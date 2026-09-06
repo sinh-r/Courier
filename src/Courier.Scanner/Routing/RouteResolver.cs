@@ -91,6 +91,28 @@ public static class RouteResolver
     private static void Replace(StringBuilder sb, string token, string value) =>
         sb.Replace(token, value);
 
+    /// <summary>
+    /// Joins a route-group prefix with a nested segment or route group's own prefix. Used to resolve
+    /// minimal API <c>MapGroup</c> nesting, where there is no controller-style token substitution —
+    /// just prefixes composing, in exactly the way <see cref="Combine"/> composes a controller route
+    /// with an action route.
+    /// </summary>
+    public static string JoinSegments(string? prefix, string? segment)
+    {
+        var left = Normalise(prefix)?.Trim('/');
+        var right = Normalise(segment)?.Trim('/');
+
+        var combined = (left, right) switch
+        {
+            (null or "", null or "") => string.Empty,
+            (null or "", not null) => right,
+            (not null, null or "") => left,
+            _ => $"{left}/{right}",
+        };
+
+        return Tidy(combined);
+    }
+
     /// <summary>Collapses double slashes and trims the ends, so two templates compose predictably.</summary>
     private static string Tidy(string route)
     {

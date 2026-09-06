@@ -13,6 +13,8 @@ using Courier.Core.Http;
 using Courier.Core.Privacy;
 using Courier.Core.Storage;
 using Courier.Core.Variables;
+using Courier.Scanner;
+using Courier.Scanner.Diffing;
 
 namespace Courier.App.ViewModels;
 
@@ -23,6 +25,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 {
     private readonly AppServices _services;
     private readonly DispatcherTimer _elapsedTimer;
+    private ScanResult? _lastScanResult;
 
     /// <summary>The window this shell is drawn in, set once the window opens. Needed for file pickers.</summary>
     public TopLevel? TopLevel { get; set; }
@@ -366,6 +369,175 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         await Tree.OpenFolderAsync(path).ConfigureAwait(true);
         CollectionSyncStatus = $"{Tree.CollectionName} open";
+        Dialog = DialogKind.None;
+    }
+
+    /// <summary>
+    /// Picks a folder or .sln to scan and runs the first scan against it. SCAN-01. The menu, the
+    /// palette and the first-run screen all reach this, since none of them previously did anything
+    /// at all — the dialog they opened had no way to start a scan.
+    /// </summary>
+    [RelayCommand]
+    public async Task ImportFromCodeAsync()
+    {
+        if (TopLevel?.StorageProvider is not { } storage)
+        {
+            return;
+        }
+
+        var folders = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Choose the folder or solution to scan",
+            AllowMultiple = false,
+        }).ConfigureAwait(true);
+
+        if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } path)
+        {
+            return;
+        }
+
+        SyncReview.SourcePath = path;
+        SyncReview.OutputPath = Path.Combine(path, "collections", Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)));
+        Dialog = DialogKind.SyncFromCode;
+
+        await RunScanAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>The Browse button beside the source field, for correcting it before a rescan.</summary>
+    [RelayCommand]
+    public async Task BrowseScanSourceAsync()
+    {
+        if (TopLevel?.StorageProvider is not { } storage)
+        {
+            return;
+        }
+
+        var folders = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Choose the folder or solution to scan",
+            AllowMultiple = false,
+        }).ConfigureAwait(true);
+
+        if (folders.Count > 0 && folders[0].TryGetLocalPath() is { } path)
+        {
+            SyncReview.SourcePath = path;
+        }
+    }
+
+    /// <summary>The Browse button beside the output field, for choosing where the collection lands.</summary>
+    [RelayCommand]
+    public async Task BrowseScanOutputAsync()
+    {
+        if (TopLevel?.StorageProvider is not { } storage)
+        {
+            return;
+        }
+
+        var folders = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Choose where the collection is written",
+            AllowMultiple = false,
+        }).ConfigureAwait(true);
+
+        if (folders.Count > 0 && folders[0].TryGetLocalPath() is { } path)
+        {
+            SyncReview.OutputPath = path;
+        }
+    }
+
+    /// <summary>Re-runs the scan against whatever is currently in the source/output fields.</summary>
+    [RelayCommand]
+    public Task RescanAsync() => RunScanAsync();
+
+    /// <summary>
+    /// Scans, diffs against whatever collection already exists at the output path, and populates the
+    /// review. <see cref="SolutionScanner.Scan"/> is synchronous and CPU-bound — walking a real
+    /// codebase's worth of files is not free — so this is the one place in the app that reaches for
+    /// <see cref="Task.Run"/> rather than an already-async I/O call.
+    /// </summary>
+    private async Task RunScanAsync()
+    {
+        var sourcePath = SyncReview.SourcePath;
+        var outputPath = SyncReview.OutputPath;
+
+        if (string.IsNullOrWhiteSpace(sourcePath))
+        {
+            return;
+        }
+
+        SyncReview.IsScanning = true;
+
+        try
+        {
+            var cache = string.IsNullOrWhiteSpace(outputPath) ? null : CollectionWriter.ReadCache(outputPath);
+
+            var result = await Task.Run(
+                () => _services.Scanner.Scan(sourcePath, cache?.Hashes, cache?.Endpoints))
+                .ConfigureAwait(true);
+
+            _lastScanResult = result;
+
+            var current = result.Endpoints.Select(e => e.ToRequest("baseUrl")).ToList();
+            var previous = LoadPreviousGenerated(outputPath);
+            var changes = ScanDiff.Compare(previous, current);
+
+            var collectionName = string.IsNullOrWhiteSpace(outputPath)
+                ? Path.GetFileName(sourcePath.TrimEnd(Path.DirectorySeparatorChar))
+                : Path.GetFileName(outputPath.TrimEnd(Path.DirectorySeparatorChar));
+
+            SyncReview.Load(changes, result, collectionName);
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            SyncReview.ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            SyncReview.IsScanning = false;
+        }
+    }
+
+    /// <summary>The previously generated set, for the diff. Empty on a first scan or a stale file.</summary>
+    private static IReadOnlyList<RequestDefinition> LoadPreviousGenerated(string? outputPath)
+    {
+        if (string.IsNullOrWhiteSpace(outputPath))
+        {
+            return [];
+        }
+
+        var path = Path.Combine(outputPath, CollectionFormat.GeneratedFileName);
+        if (!File.Exists(path))
+        {
+            return [];
+        }
+
+        try
+        {
+            return new CollectionSerializer().DeserializeGenerated(File.ReadAllText(path)).Endpoints;
+        }
+        catch (CollectionFormatException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Writes the generated file, creates the overlay if it does not exist yet, and opens the result
+    /// in the tree. SCAN-09, P3: the overlay — the user's saved payloads — is never touched here.
+    /// </summary>
+    [RelayCommand]
+    public async Task ApplyScanAsync()
+    {
+        if (_lastScanResult is not { } result || string.IsNullOrWhiteSpace(SyncReview.OutputPath))
+        {
+            return;
+        }
+
+        CollectionWriter.Write(SyncReview.OutputPath, result, "baseUrl");
+
+        await Tree.OpenFolderAsync(SyncReview.OutputPath).ConfigureAwait(true);
+        CollectionSyncStatus = $"{Tree.CollectionName} open";
+        Dialog = DialogKind.None;
     }
 
     /// <summary>

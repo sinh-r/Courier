@@ -68,15 +68,15 @@ public sealed class ControllerSyntaxScanner
             return true;
         }
 
-        return HasAttribute(type.AttributeLists, "ApiController");
+        return SyntaxHelpers.HasAttribute(type.AttributeLists, "ApiController");
     }
 
     private static void ScanController(ClassDeclarationSyntax type, string path, List<object> results)
     {
         var controllerName = type.Identifier.Text;
         var declaringType = QualifiedName(type);
-        var controllerRoute = AttributeArgument(type.AttributeLists, "Route", 0);
-        var apiVersion = AttributeArgument(type.AttributeLists, "ApiVersion", 0);
+        var controllerRoute = SyntaxHelpers.AttributeArgument(type.AttributeLists, "Route", 0);
+        var apiVersion = SyntaxHelpers.AttributeArgument(type.AttributeLists, "ApiVersion", 0);
         var controllerAuth = ReadAuthorization(type.AttributeLists);
 
         foreach (var method in type.Members.OfType<MethodDeclarationSyntax>())
@@ -137,7 +137,7 @@ public sealed class ControllerSyntaxScanner
                 }
 
                 var notes = new List<string>();
-                var parameters = ReadParameters(method, template, notes);
+                var parameters = SyntaxHelpers.ReadParameters(method.ParameterList.Parameters, template, notes);
 
                 results.Add(new ScannedEndpoint(
                     EndpointIdentity.Compute(verb, template, declaringType),
@@ -150,11 +150,11 @@ public sealed class ControllerSyntaxScanner
                 {
                     Parameters = parameters,
                     Authorization = authorization,
-                    RequiredScopes = ScopesFrom(authorization),
-                    Responses = ReadDeclaredResponses(method.AttributeLists),
+                    RequiredScopes = SyntaxHelpers.ScopesFrom(authorization),
+                    Responses = SyntaxHelpers.ReadDeclaredResponses(method.AttributeLists),
                     SampleBody = null,
                     PartialResolutionNotes = notes,
-                    Summary = ReadSummary(method),
+                    Summary = SyntaxHelpers.ReadSummary(method),
                 });
             }
         }
@@ -176,7 +176,7 @@ public sealed class ControllerSyntaxScanner
 
         foreach (var attribute in lists.SelectMany(l => l.Attributes))
         {
-            var name = AttributeName(attribute);
+            var name = SyntaxHelpers.AttributeName(attribute);
             var match = MethodAttributes.FirstOrDefault(a => name == a || name == a + "Attribute");
 
             if (match is not null)
@@ -202,7 +202,7 @@ public sealed class ControllerSyntaxScanner
                 return new VerbAttribute(verb, null, null);
             }
 
-            var literal = StringValue(argument);
+            var literal = SyntaxHelpers.StringValue(argument);
             return literal is not null
                 ? new VerbAttribute(verb, literal, null)
                 : new VerbAttribute(verb, null, argument.ToString());
@@ -215,97 +215,6 @@ public sealed class ControllerSyntaxScanner
     /// </param>
     private readonly record struct VerbAttribute(string Verb, string? Template, string? UnresolvedExpression);
 
-    /// <summary>Binds parameters by source: route, query, header, body, form. SCAN-03.</summary>
-    private static List<ScannedParameter> ReadParameters(
-        MethodDeclarationSyntax method,
-        string routeTemplate,
-        List<string> notes)
-    {
-        var routeNames = RouteResolver.ParameterNames(routeTemplate);
-        var parameters = new List<ScannedParameter>();
-
-        foreach (var parameter in method.ParameterList.Parameters)
-        {
-            var name = parameter.Identifier.Text;
-            var typeName = parameter.Type?.ToString() ?? "object";
-            var explicitSource = ExplicitSource(parameter.AttributeLists);
-
-            var source = explicitSource ?? Infer(name, typeName, routeNames);
-
-            if (source == ParameterSource.Services)
-            {
-                continue;
-            }
-
-            if (source == ParameterSource.Body)
-            {
-                // The syntax tier cannot follow the type to shape a sample. SCAN-04 needs the
-                // semantic tier; saying so is better than emitting an empty object.
-                notes.Add(
-                    $"The request body is a {typeName}. Load the solution to generate a sample body "
-                    + "from its properties.");
-
-                continue;
-            }
-
-            parameters.Add(new ScannedParameter(
-                RouteNameFor(parameter, name),
-                source,
-                typeName,
-                IsRequired(parameter, typeName),
-                SampleValues.For(typeName)));
-        }
-
-        return parameters;
-    }
-
-    private static string RouteNameFor(ParameterSyntax parameter, string fallback) =>
-        FirstStringArgumentOf(parameter.AttributeLists, "FromRoute")
-        ?? FirstStringArgumentOf(parameter.AttributeLists, "FromQuery")
-        ?? FirstStringArgumentOf(parameter.AttributeLists, "FromHeader")
-        ?? fallback;
-
-    private static ParameterSource? ExplicitSource(SyntaxList<AttributeListSyntax> lists)
-    {
-        foreach (var attribute in lists.SelectMany(l => l.Attributes))
-        {
-            switch (AttributeName(attribute).Replace("Attribute", string.Empty))
-            {
-                case "FromRoute": return ParameterSource.Route;
-                case "FromQuery": return ParameterSource.Query;
-                case "FromHeader": return ParameterSource.Header;
-                case "FromBody": return ParameterSource.Body;
-                case "FromForm": return ParameterSource.Form;
-                case "FromServices": return ParameterSource.Services;
-                case "FromKeyedServices": return ParameterSource.Services;
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// ASP.NET Core's default binding: a name matching a route token binds from the route, a simple
-    /// type binds from the query, and a complex type binds from the body.
-    /// </summary>
-    private static ParameterSource Infer(string name, string typeName, IReadOnlyList<string> routeNames)
-    {
-        if (routeNames.Contains(name, StringComparer.OrdinalIgnoreCase))
-        {
-            return ParameterSource.Route;
-        }
-
-        if (typeName is "CancellationToken" or "HttpContext" or "HttpRequest" or "HttpResponse")
-        {
-            return ParameterSource.Services;
-        }
-
-        return SampleValues.IsSimple(typeName) ? ParameterSource.Query : ParameterSource.Body;
-    }
-
-    private static bool IsRequired(ParameterSyntax parameter, string typeName) =>
-        parameter.Default is null && !typeName.EndsWith('?');
-
     private static EndpointAuthorization ReadAuthorization(SyntaxList<AttributeListSyntax> lists)
     {
         var policies = new List<string>();
@@ -315,7 +224,7 @@ public sealed class ControllerSyntaxScanner
 
         foreach (var attribute in lists.SelectMany(l => l.Attributes))
         {
-            switch (AttributeName(attribute).Replace("Attribute", string.Empty))
+            switch (SyntaxHelpers.AttributeName(attribute).Replace("Attribute", string.Empty))
             {
                 case "AllowAnonymous":
                     anonymous = true;
@@ -326,7 +235,7 @@ public sealed class ControllerSyntaxScanner
 
                     foreach (var argument in attribute.ArgumentList?.Arguments ?? default)
                     {
-                        var value = StringValue(argument.Expression);
+                        var value = SyntaxHelpers.StringValue(argument.Expression);
                         if (value is null)
                         {
                             continue;
@@ -353,7 +262,7 @@ public sealed class ControllerSyntaxScanner
                     // SCAN-06 wants surfaced before the send.
                     foreach (var argument in attribute.ArgumentList?.Arguments ?? default)
                     {
-                        if (StringValue(argument.Expression) is { } scope)
+                        if (SyntaxHelpers.StringValue(argument.Expression) is { } scope)
                         {
                             policies.Add(scope);
                         }
@@ -384,80 +293,6 @@ public sealed class ControllerSyntaxScanner
             [.. controller.Roles, .. action.Roles]);
     }
 
-    /// <summary>Policy names that look like scopes are surfaced as scopes. SCAN-06.</summary>
-    private static IReadOnlyList<string> ScopesFrom(EndpointAuthorization authorization) =>
-        [.. authorization.Policies.Where(p => p.Contains('.', StringComparison.Ordinal) || p.Contains(':', StringComparison.Ordinal))];
-
-    private static IReadOnlyList<DeclaredResponse> ReadDeclaredResponses(SyntaxList<AttributeListSyntax> lists)
-    {
-        var responses = new List<DeclaredResponse>();
-
-        foreach (var attribute in lists.SelectMany(l => l.Attributes))
-        {
-            var name = AttributeName(attribute).Replace("Attribute", string.Empty);
-            if (name is not ("ProducesResponseType" or "Produces"))
-            {
-                continue;
-            }
-
-            int? status = null;
-            string? typeName = null;
-
-            foreach (var argument in attribute.ArgumentList?.Arguments ?? default)
-            {
-                switch (argument.Expression)
-                {
-                    case LiteralExpressionSyntax { Token.Value: int code }:
-                        status = code;
-                        break;
-
-                    case MemberAccessExpressionSyntax member
-                        when member.Expression.ToString().Contains("StatusCodes", StringComparison.Ordinal):
-                        status = StatusCodeNames.Parse(member.Name.Identifier.Text);
-                        break;
-
-                    case TypeOfExpressionSyntax typeOf:
-                        typeName = typeOf.Type.ToString();
-                        break;
-                }
-            }
-
-            // ProducesResponseType<T>(200) — the generic form.
-            if (typeName is null && attribute.Name is GenericNameSyntax generic)
-            {
-                typeName = generic.TypeArgumentList.Arguments.FirstOrDefault()?.ToString();
-            }
-
-            if (status is { } resolved)
-            {
-                responses.Add(new DeclaredResponse(resolved, typeName));
-            }
-        }
-
-        return responses;
-    }
-
-    private static string? ReadSummary(MethodDeclarationSyntax method)
-    {
-        var trivia = method.GetLeadingTrivia().ToFullString();
-        var start = trivia.IndexOf("<summary>", StringComparison.Ordinal);
-        var end = trivia.IndexOf("</summary>", StringComparison.Ordinal);
-
-        if (start < 0 || end <= start)
-        {
-            return null;
-        }
-
-        var body = trivia[(start + "<summary>".Length)..end];
-        var cleaned = string.Join(
-            ' ',
-            body.Split('\n')
-                .Select(l => l.Trim().TrimStart('/').Trim())
-                .Where(l => l.Length > 0));
-
-        return cleaned.Length == 0 ? null : cleaned;
-    }
-
     private static string QualifiedName(ClassDeclarationSyntax type)
     {
         var names = new List<string> { type.Identifier.Text };
@@ -478,56 +313,4 @@ public sealed class ControllerSyntaxScanner
 
         return string.Join('.', names);
     }
-
-    private static bool HasAttribute(SyntaxList<AttributeListSyntax> lists, string name) =>
-        lists.SelectMany(l => l.Attributes)
-            .Any(a => AttributeName(a) == name || AttributeName(a) == name + "Attribute");
-
-    private static string AttributeName(AttributeSyntax attribute) => attribute.Name switch
-    {
-        GenericNameSyntax generic => generic.Identifier.Text,
-        QualifiedNameSyntax qualified => qualified.Right.Identifier.Text,
-        var other => other.ToString(),
-    };
-
-    private static string? AttributeArgument(SyntaxList<AttributeListSyntax> lists, string attributeName, int index)
-    {
-        foreach (var attribute in lists.SelectMany(l => l.Attributes))
-        {
-            var name = AttributeName(attribute);
-            if (name != attributeName && name != attributeName + "Attribute")
-            {
-                continue;
-            }
-
-            var arguments = attribute.ArgumentList?.Arguments;
-            if (arguments is { Count: > 0 } && index < arguments.Value.Count)
-            {
-                return StringValue(arguments.Value[index].Expression);
-            }
-        }
-
-        return null;
-    }
-
-    private static string? FirstStringArgument(AttributeSyntax attribute) =>
-        attribute.ArgumentList?.Arguments.Count > 0
-            ? StringValue(attribute.ArgumentList.Arguments[0].Expression)
-            : null;
-
-    private static string? FirstStringArgumentOf(SyntaxList<AttributeListSyntax> lists, string attributeName) =>
-        AttributeArgument(lists, attributeName, 0);
-
-    /// <summary>
-    /// Reads a compile-time string. Deliberately literal-only: following a constant across files
-    /// is the semantic tier's job, and guessing here would produce a confidently wrong route.
-    /// </summary>
-    private static string? StringValue(ExpressionSyntax expression) => expression switch
-    {
-        LiteralExpressionSyntax { Token.Value: string value } => value,
-        LiteralExpressionSyntax { Token.Value: int number } => number.ToString(),
-        InterpolatedStringExpressionSyntax interpolated when interpolated.Contents.Count == 1
-            && interpolated.Contents[0] is InterpolatedStringTextSyntax text => text.TextToken.ValueText,
-        _ => null,
-    };
 }

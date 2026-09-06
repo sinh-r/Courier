@@ -32,6 +32,48 @@
         </Grid>
       </Border>
 
+      <!--
+        Scan controls. SCAN-01: the dialog used to be a pure result-renderer with nothing to start a
+        scan from, so this is the part that makes it a screen rather than a mock of one.
+      -->
+      <Border DockPanel.Dock="Top" Padding="16,12"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+        <StackPanel Spacing="8">
+
+          <Grid ColumnDefinitions="60,*,Auto">
+            <TextBlock Grid.Column="0" Classes="meta" Text="Source" VerticalAlignment="Center" />
+            <TextBox Grid.Column="1" Classes="mono" Text="{Binding SourcePath}"
+                     AutomationProperties.Name="Folder or solution to scan" />
+            <Button Grid.Column="2" Content="Browse…" Margin="6,0,0,0"
+                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).BrowseScanSourceCommand}" />
+          </Grid>
+
+          <Grid ColumnDefinitions="60,*,Auto">
+            <TextBlock Grid.Column="0" Classes="meta" Text="Output" VerticalAlignment="Center" />
+            <TextBox Grid.Column="1" Classes="mono" Text="{Binding OutputPath}"
+                     AutomationProperties.Name="Collection folder to write" />
+            <Button Grid.Column="2" Content="Browse…" Margin="6,0,0,0"
+                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).BrowseScanOutputCommand}" />
+          </Grid>
+
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+              <TextBlock Classes="meta" Text="Scanning…" IsVisible="{Binding IsScanning}" />
+              <TextBlock Classes="meta mono" Foreground="{DynamicResource Error}"
+                         Text="{Binding ErrorMessage}"
+                         IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+              <TextBlock Classes="meta" IsVisible="{Binding !IsScanning}"
+                         Text="{Binding Tier, StringFormat='{}{0} tier'}" />
+              <TextBlock Classes="meta" IsVisible="{Binding !IsScanning}"
+                         Text="{Binding EnvironmentCount, StringFormat='{}{0} environments found'}" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="Rescan"
+                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).RescanCommand}" />
+          </Grid>
+
+        </StackPanel>
+      </Border>
+
       <Border DockPanel.Dock="Bottom" Padding="16,12"
               BorderBrush="{DynamicResource Rule}" BorderThickness="0,1,0,0">
         <StackPanel Spacing="12">
@@ -43,7 +85,8 @@
           <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
             <Button Content="Review later"
                     Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).CloseDialogCommand}" />
-            <Button Classes="primary" Content="{Binding ApplyLabel}" Name="ApplyButton" />
+            <Button Classes="primary" Content="{Binding ApplyLabel}"
+                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ApplyScanCommand}" />
           </StackPanel>
 
         </StackPanel>

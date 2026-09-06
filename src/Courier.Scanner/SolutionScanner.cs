@@ -27,6 +27,7 @@ public sealed class SolutionScanner
     ];
 
     private readonly ControllerSyntaxScanner _syntax = new();
+    private readonly MinimalApiScanner _minimalApi = new();
 
     /// <param name="previousHashes">
     /// From the last scan. Supplying them makes this incremental: only changed files are parsed,
@@ -89,7 +90,7 @@ public sealed class SolutionScanner
                 continue;
             }
 
-            foreach (var result in _syntax.ScanFile(file, text))
+            foreach (var result in _syntax.ScanFile(file, text).Concat(_minimalApi.ScanFile(file, text)))
             {
                 switch (result)
                 {

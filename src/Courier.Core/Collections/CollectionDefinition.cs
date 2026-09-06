@@ -29,6 +29,9 @@ public static class CollectionFormat
 
     public const string CapsuleExtension = ".capsule";
 
+    /// <summary>Incremental-rescan cache: file hashes and the endpoints they produced. SCAN-10.</summary>
+    public const string ScanCacheFileName = ".courier-scan-cache.json";
+
     /// <summary>Turns a request name into a file name that is stable, readable and diff-friendly.</summary>
     public static string FileNameFor(RequestDefinition request)
     {

@@ -184,6 +184,8 @@ internal static class SampleSolutions
 
     public static string Legacy { get; } = Locate("Legacy.Api");
 
+    public static string Minimal { get; } = Locate("Minimal.Api");
+
     private static string Locate(string name)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

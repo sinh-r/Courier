@@ -70,9 +70,8 @@ internal static class ScanCommand
         bool failOnUnresolved)
     {
         var scanner = new SolutionScanner();
-        var serializer = new CollectionSerializer();
 
-        var previous = output is not null ? ReadPreviousHashes(output) : null;
+        var previous = output is not null ? CollectionWriter.ReadCache(output) : null;
         var result = scanner.Scan(path, previous?.Hashes, previous?.Endpoints);
 
         Console.WriteLine(
@@ -89,7 +88,7 @@ internal static class ScanCommand
 
         if (output is not null)
         {
-            Write(output, result, serializer, baseUrlVariable);
+            CollectionWriter.Write(output, result, baseUrlVariable);
             Console.WriteLine($"Wrote {Path.Combine(output, CollectionFormat.GeneratedFileName)}");
         }
 
@@ -100,66 +99,6 @@ internal static class ScanCommand
         }
 
         return failOnUnresolved && result.Unresolved.Count > 0 ? 1 : 0;
-    }
-
-    /// <summary>
-    /// Writes only the machine-owned file. SCAN-09 and P3: the overlay holding the user's payloads
-    /// is never touched, which is what makes running this on every build safe.
-    /// </summary>
-    private static void Write(
-        string folder,
-        ScanResult result,
-        CollectionSerializer serializer,
-        string baseUrlVariable)
-    {
-        Directory.CreateDirectory(folder);
-
-        var set = new GeneratedEndpointSet
-        {
-            Source = result.Tier.ToString(),
-            GeneratedUtc = DateTimeOffset.UtcNow,
-            Endpoints = [.. result.Endpoints.Select(e => e.ToRequest(baseUrlVariable))],
-        };
-
-        File.WriteAllText(
-            Path.Combine(folder, CollectionFormat.GeneratedFileName),
-            serializer.SerializeGenerated(set));
-
-        // The overlay is created empty if it does not exist, and left alone if it does.
-        var overlayPath = Path.Combine(folder, CollectionFormat.OverlayFileName);
-        if (!File.Exists(overlayPath))
-        {
-            File.WriteAllText(overlayPath, serializer.SerializeOverlay(new OverlaySet()));
-        }
-
-        WriteScanCache(folder, result);
-    }
-
-    private static void WriteScanCache(string folder, ScanResult result) =>
-        File.WriteAllText(
-            Path.Combine(folder, ".courier-scan-cache.json"),
-            JsonSerializer.Serialize(
-                new ScanCache(result.FileHashes, result.Endpoints),
-                new JsonSerializerOptions { WriteIndented = false }));
-
-    private static ScanCache? ReadPreviousHashes(string folder)
-    {
-        var path = Path.Combine(folder, ".courier-scan-cache.json");
-
-        if (!File.Exists(path))
-        {
-            return null;
-        }
-
-        try
-        {
-            return JsonSerializer.Deserialize<ScanCache>(File.ReadAllText(path));
-        }
-        catch (JsonException)
-        {
-            // A stale or hand-edited cache costs a full rescan, which is correct rather than fatal.
-            return null;
-        }
     }
 
     private static string ToJson(ScanResult result) => JsonSerializer.Serialize(
@@ -196,8 +135,4 @@ internal static class ScanCommand
             }),
         },
         new JsonSerializerOptions { WriteIndented = true });
-
-    private sealed record ScanCache(
-        IReadOnlyDictionary<string, string> Hashes,
-        IReadOnlyList<ScannedEndpoint> Endpoints);
 }

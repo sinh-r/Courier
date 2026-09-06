@@ -142,14 +142,29 @@ That has been fixed for the core interactions — sending a request, switching a
 opening a collection folder, editing params and headers, saving a request to disk, recording
 history, switching light/dark theme, and closing every dialog — which is what makes the "uninstall
 Postman" claim in Phase 1 of [REQUIREMENTS.md](docs/REQUIREMENTS.md) true rather than aspirational.
+
+**Import from code** (SCAN-01..12) is now wired the same way: the menu, the command palette and the
+first-run screen all reach a real scan, the sync-from-code dialog can actually start one and shows a
+live diff, and Apply writes `endpoints.generated.yaml` without ever touching the overlay holding your
+edits. The scanner itself was extended to read minimal APIs (`app.MapGet`, route groups held in
+variables, method-group handlers, `MapMethods`) as well as attribute-routed controllers — previously
+a minimal-API project scanned as zero endpoints, silently. Verified end to end against
+[gothinkster/aspnetcore-realworld-example-app](https://github.com/gothinkster/aspnetcore-realworld-example-app)
+(19 controller-based endpoints, 0 unresolved) and against `dotnet/eShop`'s minimal-API catalog
+service, plus a new `samples/Minimal.Api` fixture with its own golden tests.
+
 Still open, tracked as backlog rather than fixed in this pass:
 
-- A further ~24 buttons across the capsule, telemetry, sync-from-code and first-run dialogs remain
-  unwired (each maps to a real, already-implemented library call — see the plan's Stage 5).
-- Six substantial subsystems have no UI or CLI entry point at all: the Postman and curl importers,
-  `DtoSampleGenerator`, `ScanDiff`, the App Insights/Datadog telemetry sources, and the Azure DevOps
-  work-item client.
-- OpenAPI import and the semantic (Roslyn workspace) scan tier do not exist yet.
+- A further ~24 buttons across the capsule, telemetry and first-run dialogs remain unwired (each
+  maps to a real, already-implemented library call — see the plan's Stage 5).
+- Five substantial subsystems still have no UI or CLI entry point: the Postman and curl importers,
+  `DtoSampleGenerator`, the App Insights/Datadog telemetry sources, and the Azure DevOps work-item
+  client.
+- OpenAPI import and the semantic (Roslyn workspace) scan tier do not exist yet — the semantic tier
+  is what would give a scanned request an actual body instead of a placeholder note.
+- Scanned minimal-API endpoints derive their `DeclaringType` from the containing class name, or the
+  file name for genuinely top-level statements; a handler with the same name in two different
+  extension classes in the same file could collide.
 
 Separately, the enterprise and cloud integrations (Entra/WAM, NTLM/Kerberos, smart cards, PAC
 proxies, TLS-inspecting proxies, App Insights, Datadog, Azure DevOps) have not been exercised

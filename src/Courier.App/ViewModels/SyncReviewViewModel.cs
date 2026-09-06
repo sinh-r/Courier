@@ -2,6 +2,9 @@ using System.Collections.ObjectModel;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Courier.App.Services;
+using Courier.Core.Collections;
+using Courier.Scanner;
+using ScanDiffing = Courier.Scanner.Diffing;
 
 namespace Courier.App.ViewModels;
 
@@ -11,12 +14,36 @@ namespace Courier.App.ViewModels;
 /// </summary>
 public sealed partial class SyncReviewViewModel : ObservableObject
 {
+    /// <summary>Folder or .sln to scan. Set by the import command, editable before a rescan.</summary>
     [ObservableProperty]
-    private string _collection = "Orders.Api";
+    private string _sourcePath = string.Empty;
 
+    /// <summary>Where the collection is written. Proposed by the import command, editable.</summary>
+    [ObservableProperty]
+    private string _outputPath = string.Empty;
+
+    [ObservableProperty]
+    private bool _isScanning;
+
+    [ObservableProperty]
+    private string? _errorMessage;
+
+    /// <summary>"Syntax" or "Semantic". SCAN-08.</summary>
+    [ObservableProperty]
+    private string _tier = "Syntax";
+
+    [ObservableProperty]
+    private int _environmentCount;
+
+    [NotifyPropertyChangedFor(nameof(Summary))]
+    [ObservableProperty]
+    private string _collection = string.Empty;
+
+    [NotifyPropertyChangedFor(nameof(Summary))]
     [ObservableProperty]
     private DateTimeOffset _scannedUtc = DateTimeOffset.UtcNow;
 
+    [NotifyPropertyChangedFor(nameof(Summary))]
     [ObservableProperty]
     private int _totalEndpoints;
 
@@ -41,7 +68,72 @@ public sealed partial class SyncReviewViewModel : ObservableObject
     public string ApplyLabel => $"Apply {ChangeCount} changes";
 
     /// <summary>"Orders.Api · scanned 2s ago · 47 endpoints".</summary>
-    public string Summary => $"{Collection} · scanned {Ago(ScannedUtc)} · {TotalEndpoints} endpoints";
+    public string Summary => string.IsNullOrEmpty(Collection)
+        ? "Choose a folder or .sln to scan"
+        : $"{Collection} · scanned {Ago(ScannedUtc)} · {TotalEndpoints} endpoints";
+
+    /// <summary>
+    /// Turns a scan into what the screen shows. The collections are cleared and repopulated rather
+    /// than replaced, so an in-place rescan does not tear down bindings the dialog already has.
+    /// </summary>
+    public void Load(ScanDiffing.ScanChangeSet changes, ScanResult result, string collectionName)
+    {
+        Collection = collectionName;
+        ScannedUtc = DateTimeOffset.UtcNow;
+        TotalEndpoints = result.Total;
+        Tier = result.Tier.ToString();
+        EnvironmentCount = result.Environments.Count;
+        ErrorMessage = null;
+
+        Added.Clear();
+        foreach (var request in changes.Added)
+        {
+            Added.Add(new EndpointChangeViewModel(request.Method, request.Url, DetailForAdded(request), []));
+        }
+
+        Changed.Clear();
+        foreach (var change in changes.Changed)
+        {
+            Changed.Add(new EndpointChangeViewModel(
+                change.Endpoint.Method,
+                change.Endpoint.Url,
+                string.Empty,
+                [.. change.Fields.Select(MapField)]));
+        }
+
+        Removed.Clear();
+        foreach (var request in changes.Removed)
+        {
+            Removed.Add(new EndpointChangeViewModel(request.Method, request.Url, string.Empty, []));
+        }
+
+        Unresolved.Clear();
+        foreach (var unresolved in result.Unresolved)
+        {
+            Unresolved.Add(new EndpointChangeViewModel(
+                string.Empty,
+                $"{unresolved.DeclaringType}.{unresolved.ActionName}",
+                unresolved.Reason,
+                []));
+        }
+
+        OnPropertyChanged(nameof(ChangeCount));
+        OnPropertyChanged(nameof(ApplyLabel));
+    }
+
+    private static string DetailForAdded(RequestDefinition request) => request.RequiredScopes.Count > 0
+        ? $"requires {string.Join(", ", request.RequiredScopes)}"
+        : request.Description ?? string.Empty;
+
+    private static FieldChangeViewModel MapField(ScanDiffing.FieldChange field) => new(
+        field.Section,
+        field.Kind switch
+        {
+            ScanDiffing.FieldChangeKind.Added => FieldChangeKind.Added,
+            ScanDiffing.FieldChangeKind.Removed => FieldChangeKind.Removed,
+            _ => FieldChangeKind.Modified,
+        },
+        field.Description);
 
     private static string Ago(DateTimeOffset when)
     {

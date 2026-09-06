@@ -31,7 +31,7 @@
                          Text="Plain files that git already versions. Nothing is imported or copied." />
             </StackPanel>
             <Button Grid.Column="1" Classes="primary" Content="Choose folder"
-                    VerticalAlignment="Center" Name="ChooseFolderButton" />
+                    VerticalAlignment="Center" Command="{Binding OpenFolderCommand}" />
           </Grid>
         </Border>
 
@@ -42,7 +42,8 @@
               <TextBlock Classes="meta" TextWrapping="Wrap"
                          Text="Courier reads your controllers and builds the collection, then keeps it current on every build." />
             </StackPanel>
-            <Button Grid.Column="1" Content="Pick a .sln" VerticalAlignment="Center" Name="PickSolutionButton" />
+            <Button Grid.Column="1" Content="Pick a .sln" VerticalAlignment="Center"
+                    Command="{Binding ImportFromCodeCommand}" />
           </Grid>
         </Border>
 

@@ -5,6 +5,7 @@ using Courier.Core.Http;
 using Courier.Core.Privacy;
 using Courier.Core.Storage;
 using Courier.Core.Variables;
+using Courier.Scanner;
 
 #if WINDOWS
 using Courier.Platform.Windows.Auth;
@@ -56,6 +57,7 @@ public sealed class AppServices : IDisposable
         Variables = new VariableResolver(SecretStore);
         Redaction = new RedactionEngine();
         Git = new GitStatusSource();
+        Scanner = new SolutionScanner();
 
         // Deferred, and this is not a micro-optimisation. Touching EntraAuthProvider loads MSAL and
         // its broker runtime; touching DeveloperToolTokenSource loads Azure.Identity. Both are
@@ -108,6 +110,9 @@ public sealed class AppServices : IDisposable
     public RedactionEngine Redaction { get; }
 
     public GitStatusSource Git { get; }
+
+    /// <summary>Syntax-only, no restore or build required. Runs on demand, never at startup. SCAN-08.</summary>
+    public SolutionScanner Scanner { get; }
 
     /// <summary>Constructed on first use. Loading MSAL is not free, and most sessions never need it.</summary>
     public EntraAuthProvider Entra => _entra.Value;

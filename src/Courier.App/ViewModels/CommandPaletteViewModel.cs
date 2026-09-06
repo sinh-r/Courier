@@ -119,7 +119,7 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
         Add("Cancel in-flight request", "Ctrl+.", () => { });
         Add("New request", "Ctrl+N", _shell.NewTab);
         Add("Close tab", "Ctrl+W", _shell.CloseActiveTab);
-        Add("Sync from code", string.Empty, () => _shell.OpenDialog(DialogKind.SyncFromCode));
+        Add("Import from code", string.Empty, () => _ = _shell.ImportFromCodeAsync());
         Add("Export capsule", string.Empty, () => _shell.OpenDialog(DialogKind.ExportCapsule));
         Add("Reconstruct from telemetry", string.Empty, () => _shell.OpenDialog(DialogKind.ReconstructFromTelemetry));
         Add("Environments", string.Empty, () => _shell.OpenDialog(DialogKind.Environments));

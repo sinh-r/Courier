@@ -43,8 +43,8 @@
                           Command="{Binding OpenFolderCommand}" />
                   <Border Height="1" Background="{DynamicResource Rule}" Margin="0,4" />
                   <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                          Height="{DynamicResource RowHeight}" Padding="12,0" Content="Sync from code…"
-                          Command="{Binding OpenDialogCommand}" CommandParameter="{x:Static vm:DialogKind.SyncFromCode}" />
+                          Height="{DynamicResource RowHeight}" Padding="12,0" Content="Import from code…"
+                          Command="{Binding ImportFromCodeCommand}" />
                   <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                           Height="{DynamicResource RowHeight}" Padding="12,0" Content="Export capsule…"
                           Command="{Binding OpenCapsuleExportCommand}" />
