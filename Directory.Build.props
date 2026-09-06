@@ -24,6 +24,21 @@
   </PropertyGroup>
 
   <PropertyGroup>
+    <!--
+      Lets a non-Windows machine restore a project that multi-targets a Windows TFM.
+
+      Courier.App targets net10.0 and net10.0-windows10.0.19041.0, and restore resolves every TFM
+      even when only one is being built - so on Linux, `dotnet build -f net10.0` still fails with
+      NETSDK1100 ("Windows is required to build ...") without this. TECH_SPEC 1.3 keeps macOS and
+      Linux building so contributors without Windows can work on the scanner and the CLI, and that
+      promise is worth nothing if the obvious command fails on a flag they have to know about.
+
+      A no-op on Windows.
+    -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <PropertyGroup>
     <Product>Courier</Product>
     <Company>Courier</Company>
     <Authors>Courier contributors</Authors>

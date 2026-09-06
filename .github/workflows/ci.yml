@@ -78,13 +78,25 @@ jobs:
 
       # Courier.App multi-targets so the bare net10.0 build works here; the Windows-only platform
       # project is excluded by the same condition that swaps in the Posix fallbacks.
+      #
+      # EnableWindowsTargeting is set in Directory.Build.props rather than passed here: restore
+      # resolves every TFM even when only one is being built, so without it this fails with
+      # NETSDK1100 - and a contributor running the obvious command locally would hit the same wall
+      # with no workflow to copy the flag from.
       - name: Build the platform-neutral projects
         run: |
-          dotnet build src/Courier.Core/Courier.Core.csproj -c Release
-          dotnet build src/Courier.Scanner/Courier.Scanner.csproj -c Release
-          dotnet build src/Courier.Scripting/Courier.Scripting.csproj -c Release
-          dotnet build src/Courier.Telemetry/Courier.Telemetry.csproj -c Release
-          dotnet build src/Courier.Cli/Courier.Cli.csproj -c Release
+          set -e
+          for project in \
+            src/Courier.Core/Courier.Core.csproj \
+            src/Courier.Scanner/Courier.Scanner.csproj \
+            src/Courier.Scripting/Courier.Scripting.csproj \
+            src/Courier.Telemetry/Courier.Telemetry.csproj \
+            src/Courier.Cli/Courier.Cli.csproj
+          do
+            echo "--- $project"
+            dotnet build "$project" -c Release
+          done
+          echo "--- src/Courier.App/Courier.App.csproj (net10.0)"
           dotnet build src/Courier.App/Courier.App.csproj -c Release -f net10.0
 
       - name: Test
