@@ -106,10 +106,13 @@ jobs:
       # build/publish.ps1 verifies its own output and throws if the exe is missing, which is where
       # that check belongs. It also prints sizes and paths. Nothing here needs to repeat it.
 
-      # id: the signing step below needs this step's artifact-id output to tell the signing
-      # service which artifact to sign.
+      # id: the signing step below needs this step's artifact-id output to tell the signing service
+      # which artifact to sign. That is its only purpose, so it is skipped when there is no token
+      # and nothing to sign - the exe is 350MB, and uploading it to feed an inert step cost several
+      # minutes of every release and a large artifact nobody would ever download.
       - name: Upload unsigned artifact
         id: unsigned
+        if: env.SIGNPATH_API_TOKEN != ''
         uses: actions/upload-artifact@v7
         with:
           name: unsigned
