@@ -94,25 +94,17 @@ jobs:
         shell: pwsh
         run: ./build/publish.ps1 -Runtime win-x64
 
-      # Diagnostic only, and it must never be the thing that fails a release. Two attempts died on
-      # a step that did nothing but list artifacts/ - the useful work had already succeeded both
-      # times. build/publish.ps1 already verifies its own output and throws if the exe is missing,
-      # so a second opinion here is a convenience, not a gate.
-      - name: Show what was produced
-        if: always()
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Continue'
-          Write-Host "exe: ${{ steps.publish.outputs.exe }}"
-          Write-Host "zip: ${{ steps.publish.outputs.zip }}"
-          if (Test-Path artifacts) {
-            Get-ChildItem artifacts -Recurse -File -ErrorAction SilentlyContinue |
-              ForEach-Object { Write-Host ("{0,10:N1} MB  {1}" -f ($_.Length / 1MB), $_.FullName) }
-          }
-          else {
-            Write-Host "No artifacts directory at $((Get-Location).Path)"
-          }
+      # There is deliberately no "list the artifacts" step here.
+      #
+      # Three release attempts were lost to one, and the third proved it was never about the
+      # artifacts: Upload succeeded on the very next step, so the paths had been right all along.
+      # It failed because GitHub runs pwsh steps with $ErrorActionPreference = 'Stop', and
+      # continue-on-error does not undo the damage - a step recorded as failed makes success()
+      # false for every step after it, which silently skipped the sign, attest, hash and release
+      # steps. A convenience step took the release down without failing the run.
+      #
+      # build/publish.ps1 verifies its own output and throws if the exe is missing, which is where
+      # that check belongs. It also prints sizes and paths. Nothing here needs to repeat it.
 
       # id: the signing step below needs this step's artifact-id output to tell the signing
       # service which artifact to sign.
@@ -154,14 +146,28 @@ jobs:
             Write-Host "UNSIGNED (Authenticode status: $($sig.Status)). Expected until a certificate is available."
           }
 
-      # NFR-03. Built after signing so the MSI carries the signed binary, and the MSI itself is
-      # signed separately when a certificate exists.
+      # NFR-03. Built after signing so the MSI carries the signed binary.
+      #
+      # The MSI is a nice-to-have and must not take the release with it, but continue-on-error is
+      # the wrong tool for that: a step it marks as failed makes success() false for everything
+      # after it, which is exactly how the sign, attest, hash and release steps got skipped on an
+      # earlier attempt. So the failure is swallowed inside the step instead, and the step always
+      # succeeds. WiX not being installable on the runner is a missing artifact, not a failed
+      # release.
       - name: Build the MSI
         shell: pwsh
-        continue-on-error: true
         run: |
+          $ErrorActionPreference = 'Continue'
           $version = if ('${{ github.ref_name }}' -match '^v') { '${{ github.ref_name }}' -replace '^v', '' } else { '0.1.0' }
-          ./build/msi/build-msi.ps1 -Version $version -Platform x64
+
+          try {
+            ./build/msi/build-msi.ps1 -Version $version -Platform x64
+          }
+          catch {
+            Write-Host "::warning::MSI build failed, continuing without it. $($_.Exception.Message)"
+          }
+
+          exit 0
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v4
