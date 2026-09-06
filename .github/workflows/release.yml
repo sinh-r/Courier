@@ -74,48 +74,30 @@ jobs:
         shell: pwsh
         run: ./build/Run-Tests.ps1 -Configuration Release -NoBuild
 
-      # Publish switches live in build/publish.ps1 rather than in the csproj: setting
-      # RuntimeIdentifier in the project file makes every ordinary build RID-specific.
+      # One publish, in build/publish.ps1 rather than inline here, for two reasons.
       #
-      # ReadyToRun is load-bearing, not an optimisation - PERF-01 gives 1.5s cold start and a
-      # framework-dependent build misses it by roughly five times. Compression stays off because
-      # it trades about 100ms of startup for disk size, and startup is the budget.
+      # The switches belong in the script because setting RuntimeIdentifier in the csproj would
+      # make every ordinary build RID-specific, and because the script is what a contributor runs
+      # locally - duplicating the flags in the workflow means the two drift.
       #
-      # Trimming and AOT stay off: Avalonia is reflection-heavy and neither has been validated
-      # against the full UI. See docs/NEEDS_LIVE_VALIDATION.md section 12 - trimming is the
-      # untried lever on the one budget currently unmet.
-      - name: Publish the portable build
+      # It is one publish because it used to be two, and the second one failed here on the first
+      # release: publishing the same project twice with different single-file settings shares obj/
+      # and the incremental state does not survive the difference. There was never a reason for
+      # both - a self-extracting single exe is what NFR-02's "no installer, no admin rights"
+      # actually means, and the zip carries that same exe with its licence.
+      - name: Publish
         shell: pwsh
         run: ./build/publish.ps1 -Runtime win-x64
-
-      # A second publish producing a genuinely single file. IncludeNativeLibrariesForSelfExtract
-      # is what makes it one: Skia, HarfBuzz, e_sqlite3 and the MSAL broker runtime are all native,
-      # and without this they sit beside the exe and a lone Courier.exe fails at runtime rather
-      # than at build time. Both artifacts ship - the zip for anyone who wants the folder, the
-      # single file for anyone who wants one thing to download.
-      - name: Publish the single-file build
-        run: >
-          dotnet publish src/Courier.App/Courier.App.csproj
-          --framework net10.0-windows10.0.19041.0
-          -c Release
-          -r win-x64
-          --self-contained true
-          -p:PublishSingleFile=true
-          -p:PublishReadyToRun=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
-          -p:EnableCompressionInSingleFile=false
-          -p:DebugType=none
-          -p:ContinuousIntegrationBuild=true
-          -o publish
 
       - name: Verify the expected artifacts exist
         shell: pwsh
         run: |
-          if (-not (Test-Path publish/Courier.exe)) {
-            Get-ChildItem publish
-            throw "publish/Courier.exe not found - check <AssemblyName> in Courier.App.csproj"
+          $exe = 'artifacts/app/win-x64/Courier.exe'
+          if (-not (Test-Path $exe)) {
+            Get-ChildItem artifacts -Recurse | Select-Object FullName
+            throw "$exe not found - check <AssemblyName> in Courier.App.csproj"
           }
-          Get-Item publish/Courier.exe | Select-Object Name, Length
+          Get-Item $exe | Select-Object Name, Length
           Get-ChildItem artifacts/*.zip | Select-Object Name, Length
 
       # id: the signing step below needs this step's artifact-id output to tell the signing
@@ -125,7 +107,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: unsigned
-          path: publish/Courier.exe
+          path: artifacts/app/win-x64/Courier.exe
 
       # Inert until SIGNPATH_API_TOKEN exists (see the header). The organization id and slugs are
       # repository *variables* rather than secrets - they are not sensitive, and keeping them out
@@ -142,7 +124,7 @@ jobs:
           signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
           github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
           wait-for-completion: true
-          output-artifact-directory: publish
+          output-artifact-directory: artifacts/app/win-x64
 
       # Reports whether this release is signed, so the run log answers the question without anyone
       # having to inspect the binary. Get-AuthenticodeSignature is also what a user runs to check
@@ -151,7 +133,7 @@ jobs:
       - name: Report signing status
         shell: pwsh
         run: |
-          $sig = Get-AuthenticodeSignature publish/Courier.exe
+          $sig = Get-AuthenticodeSignature artifacts/app/win-x64/Courier.exe
           if ($sig.Status -eq 'Valid') {
             Write-Host "Signed by: $($sig.SignerCertificate.Subject)"
           } else {
@@ -171,13 +153,13 @@ jobs:
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
-            publish/Courier.exe
+            artifacts/app/win-x64/Courier.exe
             artifacts/Courier-win-x64-portable.zip
 
       - name: Compute SHA256
         shell: pwsh
         run: |
-          foreach ($file in @('publish/Courier.exe', 'artifacts/Courier-win-x64-portable.zip')) {
+          foreach ($file in @('artifacts/app/win-x64/Courier.exe', 'artifacts/Courier-win-x64-portable.zip')) {
             if (Test-Path $file) {
               Get-FileHash $file -Algorithm SHA256 |
                 Select-Object -ExpandProperty Hash |
@@ -193,8 +175,8 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: |
-            publish/Courier.exe
-            publish/Courier.exe.sha256
+            artifacts/app/win-x64/Courier.exe
+            artifacts/app/win-x64/Courier.exe.sha256
             artifacts/Courier-win-x64-portable.zip
             artifacts/Courier-win-x64-portable.zip.sha256
             artifacts/*.msi
