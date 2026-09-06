@@ -85,20 +85,23 @@ jobs:
       # and the incremental state does not survive the difference. There was never a reason for
       # both - a self-extracting single exe is what NFR-02's "no installer, no admin rights"
       # actually means, and the zip carries that same exe with its licence.
+      # id: every step downstream - upload, sign, attest, hash, release - needs the paths this
+      # produced. The script emits them as outputs rather than each step reconstructing the same
+      # path by hand, which is how the previous attempt failed on a path the script had written
+      # correctly.
       - name: Publish
+        id: publish
         shell: pwsh
         run: ./build/publish.ps1 -Runtime win-x64
 
-      - name: Verify the expected artifacts exist
+      - name: Show what was produced
         shell: pwsh
         run: |
-          $exe = 'artifacts/app/win-x64/Courier.exe'
-          if (-not (Test-Path $exe)) {
-            Get-ChildItem artifacts -Recurse | Select-Object FullName
-            throw "$exe not found - check <AssemblyName> in Courier.App.csproj"
-          }
-          Get-Item $exe | Select-Object Name, Length
-          Get-ChildItem artifacts/*.zip | Select-Object Name, Length
+          Write-Host "exe: ${{ steps.publish.outputs.exe }}"
+          Write-Host "zip: ${{ steps.publish.outputs.zip }}"
+          Get-ChildItem artifacts -Recurse -File |
+            Select-Object FullName, @{ n = 'MB'; e = { [math]::Round($_.Length / 1MB, 1) } } |
+            Format-Table -AutoSize
 
       # id: the signing step below needs this step's artifact-id output to tell the signing
       # service which artifact to sign.
@@ -107,7 +110,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: unsigned
-          path: artifacts/app/win-x64/Courier.exe
+          path: ${{ steps.publish.outputs.exe }}
 
       # Inert until SIGNPATH_API_TOKEN exists (see the header). The organization id and slugs are
       # repository *variables* rather than secrets - they are not sensitive, and keeping them out
@@ -133,7 +136,7 @@ jobs:
       - name: Report signing status
         shell: pwsh
         run: |
-          $sig = Get-AuthenticodeSignature artifacts/app/win-x64/Courier.exe
+          $sig = Get-AuthenticodeSignature '${{ steps.publish.outputs.exe }}'
           if ($sig.Status -eq 'Valid') {
             Write-Host "Signed by: $($sig.SignerCertificate.Subject)"
           } else {
@@ -153,13 +156,13 @@ jobs:
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
-            artifacts/app/win-x64/Courier.exe
-            artifacts/Courier-win-x64-portable.zip
+            ${{ steps.publish.outputs.exe }}
+            ${{ steps.publish.outputs.zip }}
 
       - name: Compute SHA256
         shell: pwsh
         run: |
-          foreach ($file in @('artifacts/app/win-x64/Courier.exe', 'artifacts/Courier-win-x64-portable.zip')) {
+          foreach ($file in @('${{ steps.publish.outputs.exe }}', '${{ steps.publish.outputs.zip }}')) {
             if (Test-Path $file) {
               Get-FileHash $file -Algorithm SHA256 |
                 Select-Object -ExpandProperty Hash |
@@ -175,10 +178,10 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: |
-            artifacts/app/win-x64/Courier.exe
-            artifacts/app/win-x64/Courier.exe.sha256
-            artifacts/Courier-win-x64-portable.zip
-            artifacts/Courier-win-x64-portable.zip.sha256
+            ${{ steps.publish.outputs.exe }}
+            ${{ steps.publish.outputs.exe }}.sha256
+            ${{ steps.publish.outputs.zip }}
+            ${{ steps.publish.outputs.zip }}.sha256
             artifacts/*.msi
           generate_release_notes: true
           body: |

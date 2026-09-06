@@ -132,6 +132,15 @@ foreach ($rid in $Runtime) {
     Remove-Item $staging -Recurse -Force
 
     Write-Host "  portable: $zip" -ForegroundColor Green
+
+    # Hands the exact paths to the workflow rather than making it reconstruct them. A release run
+    # already failed once on a path this script had actually written correctly, and every step
+    # downstream - upload, sign, attest, hash, release - needs the same two paths. One source for
+    # them, emitted by the thing that created the files.
+    if ($env:GITHUB_OUTPUT) {
+        "exe=$($exe -replace '\\', '/')" | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
+        "zip=$($zip -replace '\\', '/')" | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
+    }
 }
 
 if (-not $SkipCli) {
