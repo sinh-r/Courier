@@ -177,13 +177,42 @@ or tabbed, and history can live in the inspector or as a fourth pane.
 
 `xunit.v3` runs on Microsoft.Testing.Platform, where a test project is an executable. On this SDK
 `dotnet test` reports "Zero tests ran" against them, so use `dotnet run --project <test project>`,
-which is the platform-native path. `build/run-tests.ps1` does this for all of them.
+which is the platform-native path. `build/Run-Tests.ps1` does this for all of them.
 
 The perf runner measures the **published** build when one exists. A framework-dependent
 `dotnet build` output misses PERF-01 by a factor of five, and measuring it would be measuring a
 configuration nobody ships.
 
-## 7. Where to be careful
+## 7. CI and releases
+
+`.github/workflows/ci.yml` — three jobs. `build` is the gate: warnings-as-errors and every test.
+`cross-platform` builds the platform-neutral projects on Linux, which is what stops TECH_SPEC
+§1.3's promise quietly rotting. `budgets` reports REQUIREMENTS §6.1 without failing on them; the
+comment on that job explains why, and names the one budget currently unmet.
+
+`.github/workflows/release.yml` — tag `v*` to publish. Order is load-bearing:
+
+```
+Publish -> Upload unsigned -> Sign -> Attest -> Compute SHA256 -> Create release
+```
+
+Signing changes the file, so it must precede **both** the attestation and the hash. Sign after
+either and the attestation covers a digest nobody can download, or the published `.sha256` does
+not match the published binary.
+
+Two things learned the hard way, both worth not relearning:
+
+- **`continue-on-error` is not "this step may fail".** It keeps the run alive but still records
+  the step as failed, and `success()` — the implicit condition on every later step — is then false.
+  Four release attempts were lost to a diagnostic step that did nothing but list a directory: it
+  failed, and silently skipped the sign, attest, hash and release steps after it. To make a step
+  genuinely optional, swallow the failure inside it and `exit 0`.
+- **Publish once.** Publishing the same project twice with different single-file settings shares
+  `obj/`, and the incremental state does not survive the difference. `build/publish.ps1` produces
+  one self-extracting exe and zips that; it also emits the artifact paths as step outputs so no
+  workflow step reconstructs them by hand.
+
+## 8. Where to be careful
 
 | Change | Read first |
 |---|---|
