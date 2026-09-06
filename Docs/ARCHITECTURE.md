@@ -200,13 +200,26 @@ Signing changes the file, so it must precede **both** the attestation and the ha
 either and the attestation covers a digest nobody can download, or the published `.sha256` does
 not match the published binary.
 
-Two things learned the hard way, both worth not relearning:
+Four things learned the hard way, one of them embarrassing, all worth not relearning:
 
-- **`continue-on-error` is not "this step may fail".** It keeps the run alive but still records
-  the step as failed, and `success()` — the implicit condition on every later step — is then false.
-  Four release attempts were lost to a diagnostic step that did nothing but list a directory: it
-  failed, and silently skipped the sign, attest, hash and release steps after it. To make a step
-  genuinely optional, swallow the failure inside it and `exit 0`.
+- **Read the failure before fixing it.** Seven release runs were needed to ship the first one. Six
+  of them failed at `Publish`, and five were spent editing later steps that were never broken,
+  because the jobs API was parsed with a shell pipeline that paired each step's *name* with the
+  *next* step's *conclusion*. Off by one, every run appeared to fail at "Upload unsigned artifact".
+  Parse the JSON — `Invoke-RestMethod .../actions/runs/<id>/jobs` and walk `.jobs[].steps[]` — and
+  reproduce the step locally before touching the workflow. `./build/publish.ps1 -Runtime win-x64`
+  *is* the Publish step, and it reproduces in about four minutes.
+- **A repo-wide pack property can be wrong for one project.** `Directory.Build.props` sets
+  `IncludeSymbols`, which is right for the shipping libraries. `Courier.MSBuild` sets
+  `IncludeBuildOutput=false`, because a build-task assembly belongs in `tasks/`, not `lib/` — so its
+  `.snupkg` had nothing to carry and NuGet failed the run with **NU5017**, *after* writing a
+  perfectly valid `.nupkg`. It now sets `IncludeSymbols=false`. Any future project that opts out of
+  build output must do the same.
+- **`continue-on-error` is not "this step may fail".** It keeps the run alive but still records the
+  step as failed, and `success()` — the implicit condition on every later step — is then false, so
+  sign, attest, hash and release are silently skipped. To make a step genuinely optional, swallow
+  the failure inside it and `exit 0`. That is why the MSI step is a `try`/`catch` rather than
+  `continue-on-error`.
 - **Publish once.** Publishing the same project twice with different single-file settings shares
   `obj/`, and the incremental state does not survive the difference. `build/publish.ps1` produces
   one self-extracting exe and zips that; it also emits the artifact paths as step outputs so no

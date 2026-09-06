@@ -13,6 +13,14 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <DevelopmentDependency>true</DevelopmentDependency>
+
+    <!--
+      No symbols package. Directory.Build.props turns IncludeSymbols on for the whole repo, which
+      is right for the shipping libraries and wrong here: IncludeBuildOutput is false because a
+      build-task assembly belongs in tasks/, not lib/, so the .snupkg has nothing to carry and pack
+      fails the whole run with NU5017 after having written a perfectly good .nupkg.
+    -->
+    <IncludeSymbols>false</IncludeSymbols>
     <NoWarn>$(NoWarn);NU5100;NU5128</NoWarn>
     <Nullable>disable</Nullable>
 

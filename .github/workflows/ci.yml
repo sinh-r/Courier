@@ -65,6 +65,13 @@ jobs:
         shell: pwsh
         run: ./build/Run-Tests.ps1 -Configuration Release -NoBuild
 
+      # Packing is a release concern, so it used to run only on a tag - which meant NU5017 in
+      # Courier.MSBuild was discovered by six consecutive failed releases rather than by the push
+      # that introduced it. Packing here costs under a minute and turns that class of fault into an
+      # ordinary red build. The output is thrown away; only the exit code matters.
+      - name: Pack
+        run: dotnet pack Courier.slnx -c Release --no-build --output ${{ runner.temp }}/nuget --nologo
+
   cross-platform:
     runs-on: ubuntu-latest
     timeout-minutes: 15

@@ -94,14 +94,24 @@ jobs:
         shell: pwsh
         run: ./build/publish.ps1 -Runtime win-x64
 
-      # There is deliberately no "list the artifacts" step here.
+      # There is deliberately no "list the artifacts" step here, and there is a story behind that
+      # which is worth more than the step was.
       #
-      # Three release attempts were lost to one, and the third proved it was never about the
-      # artifacts: Upload succeeded on the very next step, so the paths had been right all along.
-      # It failed because GitHub runs pwsh steps with $ErrorActionPreference = 'Stop', and
-      # continue-on-error does not undo the damage - a step recorded as failed makes success()
-      # false for every step after it, which silently skipped the sign, attest, hash and release
-      # steps. A convenience step took the release down without failing the run.
+      # Six releases failed at this point in the workflow. Five of those were spent editing steps
+      # that were never broken, because the failure was read out of the jobs API with a script that
+      # paired each step's name with the *next* step's conclusion. Off by one, the log said "Upload
+      # unsigned artifact failed"; read correctly, it always said "Publish failed". Convenience
+      # steps got deleted and guards got added to chase a failure one line further down.
+      #
+      # The actual cause was in the pack at the end of build/publish.ps1. Directory.Build.props sets
+      # IncludeSymbols for the whole repo; Courier.MSBuild sets IncludeBuildOutput=false because a
+      # build-task assembly belongs in tasks/ rather than lib/. Its .snupkg therefore had nothing in
+      # it, and NuGet failed the run with NU5017 *after* writing a valid .nupkg, so the message read
+      # like a success followed by an unrelated error.
+      #
+      # Two things to take from it. If a step here fails, reproduce it locally before editing the
+      # workflow - `./build/publish.ps1 -Runtime win-x64` is the whole step and it fails in about
+      # four minutes on a laptop. And when reading the jobs API, parse the JSON; do not pair lines.
       #
       # build/publish.ps1 verifies its own output and throws if the exe is missing, which is where
       # that check belongs. It also prints sizes and paths. Nothing here needs to repeat it.
