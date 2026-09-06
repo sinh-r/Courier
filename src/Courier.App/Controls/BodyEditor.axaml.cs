@@ -1,7 +1,10 @@
+using System.ComponentModel;
 using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using AvaloniaEdit.Document;
+using Courier.App.ViewModels;
+using Courier.Core.Collections;
 
 namespace Courier.App.Controls;
 
@@ -23,6 +26,9 @@ public sealed partial class BodyEditor : UserControl
 
     private readonly DispatcherTimer _validationTimer;
     private CancellationTokenSource? _validation;
+    private MainWindowViewModel? _shell;
+    private TabViewModel? _boundTab;
+    private bool _suppressStateWrites;
 
     public BodyEditor()
     {
@@ -41,9 +47,74 @@ public sealed partial class BodyEditor : UserControl
             // user stops typing.
             _validationTimer.Stop();
             _validationTimer.Start();
+
+            if (!_suppressStateWrites && _boundTab?.State is { } state)
+            {
+                state.BodyText = Editor.Document?.Text;
+                _boundTab.MarkDirty();
+            }
+        };
+
+        KindPicker.SelectionChanged += (_, _) =>
+        {
+            if (!_suppressStateWrites && _boundTab?.State is { } state && KindPicker.SelectedIndex >= 0)
+            {
+                state.BodyKind = (BodyKind)KindPicker.SelectedIndex;
+                _boundTab.MarkDirty();
+            }
         };
 
         FormatButton.Click += (_, _) => Format();
+
+        DataContextChanged += OnDataContextChanged;
+    }
+
+    /// <summary>
+    /// The body's DataContext is inherited from the shell far above, and does not change when the
+    /// active tab does — so this listens to the tab collection itself rather than to its own
+    /// DataContext, and reloads the editor's content each time the active tab changes.
+    /// </summary>
+    private void OnDataContextChanged(object? sender, EventArgs e)
+    {
+        if (_shell is not null)
+        {
+            _shell.Tabs.PropertyChanged -= OnTabsPropertyChanged;
+        }
+
+        _shell = DataContext as MainWindowViewModel;
+
+        if (_shell is not null)
+        {
+            _shell.Tabs.PropertyChanged += OnTabsPropertyChanged;
+        }
+
+        LoadFromActiveTab();
+    }
+
+    private void OnTabsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is null or nameof(TabCollection.Active))
+        {
+            LoadFromActiveTab();
+        }
+    }
+
+    private void LoadFromActiveTab()
+    {
+        _boundTab = _shell?.Tabs.Active;
+        var state = _boundTab?.State;
+
+        _suppressStateWrites = true;
+
+        Editor.Document = new TextDocument(state?.BodyText ?? string.Empty);
+
+        var index = (int)(state?.BodyKind ?? BodyKind.Json);
+        if (index is >= 0 and < 8)
+        {
+            KindPicker.SelectedIndex = index;
+        }
+
+        _suppressStateWrites = false;
     }
 
     /// <summary>Format-on-demand, never format-as-you-type. CORE-02.</summary>

@@ -21,17 +21,22 @@
 
       <Border DockPanel.Dock="Top" Padding="16,12"
               BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
-        <StackPanel Spacing="6">
-          <TextBlock Classes="title" Text="Export capsule" />
-          <StackPanel Orientation="Horizontal" Spacing="12">
-            <TextBlock Classes="mono" FontSize="11" Text="{Binding Method}"
-                       Foreground="{Binding Method, Converter={StaticResource VerbBrushConverter}}" />
-            <TextBlock Classes="mono" Text="{Binding Route}" />
-            <TextBlock Classes="mono" Text="{Binding StatusText}"
-                       Foreground="{Binding Status, Converter={StaticResource StatusBrushConverter}}" />
-            <TextBlock Classes="mono meta" Text="{Binding CapturedAt}" />
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Grid.Column="0" Spacing="6">
+            <TextBlock Classes="title" Text="Export capsule" />
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <TextBlock Classes="mono" FontSize="11" Text="{Binding Method}"
+                         Foreground="{Binding Method, Converter={StaticResource VerbBrushConverter}}" />
+              <TextBlock Classes="mono" Text="{Binding Route}" />
+              <TextBlock Classes="mono" Text="{Binding StatusText}"
+                         Foreground="{Binding Status, Converter={StaticResource StatusBrushConverter}}" />
+              <TextBlock Classes="mono meta" Text="{Binding CapturedAt}" />
+            </StackPanel>
           </StackPanel>
-        </StackPanel>
+          <Button Grid.Column="1" Classes="bare" Content="×" VerticalAlignment="Top"
+                  Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).CloseDialogCommand}"
+                  AutomationProperties.Name="Close" />
+        </Grid>
       </Border>
 
       <Border DockPanel.Dock="Bottom" Padding="16,12"

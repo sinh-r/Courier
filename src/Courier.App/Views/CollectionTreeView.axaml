@@ -10,9 +10,26 @@
       <!-- Header. 24px, matching every other row in the application. -->
       <Border DockPanel.Dock="Top" Height="{DynamicResource RowHeight}"
               BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
-        <Grid ColumnDefinitions="*,Auto">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto">
           <TextBlock Grid.Column="0" Classes="heading" Text="Collections" VerticalAlignment="Center" />
-          <TextBlock Grid.Column="1" Classes="mono meta" Text="+ ⌕ ⋯" VerticalAlignment="Center" />
+
+          <Button Grid.Column="1" Classes="bare" Width="20" Height="20" Padding="0"
+                  Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).NewTabCommand}"
+                  AutomationProperties.Name="New request">
+            <TextBlock Classes="mono meta" Text="+" HorizontalAlignment="Center" />
+          </Button>
+
+          <Button Grid.Column="2" Classes="bare" Width="20" Height="20" Padding="0"
+                  Name="FocusFilterButton"
+                  AutomationProperties.Name="Filter collections">
+            <TextBlock Classes="mono meta" Text="⌕" HorizontalAlignment="Center" />
+          </Button>
+
+          <Button Grid.Column="3" Classes="bare" Width="20" Height="20" Padding="0"
+                  Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenFolderCommand}"
+                  AutomationProperties.Name="Open a collection folder">
+            <TextBlock Classes="mono meta" Text="⋯" HorizontalAlignment="Center" />
+          </Button>
         </Grid>
       </Border>
 
@@ -22,7 +39,7 @@
               BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
         <Grid ColumnDefinitions="Auto,*">
           <TextBlock Grid.Column="0" Classes="meta" Text="⌕" VerticalAlignment="Center" Margin="0,0,6,0" />
-          <TextBox Grid.Column="1" Text="{Binding Filter}" PlaceholderText="filter"
+          <TextBox Grid.Column="1" Name="FilterBox" Text="{Binding Filter}" PlaceholderText="filter"
                    BorderThickness="0" Background="Transparent" Padding="0"
                    VerticalAlignment="Center"
                    AutomationProperties.Name="Filter collections" />
@@ -57,7 +74,7 @@
                    Text="No collections yet. Open a folder, or point Courier at a .NET solution and it will build one." />
       </Border>
 
-      <TreeView ItemsSource="{Binding Roots}"
+      <TreeView Name="Tree" ItemsSource="{Binding Roots}"
                 SelectedItem="{Binding Selected}"
                 Background="Transparent"
                 BorderThickness="0"
@@ -66,7 +83,8 @@
 
         <TreeView.ItemTemplate>
           <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="vm:TreeNode">
-            <Grid ColumnDefinitions="14,40,*,Auto,Auto" Height="{DynamicResource RowHeight}">
+            <Grid ColumnDefinitions="14,40,*,Auto,Auto" Height="{DynamicResource RowHeight}"
+                  IsVisible="{Binding IsVisible}">
 
               <!-- Provenance. Glyph and colour together; never colour alone. -->
               <TextBlock Grid.Column="0" Classes="meta" VerticalAlignment="Center"

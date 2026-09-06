@@ -134,10 +134,28 @@ the most important thing left to fix in the pipeline.
 
 ## Status
 
-Not released. Every requirement has an implementation and the performance budgets pass, but the
-enterprise and cloud integrations have not been exercised against a real tenant, proxy, monitoring
-backend or work item tracker. [NEEDS_LIVE_VALIDATION.md](docs/NEEDS_LIVE_VALIDATION.md) lists each
-one and how to check it. Nothing on that list should be described as working until it is.
+Not released. Every library requirement has an implementation and the performance budgets pass, but
+until recently the desktop app itself was a disconnected shell around them: the tab strip, the
+collections rail, the theme, and the Send button all rendered but had nothing behind them.
+
+That has been fixed for the core interactions — sending a request, switching and closing tabs,
+opening a collection folder, editing params and headers, saving a request to disk, recording
+history, switching light/dark theme, and closing every dialog — which is what makes the "uninstall
+Postman" claim in Phase 1 of [REQUIREMENTS.md](docs/REQUIREMENTS.md) true rather than aspirational.
+Still open, tracked as backlog rather than fixed in this pass:
+
+- A further ~24 buttons across the capsule, telemetry, sync-from-code and first-run dialogs remain
+  unwired (each maps to a real, already-implemented library call — see the plan's Stage 5).
+- Six substantial subsystems have no UI or CLI entry point at all: the Postman and curl importers,
+  `DtoSampleGenerator`, `ScanDiff`, the App Insights/Datadog telemetry sources, and the Azure DevOps
+  work-item client.
+- OpenAPI import and the semantic (Roslyn workspace) scan tier do not exist yet.
+
+Separately, the enterprise and cloud integrations (Entra/WAM, NTLM/Kerberos, smart cards, PAC
+proxies, TLS-inspecting proxies, App Insights, Datadog, Azure DevOps) have not been exercised
+against a real tenant, proxy, monitoring backend or work item tracker.
+[NEEDS_LIVE_VALIDATION.md](docs/NEEDS_LIVE_VALIDATION.md) lists each one and how to check it.
+Nothing on either list should be described as working until it is.
 
 ## Licence
 

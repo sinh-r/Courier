@@ -1,16 +1,19 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
              x:Class="Courier.App.Controls.KeyValueGrid">
 
   <!--
     Params and headers. A checkbox per row rather than a delete, so disabling a header is not
-    destructive and the row stays in the file for the next time it is needed.
+    destructive and the row stays in the file for the next time it is needed. There is always one
+    blank trailing row: typing into it is how a new entry appears, and the × on the right is how an
+    existing one goes away.
   -->
   <DockPanel LastChildFill="True">
 
     <Border DockPanel.Dock="Top" Height="{DynamicResource RowHeight}"
             BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
-      <Grid ColumnDefinitions="24,220,*,180">
+      <Grid ColumnDefinitions="24,220,*,180,20">
         <TextBlock Grid.Column="1" Classes="meta" Text="Name" VerticalAlignment="Center" />
         <TextBlock Grid.Column="2" Classes="meta" Text="Value" VerticalAlignment="Center" />
         <TextBlock Grid.Column="3" Classes="meta" Text="Description" VerticalAlignment="Center" />
@@ -19,17 +22,33 @@
 
     <ItemsControl Name="Rows">
       <ItemsControl.ItemTemplate>
-        <!--
-          Params and headers are different types with the same shape, so this template is
-          reflection-bound rather than compiled. It is the one place in the app that opts out.
-        -->
-        <DataTemplate x:CompileBindings="False">
+        <DataTemplate x:DataType="vm:KeyValueRowViewModel">
           <Border BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
-            <Grid ColumnDefinitions="24,220,*,180" Height="{DynamicResource RowHeight}">
-              <CheckBox Grid.Column="0" IsChecked="{Binding Enabled, Mode=OneWay}" />
-              <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Name}" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="2" Classes="mono" Text="{Binding Value}" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="3" Classes="meta" Text="{Binding Description}" VerticalAlignment="Center" />
+            <Grid ColumnDefinitions="24,220,*,180,20" Height="{DynamicResource RowHeight}">
+              <CheckBox Grid.Column="0" IsChecked="{Binding Enabled, Mode=TwoWay}" />
+
+              <TextBox Grid.Column="1" Classes="chrome" BorderThickness="0" Background="Transparent"
+                       Padding="0" VerticalAlignment="Center"
+                       Text="{Binding Name, Mode=TwoWay}"
+                       AutomationProperties.Name="Name" />
+
+              <TextBox Grid.Column="2" Classes="chrome" BorderThickness="0" Background="Transparent"
+                       Padding="0" VerticalAlignment="Center"
+                       Text="{Binding Value, Mode=TwoWay}"
+                       AutomationProperties.Name="Value" />
+
+              <TextBox Grid.Column="3" Classes="chrome meta" BorderThickness="0" Background="Transparent"
+                       Padding="0" VerticalAlignment="Center"
+                       Text="{Binding Description, Mode=TwoWay}"
+                       AutomationProperties.Name="Description" />
+
+              <Button Grid.Column="4" Classes="bare" Width="18" Height="18" Padding="0"
+                      Command="{Binding DeleteCommand}"
+                      IsVisible="{Binding !IsBlank}"
+                      AutomationProperties.Name="Remove row">
+                <TextBlock Text="×" Foreground="{DynamicResource Muted}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Button>
             </Grid>
           </Border>
         </DataTemplate>

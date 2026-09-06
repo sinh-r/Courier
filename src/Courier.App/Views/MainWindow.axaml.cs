@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.VisualTree;
 using Courier.App.Services;
 using Courier.App.ViewModels;
 
@@ -19,6 +20,19 @@ public sealed partial class MainWindow : Window
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DropEvent, OnDrop);
         DragDrop.SetAllowDrop(this, true);
+
+        // A file picker needs a TopLevel, and the shell is built before this window exists.
+        DataContextChanged += (_, _) =>
+        {
+            if (Shell is { } shell)
+            {
+                shell.TopLevel = this;
+            }
+        };
+
+        // Clicking the scrim outside the dialog's own bounds dismisses it. Escape already does the
+        // same; this is the mouse-only path.
+        Scrim.PointerPressed += (_, _) => Shell?.CloseDialog();
     }
 
     private MainWindowViewModel? Shell => DataContext as MainWindowViewModel;
@@ -108,6 +122,31 @@ public sealed partial class MainWindow : Window
 
             case Key.Tab when control:
                 CycleTab(shell, e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? -1 : 1);
+                e.Handled = true;
+                break;
+
+            case Key.Enter when control:
+                _ = shell.SendAsync();
+                e.Handled = true;
+                break;
+
+            case Key.OemPeriod when control:
+                shell.CancelSend();
+                e.Handled = true;
+                break;
+
+            case Key.S when control:
+                _ = shell.SaveAsync();
+                e.Handled = true;
+                break;
+
+            case Key.O when control:
+                _ = shell.OpenFolderAsync();
+                e.Handled = true;
+                break;
+
+            case Key.F when control:
+                this.GetVisualDescendants().OfType<TextBox>().FirstOrDefault(t => t.Name == "SearchBox")?.Focus();
                 e.Handled = true;
                 break;
         }

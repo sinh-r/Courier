@@ -143,6 +143,33 @@
     <Setter Property="FontSize" Value="{DynamicResource PayloadSize}" />
   </Style>
 
+  <!--
+    Request/response section tabs. Undefined until now, so both fell back to Simple's own palette,
+    which is fixed rather than theme-aware — the reason Params/Headers/Body/Scripts read as
+    invisible text in dark mode. Every colour here comes from Tokens.axaml so both themes stay correct.
+  -->
+  <Style Selector="TabControl">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <Style Selector="TabItem">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Sans}" />
+    <Setter Property="FontSize" Value="{DynamicResource BodySize}" />
+    <Setter Property="Padding" Value="10,4" />
+  </Style>
+
+  <Style Selector="TabItem:selected">
+    <Setter Property="Background" Value="{DynamicResource Paper}" />
+    <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+    <Setter Property="FontWeight" Value="Medium" />
+  </Style>
+
+  <Style Selector="TabItem:pointerover">
+    <Setter Property="Background" Value="{DynamicResource Hover}" />
+  </Style>
+
   <Style Selector="CheckBox">
     <Setter Property="Foreground" Value="{DynamicResource Ink}" />
     <Setter Property="FontFamily" Value="{DynamicResource Sans}" />

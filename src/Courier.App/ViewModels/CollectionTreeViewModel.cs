@@ -29,6 +29,44 @@ public sealed partial class CollectionTreeViewModel : ObservableObject
 
     public CollectionTreeViewModel(AppServices services) => _services = services;
 
+    partial void OnFilterChanged(string value) => ApplyFilter();
+
+    /// <summary>
+    /// Marks every node visible or not. A folder stays visible whenever anything under it matches,
+    /// so filtering narrows the tree without ever hiding the path to a match.
+    /// </summary>
+    private void ApplyFilter()
+    {
+        foreach (var root in Roots)
+        {
+            ApplyFilter(root, Filter);
+        }
+    }
+
+    private static bool ApplyFilter(TreeNode node, string filter)
+    {
+        if (string.IsNullOrWhiteSpace(filter))
+        {
+            node.IsVisible = true;
+            foreach (var child in node.Children)
+            {
+                ApplyFilter(child, filter);
+            }
+
+            return true;
+        }
+
+        var childVisible = false;
+        foreach (var child in node.Children)
+        {
+            childVisible |= ApplyFilter(child, filter);
+        }
+
+        var selfMatches = node.Name.Contains(filter, StringComparison.OrdinalIgnoreCase);
+        node.IsVisible = node.Kind == TreeNodeKind.Collection || selfMatches || childVisible;
+        return node.IsVisible;
+    }
+
     public ObservableCollection<TreeNode> Roots { get; } = [];
 
     /// <summary>The legend under the tree: ■ from code · ◧ edited · ○ yours.</summary>
@@ -72,6 +110,7 @@ public sealed partial class CollectionTreeViewModel : ObservableObject
 
         Roots.Add(root);
         OnPropertyChanged(nameof(IsEmpty));
+        ApplyFilter();
 
         await RefreshGitStatusAsync(ct).ConfigureAwait(true);
     }
@@ -176,6 +215,9 @@ public sealed partial class TreeNode : ObservableObject
 {
     [ObservableProperty]
     private bool _isExpanded = true;
+
+    [ObservableProperty]
+    private bool _isVisible = true;
 
     [ObservableProperty]
     private GitFileState _gitState = GitFileState.Unchanged;

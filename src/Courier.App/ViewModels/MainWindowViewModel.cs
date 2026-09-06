@@ -1,11 +1,18 @@
 using System.Collections.ObjectModel;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Platform.Storage;
+using Avalonia.Styling;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Courier.App.Services;
 using Courier.Core.Abstractions;
 using Courier.Core.Collections;
+using Courier.Core.Http;
 using Courier.Core.Privacy;
 using Courier.Core.Storage;
+using Courier.Core.Variables;
 
 namespace Courier.App.ViewModels;
 
@@ -15,9 +22,19 @@ namespace Courier.App.ViewModels;
 public sealed partial class MainWindowViewModel : ObservableObject
 {
     private readonly AppServices _services;
+    private readonly DispatcherTimer _elapsedTimer;
+
+    /// <summary>The window this shell is drawn in, set once the window opens. Needed for file pickers.</summary>
+    public TopLevel? TopLevel { get; set; }
 
     [ObservableProperty]
     private string _environmentName = "Local";
+
+    [ObservableProperty]
+    private string _themeName = "System";
+
+    [ObservableProperty]
+    private CapsuleExportViewModel? _capsuleExport;
 
     [ObservableProperty]
     private bool _environmentHasSecrets;
@@ -70,6 +87,16 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // It updates from the egress gate's own records rather than from a flag someone could
         // forget to clear.
         services.Egress.Recorded += _ => OnPropertyChanged(nameof(NetworkSummary));
+
+        // Drives the elapsed-time label beside Send while a request is in flight. 200ms is plenty
+        // for a label a human is watching; it is not on any performance budget's critical path.
+        _elapsedTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(200) };
+        _elapsedTimer.Tick += (_, _) => Tabs.Active?.TickElapsed();
+        _elapsedTimer.Start();
+
+        // Restores the last chosen theme. Setting the property (not the backing field) runs
+        // OnThemeNameChanged, which is what actually applies it.
+        ThemeName = AppSettingsStore.Load().Theme;
     }
 
     public TabCollection Tabs { get; }
@@ -106,6 +133,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         new("Ctrl+I", "Show or hide the inspector"),
         new("Ctrl+Enter", "Send the active request"),
         new("Ctrl+.", "Cancel the in-flight request"),
+        new("Ctrl+S", "Save the active request"),
+        new("Ctrl+O", "Open a collection folder"),
         new("Ctrl+F", "Search within the response"),
         new("Escape", "Dismiss the open dialog"),
     ];
@@ -189,6 +218,202 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public void OpenRequest(RequestDefinition request) =>
         Tabs.Open(TabState.FromDefinition(request, Tree.CollectionName, EnvironmentName));
 
+    /// <summary>
+    /// Sends the active tab's request. CORE-01. Variable substitution runs first so the URL, headers
+    /// and body that go on the wire match what CORE-04's hover already promised the user.
+    /// </summary>
+    [RelayCommand]
+    public async Task SendAsync()
+    {
+        if (Tabs.Active is not { State: { } state } tab)
+        {
+            return;
+        }
+
+        var ct = tab.BeginSend();
+
+        try
+        {
+            var scopes = new VariableScopes();
+
+            var urlResult = await _services.Variables.SubstituteAsync(state.Url, scopes, ct).ConfigureAwait(true);
+            if (!Uri.TryCreate(urlResult.Text, UriKind.Absolute, out var uri))
+            {
+                return;
+            }
+
+            var enabledQuery = state.Query.Where(q => q.Enabled && q.Name.Length > 0).ToList();
+            if (enabledQuery.Count > 0)
+            {
+                var pairs = new List<string>();
+                if (!string.IsNullOrEmpty(uri.Query))
+                {
+                    pairs.Add(uri.Query.TrimStart('?'));
+                }
+
+                foreach (var q in enabledQuery)
+                {
+                    var value = await _services.Variables.SubstituteAsync(q.Value, scopes, ct).ConfigureAwait(true);
+                    pairs.Add($"{Uri.EscapeDataString(q.Name)}={Uri.EscapeDataString(value.Text)}");
+                }
+
+                uri = new UriBuilder(uri) { Query = string.Join("&", pairs) }.Uri;
+            }
+
+            var headers = new List<KeyValuePair<string, string>>();
+            foreach (var h in state.Headers.Where(h => h.Enabled && h.Name.Length > 0))
+            {
+                var value = await _services.Variables.SubstituteAsync(h.Value, scopes, ct).ConfigureAwait(true);
+                headers.Add(new KeyValuePair<string, string>(h.Name, value.Text));
+            }
+
+            byte[]? bodyBytes = null;
+            string? contentType = null;
+
+            if (state.BodyKind != BodyKind.None && !string.IsNullOrEmpty(state.BodyText))
+            {
+                var body = await _services.Variables.SubstituteAsync(state.BodyText, scopes, ct).ConfigureAwait(true);
+                bodyBytes = System.Text.Encoding.UTF8.GetBytes(body.Text);
+                contentType = new RequestBody { Kind = state.BodyKind }.ResolveContentType();
+            }
+
+            var prepared = new PreparedRequest
+            {
+                Method = string.IsNullOrWhiteSpace(state.Method) ? "GET" : state.Method,
+                Url = uri,
+                Headers = headers,
+                BodyBytes = bodyBytes,
+                ContentType = contentType,
+                Settings = state.Settings,
+                EnvironmentName = state.EnvironmentName,
+            };
+
+            var result = await _services.Executor.SendAsync(prepared, ct).ConfigureAwait(true);
+
+            tab.Response?.Dispose();
+            tab.Response = new ResponseViewModel(result);
+
+            var database = await _services.DatabaseAsync().ConfigureAwait(true);
+            await new HistoryStore(database)
+                .RecordAsync(result, state.EnvironmentName, Tree.CollectionName, state.EndpointId ?? state.RequestPath, ct)
+                .ConfigureAwait(true);
+
+            HistoryCount++;
+            OnPropertyChanged(nameof(HistoryCountLabel));
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancel is a normal outcome, not a failure to report.
+        }
+        finally
+        {
+            tab.CompleteSend();
+        }
+    }
+
+    /// <summary>Ctrl+. and the Cancel button. Cancelling an idle tab is a harmless no-op.</summary>
+    [RelayCommand]
+    public void CancelSend() => Tabs.Active?.CancelSend();
+
+    /// <summary>
+    /// Writes the active tab to disk as a request file. Ctrl+S. Nothing in the app could do this
+    /// before — every edit lived only in the session's SQLite blob until now.
+    /// </summary>
+    [RelayCommand]
+    public async Task SaveAsync()
+    {
+        if (Tabs.Active is not { State: { } state } tab || Tree.Folder is null)
+        {
+            return;
+        }
+
+        var definition = state.ToDefinition();
+        var serializer = new CollectionSerializer();
+        var yaml = serializer.SerializeRequest(definition);
+
+        var path = state.RequestPath ?? Path.Combine(
+            Tree.Folder,
+            CollectionFormat.RequestsFolder,
+            CollectionFormat.FileNameFor(definition));
+
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, yaml).ConfigureAwait(true);
+
+        state.RequestPath = path;
+        state.IsDirty = false;
+        tab.IsDirty = false;
+    }
+
+    /// <summary>Opens a folder of collections. The menu, the rail's "…" button and Ctrl+O all reach this.</summary>
+    [RelayCommand]
+    public async Task OpenFolderAsync()
+    {
+        if (TopLevel?.StorageProvider is not { } storage)
+        {
+            return;
+        }
+
+        var folders = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Open a collection folder",
+            AllowMultiple = false,
+        }).ConfigureAwait(true);
+
+        if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } path)
+        {
+            return;
+        }
+
+        await Tree.OpenFolderAsync(path).ConfigureAwait(true);
+        CollectionSyncStatus = $"{Tree.CollectionName} open";
+    }
+
+    /// <summary>
+    /// Opens the export-capsule review for the active tab's last response. CAP-01, CAP-04. Building
+    /// the view model here rather than in the dialog is what fixes the dialog rendering empty: it
+    /// was never being constructed at all.
+    /// </summary>
+    [RelayCommand]
+    public void OpenCapsuleExport()
+    {
+        if (Tabs.Active?.Response?.Result is not { } result)
+        {
+            return;
+        }
+
+        CapsuleExport = new CapsuleExportViewModel(
+            _services.Redaction,
+            result,
+            EnvironmentName,
+            result.TraceId,
+            _services.Version);
+
+        Dialog = DialogKind.ExportCapsule;
+    }
+
+    /// <summary>Light, Dark or System. Applied immediately and remembered for next launch.</summary>
+    [RelayCommand]
+    public void SetTheme(string preference)
+    {
+        ThemeName = preference;
+        AppSettingsStore.Save(new AppSettings { Theme = preference });
+    }
+
+    partial void OnThemeNameChanged(string value)
+    {
+        if (Application.Current is not { } app)
+        {
+            return;
+        }
+
+        app.RequestedThemeVariant = value switch
+        {
+            "Light" => ThemeVariant.Light,
+            "Dark" => ThemeVariant.Dark,
+            _ => ThemeVariant.Default,
+        };
+    }
+
     /// <summary>Deferred past first paint. PERF-01.</summary>
     public async Task LoadHistoryAsync()
     {
@@ -248,6 +473,7 @@ public enum DialogKind
     TrustAndNetwork,
     Storage,
     Keyboard,
+    Appearance,
 }
 
 public enum InspectorLayout

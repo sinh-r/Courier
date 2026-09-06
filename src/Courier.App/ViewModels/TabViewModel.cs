@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -49,12 +50,56 @@ public sealed partial class TabViewModel : ObservableObject
     [ObservableProperty]
     private TimeSpan _elapsed;
 
+    private Stopwatch? _sendStopwatch;
+    private CancellationTokenSource? _sendCts;
+
     public TabViewModel(TabState state)
     {
         State = state;
         _title = state.Title;
         _method = state.Method;
         _isDirty = state.IsDirty;
+
+        HeaderEditor = new KeyValueEditorViewModel(rows =>
+        {
+            if (State is null)
+            {
+                return;
+            }
+
+            State.Headers = [.. rows.Select(r => new HeaderValue(r.Name, r.Value, r.Enabled, r.Description))];
+            MarkDirty();
+        });
+
+        QueryEditor = new KeyValueEditorViewModel(rows =>
+        {
+            if (State is null)
+            {
+                return;
+            }
+
+            State.Query = [.. rows.Select(r => new QueryParameter(r.Name, r.Value, r.Enabled, r.Description))];
+            MarkDirty();
+        });
+
+        LoadRowsFromState();
+    }
+
+    /// <summary>The Params grid. UI_SPEC — the grid the user actually edits.</summary>
+    public KeyValueEditorViewModel QueryEditor { get; }
+
+    /// <summary>The Headers grid.</summary>
+    public KeyValueEditorViewModel HeaderEditor { get; }
+
+    private void LoadRowsFromState()
+    {
+        if (State is null)
+        {
+            return;
+        }
+
+        HeaderEditor.Load(State.Headers.Select(h => (h.Name, h.Value, h.Enabled, h.Description)));
+        QueryEditor.Load(State.Query.Select(q => (q.Name, q.Value, q.Enabled, q.Description)));
     }
 
     /// <summary>Null while suspended. Every access must go through <see cref="Activate"/> first.</summary>
@@ -117,6 +162,39 @@ public sealed partial class TabViewModel : ObservableObject
 
         State.LastActive = DateTimeOffset.UtcNow;
         _suspendedPayload = null;
+        LoadRowsFromState();
+    }
+
+    /// <summary>Starts the in-flight state: elapsed timer running, a cancellable token live.</summary>
+    public CancellationToken BeginSend()
+    {
+        _sendCts?.Cancel();
+        _sendCts?.Dispose();
+        _sendCts = new CancellationTokenSource();
+        _sendStopwatch = Stopwatch.StartNew();
+        Elapsed = TimeSpan.Zero;
+        IsSending = true;
+        return _sendCts.Token;
+    }
+
+    /// <summary>Called on a timer while sending so the elapsed-time label keeps moving.</summary>
+    public void TickElapsed()
+    {
+        if (_sendStopwatch is not null)
+        {
+            Elapsed = _sendStopwatch.Elapsed;
+        }
+    }
+
+    /// <summary>Requests cancellation of the in-flight send. Ctrl+. and the Cancel button both call this.</summary>
+    public void CancelSend() => _sendCts?.Cancel();
+
+    public void CompleteSend()
+    {
+        IsSending = false;
+        _sendStopwatch = null;
+        _sendCts?.Dispose();
+        _sendCts = null;
     }
 
     /// <summary>The serialized form, for session restore and crash recovery. NFR-07.</summary>
@@ -138,7 +216,19 @@ public sealed partial class TabViewModel : ObservableObject
         }
     }
 
-    partial void OnMethodChanged(string value) => OnPropertyChanged(nameof(VerbBrush));
+    partial void OnMethodChanged(string value)
+    {
+        OnPropertyChanged(nameof(VerbBrush));
+
+        // State and Method were two independent copies of the same fact until now: the method
+        // combo box binds here (so the tab header's verb badge updates live), and this is the one
+        // place that pushes the choice back into the state that actually gets sent and saved.
+        if (State is not null && State.Method != value)
+        {
+            State.Method = value;
+            MarkDirty();
+        }
+    }
 
     partial void OnTitleChanged(string value) => OnPropertyChanged(nameof(DisplayTitle));
 

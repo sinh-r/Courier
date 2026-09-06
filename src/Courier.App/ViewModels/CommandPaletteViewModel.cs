@@ -66,6 +66,8 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
         Search(Query);
     }
 
+    partial void OnQueryChanged(string value) => Search(value);
+
     public void Search(string query)
     {
         Query = query;

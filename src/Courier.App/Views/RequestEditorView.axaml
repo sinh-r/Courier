@@ -41,16 +41,10 @@
               BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
         <Grid ColumnDefinitions="Auto,4,*,8,Auto" VerticalAlignment="Center">
 
-          <ComboBox Grid.Column="0" Width="92" SelectedIndex="0"
-                    AutomationProperties.Name="HTTP method">
-            <ComboBoxItem Content="GET" />
-            <ComboBoxItem Content="POST" />
-            <ComboBoxItem Content="PUT" />
-            <ComboBoxItem Content="PATCH" />
-            <ComboBoxItem Content="DELETE" />
-            <ComboBoxItem Content="HEAD" />
-            <ComboBoxItem Content="OPTIONS" />
-          </ComboBox>
+          <ComboBox Grid.Column="0" Width="92"
+                    ItemsSource="{x:Static vm:HttpMethods.All}"
+                    SelectedItem="{Binding Tabs.Active.Method, Mode=TwoWay}"
+                    AutomationProperties.Name="HTTP method" />
 
           <!--
             Variable references stay visible as {{name}} and resolve on hover, so the user can see
@@ -70,8 +64,10 @@
             <TextBlock Classes="meta mono" VerticalAlignment="Center"
                        IsVisible="{Binding Tabs.Active.IsSending}"
                        Text="{Binding Tabs.Active.Elapsed, Converter={StaticResource ElapsedConverter}}" />
-            <Button Content="Cancel" IsVisible="{Binding Tabs.Active.IsSending}" />
+            <Button Content="Cancel" Command="{Binding CancelSendCommand}"
+                    IsVisible="{Binding Tabs.Active.IsSending}" />
             <Button Classes="primary" Content="Send" Width="64"
+                    Command="{Binding SendCommand}"
                     IsVisible="{Binding !Tabs.Active.IsSending}"
                     AutomationProperties.Name="Send request" />
           </StackPanel>
@@ -83,11 +79,11 @@
       <TabControl DockPanel.Dock="Top" Padding="0" Background="Transparent">
 
         <TabItem Header="Params">
-          <controls:KeyValueGrid ItemsSource="{Binding Tabs.Active.State.Query}" />
+          <controls:KeyValueGrid ItemsSource="{Binding Tabs.Active.QueryEditor.Rows}" />
         </TabItem>
 
         <TabItem Header="Headers">
-          <controls:KeyValueGrid ItemsSource="{Binding Tabs.Active.State.Headers}" />
+          <controls:KeyValueGrid ItemsSource="{Binding Tabs.Active.HeaderEditor.Rows}" />
         </TabItem>
 
         <TabItem Header="Body" IsSelected="True">

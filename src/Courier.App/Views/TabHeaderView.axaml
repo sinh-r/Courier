@@ -19,30 +19,40 @@
           Height="{DynamicResource TabHeight}"
           Background="{DynamicResource Panel}"
           BorderBrush="{DynamicResource Rule}"
-          BorderThickness="0,0,1,0"
-          Padding="8,0">
+          BorderThickness="0,0,1,0">
 
-    <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+    <Grid ColumnDefinitions="*,Auto">
 
-      <!-- The verb badge. Often the only thing the user reads. -->
-      <TextBlock Grid.Column="0" Classes="mono" FontSize="11" Margin="0,0,6,0"
-                 VerticalAlignment="Center"
-                 Text="{Binding Method}"
-                 Foreground="{Binding Method, Converter={StaticResource VerbBrushConverter}}" />
+      <!-- The main click target: selects this tab. The verb badge is often the only thing read. -->
+      <Button Grid.Column="0" Name="SelectButton" Classes="bare"
+              HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+              Padding="8,0" AutomationProperties.Name="{Binding Title}">
+        <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
+          <TextBlock Grid.Column="0" Classes="mono" FontSize="11" Margin="0,0,6,0"
+                     VerticalAlignment="Center"
+                     Text="{Binding Method}"
+                     Foreground="{Binding Method, Converter={StaticResource VerbBrushConverter}}" />
 
-      <TextBlock Grid.Column="1" VerticalAlignment="Center"
-                 Text="{Binding DisplayTitle}"
-                 ToolTip.Tip="{Binding Title}" />
+          <TextBlock Grid.Column="1" VerticalAlignment="Center"
+                     Text="{Binding DisplayTitle}"
+                     ToolTip.Tip="{Binding Title}" />
+        </Grid>
+      </Button>
 
-      <!-- Unsaved changes show as a filled dot in place of the close affordance until hover. -->
-      <TextBlock Grid.Column="2" Text="●" FontSize="9" VerticalAlignment="Center"
-                 Foreground="{DynamicResource Ink}"
-                 IsVisible="{Binding IsDirty}"
-                 AutomationProperties.Name="Unsaved changes" />
+      <!-- Unsaved-changes dot, plus a real close button next to it. -->
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="3" Margin="0,0,4,0"
+                  VerticalAlignment="Center">
+        <TextBlock Text="●" FontSize="9" VerticalAlignment="Center"
+                   Foreground="{DynamicResource Ink}"
+                   IsVisible="{Binding IsDirty}"
+                   AutomationProperties.Name="Unsaved changes" />
 
-      <TextBlock Grid.Column="2" Text="×" VerticalAlignment="Center"
-                 Foreground="{DynamicResource Muted}"
-                 IsVisible="{Binding !IsDirty}" />
+        <Button Name="CloseButton" Classes="bare" Width="18" Height="18" Padding="0"
+                AutomationProperties.Name="Close tab">
+          <TextBlock Text="×" Foreground="{DynamicResource Muted}"
+                     HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Button>
+      </StackPanel>
 
     </Grid>
   </Border>

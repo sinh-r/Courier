@@ -37,8 +37,7 @@
 
           <!-- The capsule affordance sits with the response, where the failing call is. CAP-01. -->
           <Button Grid.Column="5" Classes="bare" Height="18"
-                  Command="{Binding OpenDialogCommand}"
-                  CommandParameter="{x:Static vm:DialogKind.ExportCapsule}"
+                  Command="{Binding OpenCapsuleExportCommand}"
                   AutomationProperties.Name="Export this request and response as a capsule">
             <StackPanel Orientation="Horizontal" Spacing="5">
               <TextBlock Classes="meta" Text="⧉" />

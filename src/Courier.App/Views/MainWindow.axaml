@@ -28,9 +28,40 @@
               BorderThickness="0,0,0,1">
         <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto" Margin="8,0">
 
-          <TextBlock Grid.Column="0" Text="≡" Foreground="{DynamicResource Muted}"
-                     VerticalAlignment="Center" Width="24" TextAlignment="Center"
-                     AutomationProperties.Name="Menu" />
+          <Button Grid.Column="0" Classes="bare" Width="24" Height="24" Padding="0"
+                  AutomationProperties.Name="Menu">
+            <TextBlock Text="≡" Foreground="{DynamicResource Muted}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <Button.Flyout>
+              <Flyout Placement="BottomEdgeAlignedLeft">
+                <StackPanel Width="220" Spacing="0">
+                  <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                          Height="{DynamicResource RowHeight}" Padding="12,0" Content="New request"
+                          Command="{Binding NewTabCommand}" />
+                  <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                          Height="{DynamicResource RowHeight}" Padding="12,0" Content="Open folder…"
+                          Command="{Binding OpenFolderCommand}" />
+                  <Border Height="1" Background="{DynamicResource Rule}" Margin="0,4" />
+                  <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                          Height="{DynamicResource RowHeight}" Padding="12,0" Content="Sync from code…"
+                          Command="{Binding OpenDialogCommand}" CommandParameter="{x:Static vm:DialogKind.SyncFromCode}" />
+                  <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                          Height="{DynamicResource RowHeight}" Padding="12,0" Content="Export capsule…"
+                          Command="{Binding OpenCapsuleExportCommand}" />
+                  <Border Height="1" Background="{DynamicResource Rule}" Margin="0,4" />
+                  <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                          Height="{DynamicResource RowHeight}" Padding="12,0" Content="Settings…"
+                          Command="{Binding OpenDialogCommand}" CommandParameter="{x:Static vm:DialogKind.Environments}" />
+                  <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                          Height="{DynamicResource RowHeight}" Padding="12,0" Content="Appearance…"
+                          Command="{Binding OpenDialogCommand}" CommandParameter="{x:Static vm:DialogKind.Appearance}" />
+                  <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                          Height="{DynamicResource RowHeight}" Padding="12,0" Content="Keyboard shortcuts…"
+                          Command="{Binding OpenDialogCommand}" CommandParameter="{x:Static vm:DialogKind.Keyboard}" />
+                </StackPanel>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
 
           <TextBlock Grid.Column="1" Text="Courier" FontWeight="Medium" VerticalAlignment="Center" />
 
@@ -126,7 +157,7 @@
       Modal surfaces. A scrim plus one dialog, matching the mock's states. The scrim is the only
       place an overlay appears; nothing else in the application floats.
     -->
-    <Border Background="{DynamicResource Scrim}" IsVisible="{Binding IsScrimVisible}" />
+    <Border Name="Scrim" Background="{DynamicResource Scrim}" IsVisible="{Binding IsScrimVisible}" />
 
     <dialogs:DialogHost DataContext="{Binding}" IsVisible="{Binding IsDialogOpen}" />
 

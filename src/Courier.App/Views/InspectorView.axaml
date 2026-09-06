@@ -112,8 +112,7 @@
               <TextBlock Classes="meta" TextWrapping="Wrap"
                          Text="Export this exchange as a single file with secrets replaced by placeholders." />
               <Button Content="Export capsule"
-                      Command="{Binding OpenDialogCommand}"
-                      CommandParameter="{x:Static vm:DialogKind.ExportCapsule}" />
+                      Command="{Binding OpenCapsuleExportCommand}" />
             </StackPanel>
           </Expander>
 

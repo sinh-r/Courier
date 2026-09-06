@@ -44,6 +44,9 @@
           <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                   Height="{DynamicResource RowHeight}" Padding="16,0" Content="Keyboard"
                   Command="{Binding OpenDialogCommand}" CommandParameter="{x:Static vm:DialogKind.Keyboard}" />
+          <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                  Height="{DynamicResource RowHeight}" Padding="16,0" Content="Appearance"
+                  Command="{Binding OpenDialogCommand}" CommandParameter="{x:Static vm:DialogKind.Appearance}" />
         </StackPanel>
       </Border>
 
@@ -377,6 +380,20 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- Appearance. Light, Dark or System — the dark palette has been a full mirror all along. -->
+        <ScrollViewer Padding="16"
+                      IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=Appearance}">
+          <StackPanel Spacing="12">
+            <TextBlock Classes="heading" Text="Appearance" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="Light" Command="{Binding SetThemeCommand}" CommandParameter="Light" />
+              <Button Content="Dark" Command="{Binding SetThemeCommand}" CommandParameter="Dark" />
+              <Button Content="Match system" Command="{Binding SetThemeCommand}" CommandParameter="System" />
+            </StackPanel>
+            <TextBlock Classes="meta" Text="{Binding ThemeName, StringFormat='Current: {0}'}" />
           </StackPanel>
         </ScrollViewer>
 

@@ -13,10 +13,22 @@
 
   <Panel>
     <dialogs:FirstRunView IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=FirstRun}" />
-    <dialogs:SyncFromCodeDialog IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=SyncFromCode}" />
-    <dialogs:CapsuleExportDialog IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=ExportCapsule}" />
+
+    <!--
+      These three carry their own view model as DataContext (SyncReview, CapsuleExport, Telemetry)
+      rather than the shell's, so IsVisible has to be evaluated one level up — on the same element
+      it would resolve Dialog against the child view model instead of the shell.
+    -->
+    <Panel IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=SyncFromCode}">
+      <dialogs:SyncFromCodeDialog DataContext="{Binding SyncReview}" />
+    </Panel>
+    <Panel IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=ExportCapsule}">
+      <dialogs:CapsuleExportDialog DataContext="{Binding CapsuleExport}" />
+    </Panel>
     <dialogs:CapsuleDropView IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=CapsuleDrop}" />
-    <dialogs:TelemetryReconstructDialog IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=ReconstructFromTelemetry}" />
+    <Panel IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=ReconstructFromTelemetry}">
+      <dialogs:TelemetryReconstructDialog DataContext="{Binding Telemetry}" />
+    </Panel>
     <dialogs:CommandPaletteView IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=CommandPalette}" />
     <dialogs:TabOverflowView IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=TabOverflow}" />
     <dialogs:SettingsView IsVisible="{Binding Dialog, Converter={StaticResource DialogIsSettingsConverter}}" />

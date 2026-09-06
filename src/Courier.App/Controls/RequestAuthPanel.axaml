@@ -13,6 +13,8 @@
     <Grid ColumnDefinitions="120,*">
       <TextBlock Grid.Column="0" Classes="meta" Text="Profile" VerticalAlignment="Center" />
       <ComboBox Grid.Column="1" HorizontalAlignment="Left" Width="240"
+                ItemsSource="{x:Static vm:AuthProfileNames.All}"
+                SelectedItem="{Binding Tabs.Active.State.AuthProfile, Mode=TwoWay}"
                 AutomationProperties.Name="Auth profile" />
     </Grid>
 
