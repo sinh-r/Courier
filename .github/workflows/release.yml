@@ -161,26 +161,19 @@ jobs:
 
       # NFR-03. Built after signing so the MSI carries the signed binary.
       #
-      # The MSI is a nice-to-have and must not take the release with it, but continue-on-error is
-      # the wrong tool for that: a step it marks as failed makes success() false for everything
-      # after it, which is exactly how the sign, attest, hash and release steps got skipped on an
-      # earlier attempt. So the failure is swallowed inside the step instead, and the step always
-      # succeeds. WiX not being installable on the runner is a missing artifact, not a failed
-      # release.
+      # This step used to swallow its own failure and `exit 0`, on the reasoning that an MSI is a
+      # convenience and should not take a release down. That reasoning was wrong twice over: the
+      # script it calls had never once succeeded - it invoked `wix harvest`, a command WiX does not
+      # have - and so v0.1.0 shipped with the MSI silently missing while the step reported success.
+      # An installer is NFR-03, not a convenience. If it breaks, the release should stop and say so.
       - name: Build the MSI
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Continue'
           $version = if ('${{ github.ref_name }}' -match '^v') { '${{ github.ref_name }}' -replace '^v', '' } else { '0.1.0' }
+          ./build/msi/build-msi.ps1 -Version $version -Platform x64
 
-          try {
-            ./build/msi/build-msi.ps1 -Version $version -Platform x64
-          }
-          catch {
-            Write-Host "::warning::MSI build failed, continuing without it. $($_.Exception.Message)"
-          }
-
-          exit 0
+          $msi = "artifacts/Courier-$version-x64.msi"
+          if (-not (Test-Path $msi)) { throw "build-msi.ps1 succeeded but produced no $msi" }
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v4

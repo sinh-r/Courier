@@ -9,3 +9,11 @@ artifacts/
 TestResults/
 BenchmarkDotNet.Artifacts/
 node_modules/
+
+# WiX 5 caches downloaded extensions here; build/msi/build-msi.ps1 re-adds them on demand.
+.wix/
+
+# `dotnet new tool-manifest --output <dir>` writes the manifest to <dir>/dotnet-tools.json rather
+# than <dir>/.config/dotnet-tools.json, and then refuses to run again because that stray file
+# exists. The real manifest is .config/dotnet-tools.json and is committed.
+/dotnet-tools.json

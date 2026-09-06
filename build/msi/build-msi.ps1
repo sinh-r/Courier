@@ -33,39 +33,84 @@ if (-not $OutputPath) {
 }
 
 # WiX as a local tool: a machine-wide install is one more thing for a contributor to get wrong.
-if (-not (Test-Path (Join-Path $repo '.config/dotnet-tools.json'))) {
-    & dotnet new tool-manifest --output $repo | Out-Null
+#
+# The manifest is written here rather than by `dotnet new tool-manifest`. That command writes to
+# <dir>/dotnet-tools.json rather than <dir>/.config/dotnet-tools.json, so `dotnet tool restore`
+# cannot find what it just created - and on the second run it refuses with exit 73 because the
+# stray file is in its way. The file is one line of stable schema; writing it here removes a
+# dependency on the template engine for no loss.
+$manifest = Join-Path $repo '.config/dotnet-tools.json'
+if (-not (Test-Path $manifest)) {
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $manifest) | Out-Null
+    '{ "version": 1, "isRoot": true, "tools": {} }' | Set-Content -Path $manifest -Encoding UTF8
 }
 
-& dotnet tool restore --tool-manifest (Join-Path $repo '.config/dotnet-tools.json') 2>$null
-if ($LASTEXITCODE -ne 0) {
-    & dotnet tool install wix --version 7.0.0 --tool-manifest (Join-Path $repo '.config/dotnet-tools.json')
-}
-
-# Harvest the published tree so the component list never drifts from what was published.
-$harvested = Join-Path $env:TEMP "courier-files-$([guid]::NewGuid().ToString('n')).wxs"
-
-& dotnet wix harvest files $PublishDir `
-    --directory-id INSTALLFOLDER `
-    --component-group-id PublishedFiles `
-    --out $harvested
-
-if ($LASTEXITCODE -ne 0) { throw 'WiX harvest failed' }
-
+# Probing whether a tool is present means running a command that is expected to fail, and in
+# Windows PowerShell 5.1 that is not as simple as checking $LASTEXITCODE: with
+# $ErrorActionPreference = 'Stop', *any* output a native executable writes to stderr is turned into
+# a terminating NativeCommandError, and 2>$null does not prevent it because the redirection happens
+# after PowerShell has already routed it through the error stream. The probes below therefore drop
+# to 'Continue' and read the exit code, which is the only reliable signal here.
+$previousPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
 try {
-    & dotnet wix build `
-        (Join-Path $PSScriptRoot 'Courier.wxs') $harvested `
-        -d "Version=$Version" `
-        -d "PublishDir=$PublishDir" `
-        -arch $Platform `
-        -ext WixToolset.UI.wixext `
-        -out $OutputPath
+    # Fast path: the manifest already lists wix, so this installs it from the lock file.
+    & dotnet tool restore --tool-manifest $manifest *> $null
 
-    if ($LASTEXITCODE -ne 0) { throw 'WiX build failed' }
+    # Not keyed off restore's exit code: `dotnet tool restore` exits 0 on a manifest that lists no
+    # tools, so a fresh checkout would report success and never install anything - which is how the
+    # MSI came to be missing from a release whose MSI step reported success.
+    & dotnet wix --version *> $null
+    $wixIsUsable = ($LASTEXITCODE -eq 0)
+
+    if (-not $wixIsUsable) {
+        & dotnet tool install wix --version 5.0.2 --tool-manifest $manifest *> $null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not install the WiX tool.' }
+    }
 }
 finally {
-    Remove-Item $harvested -Force -ErrorAction SilentlyContinue
+    $ErrorActionPreference = $previousPreference
 }
 
-Write-Host "MSI: $OutputPath" -ForegroundColor Green
+# There is no harvest step, and there was never a working one.
+#
+# The original script called `wix harvest files`, which does not exist: WiX 7's command set is
+# build, eula, msi, burn, extension, convert and format. It failed on every release, inside a step
+# that swallows failures, so the MSI was simply absent from a release whose MSI step reported
+# success.
+#
+# Harvesting was also solving a problem this build does not have. build/publish.ps1 produces a
+# self-extracting single file, so the payload is exactly one exe. It is authored directly in
+# Courier.wxs, where a reviewer can see what the installer installs.
+
+# WiX 5, deliberately, and not the newer 7.
+#
+# WiX 7 refuses to run at all until its Open Source Maintenance Fee EULA is accepted (WIX7015),
+# which a build script can do with `wix eula accept wix7`. That is a licensing commitment about how
+# an organization funds the toolset, not a build setting, so it is not something this script should
+# make on a user's behalf inside CI. WiX 5 has no such gate, identical authoring for what
+# Courier.wxs uses, and is Microsoft-independent and maintained.
+#
+# If the project later decides to accept the OSMF terms, bump the two version numbers below and add
+# `wix eula accept wix7` before the first wix invocation. Nothing else here changes.
+
+# The UI extension has to be in the local cache before -ext can resolve it, and `extension add` is
+# idempotent.
+$previousPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try { & dotnet wix extension add WixToolset.UI.wixext/5.0.2 *> $null }
+finally { $ErrorActionPreference = $previousPreference }
+
+& dotnet wix build `
+    (Join-Path $PSScriptRoot 'Courier.wxs') `
+    -d "Version=$Version" `
+    -d "PublishDir=$PublishDir" `
+    -arch $Platform `
+    -ext WixToolset.UI.wixext `
+    -out $OutputPath
+
+if ($LASTEXITCODE -ne 0) { throw 'WiX build failed' }
+if (-not (Test-Path $OutputPath)) { throw "WiX reported success but produced no file at $OutputPath" }
+
+Write-Host ("MSI: {0} ({1:N0} MB)" -f $OutputPath, ((Get-Item $OutputPath).Length / 1MB)) -ForegroundColor Green
 Write-Host 'Remember to sign it. An unsigned MSI will not survive corporate application control.' -ForegroundColor Yellow
