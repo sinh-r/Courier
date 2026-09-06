@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <!--
+    MSI for managed corporate deployment. NFR-03.
+
+    Per-machine, because that is what a deployment tool expects, and because the policy defaults
+    below live in HKLM where a user cannot change them. The portable zip covers the case where the
+    user has no admin rights at all.
+  -->
+
+  <Package Name="Courier"
+           Manufacturer="Courier contributors"
+           Version="$(var.Version)"
+           UpgradeCode="6f1c7a92-4d3e-4b7a-9d21-2c5b8e4f7a10"
+           Scope="perMachine"
+           Compressed="yes">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Courier is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="CourierIcon" SourceFile="$(var.PublishDir)\Courier.exe" />
+    <Property Id="ARPPRODUCTICON" Value="CourierIcon" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/courier-api/courier" />
+
+    <!--
+      Admin-configurable policy defaults, read from a machine-level location so an administrator can
+      pre-set proxy, trust and telemetry behaviour before the first launch. NFR-03.
+
+      There is deliberately no policy that can switch on an update check, analytics or crash
+      reporting: SEC-01 makes those opt-in by the user, and a machine policy that turned them on
+      would be a way around it.
+    -->
+    <Property Id="COURIER_PROXY" Secure="yes" />
+    <Property Id="COURIER_TRUSTED_ROOTS" Secure="yes" />
+    <Property Id="COURIER_COLLECTION_ROOT" Secure="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Courier" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="CourierShortcutFolder" Name="Courier" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Courier" Level="1">
+      <ComponentGroupRef Id="PublishedFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="CapsuleAssociation" />
+      <ComponentRef Id="PolicyDefaults" />
+    </Feature>
+
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="ShortcutAndAssociation">
+
+      <Component Id="StartMenuShortcut" Directory="CourierShortcutFolder" Guid="*">
+        <Shortcut Id="CourierStartMenu"
+                  Name="Courier"
+                  Description="A local-first API client. No account, no sync, no telemetry."
+                  Target="[INSTALLFOLDER]Courier.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="RemoveCourierShortcutFolder" On="uninstall" />
+        <RegistryValue Root="HKLM" Key="Software\Courier" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+
+      <!--
+        The .capsule association. CAP-05: a double-clicked capsule opens in Courier.
+        --open-capsule is a read-only path; CAP-09 means opening one never runs anything.
+      -->
+      <Component Id="CapsuleAssociation" Directory="INSTALLFOLDER" Guid="*">
+        <RegistryKey Root="HKCR" Key="Courier.Capsule">
+          <RegistryValue Type="string" Value="Courier capsule" />
+          <RegistryKey Key="DefaultIcon">
+            <RegistryValue Type="string" Value="[INSTALLFOLDER]Courier.exe,0" />
+          </RegistryKey>
+          <RegistryKey Key="shell\open\command">
+            <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]Courier.exe&quot; --open-capsule &quot;%1&quot;" />
+          </RegistryKey>
+        </RegistryKey>
+
+        <RegistryKey Root="HKCR" Key=".capsule">
+          <RegistryValue Type="string" Value="Courier.Capsule" />
+          <RegistryValue Name="PerceivedType" Type="string" Value="document" />
+        </RegistryKey>
+      </Component>
+
+      <!-- Policy defaults an administrator can pre-set. Read once at first launch. -->
+      <Component Id="PolicyDefaults" Directory="INSTALLFOLDER" Guid="*">
+        <RegistryKey Root="HKLM" Key="Software\Policies\Courier">
+          <RegistryValue Name="Proxy" Type="string" Value="[COURIER_PROXY]" />
+          <RegistryValue Name="TrustedRoots" Type="string" Value="[COURIER_TRUSTED_ROOTS]" />
+          <RegistryValue Name="CollectionRoot" Type="string" Value="[COURIER_COLLECTION_ROOT]" />
+
+          <!-- Stated explicitly so an auditor can see the shipped value, not infer it. -->
+          <RegistryValue Name="UpdateCheckEnabled" Type="integer" Value="0" />
+          <RegistryValue Name="TelemetryEnabled" Type="integer" Value="0" />
+        </RegistryKey>
+      </Component>
+
+    </ComponentGroup>
+  </Fragment>
+
+</Wix>

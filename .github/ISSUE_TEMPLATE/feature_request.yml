@@ -1,0 +1,56 @@
+name: Feature request
+description: Suggest something Courier should do
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check `docs/REQUIREMENTS.md` first — it has 86 numbered requirements and a lot is
+        specified but not yet proven. `docs/NEEDS_LIVE_VALIDATION.md` lists what exists but has
+        never been exercised against the real thing.
+
+        Two things are permanently out of scope and no amount of demand will change them:
+        anything requiring a server this project operates, and team collaboration beyond what git
+        and capsules already provide. Those are constraints, not a backlog.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve
+      description: Describe the situation you are in, not just the feature you want.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Sending requests / response viewer
+        - Collections, environments and variables
+        - Authentication and enterprise transport
+        - Scanning a .NET solution
+        - Capsules
+        - Telemetry bridge
+        - Scripting and tests
+        - CLI, MSBuild task or CI
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: This does not require a server operated by the project (principle P1).
+          required: true
+        - label: This does not put a secret value into a file Courier writes (principle P2).
+          required: true

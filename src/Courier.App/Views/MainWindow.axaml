@@ -1,0 +1,135 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Courier.App.ViewModels"
+        xmlns:views="clr-namespace:Courier.App.Views"
+        xmlns:dialogs="clr-namespace:Courier.App.Views.Dialogs"
+        x:Class="Courier.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Courier"
+        Width="1280" Height="800"
+        MinWidth="1024" MinHeight="640"
+        Background="{DynamicResource Panel}"
+        FontFamily="{DynamicResource Sans}">
+
+  <!--
+    The frame from UI_SPEC 4.1. Fixed heights are load-bearing: 36px toolbar, 30px tabs, 22px
+    status bar, 260px rail, 300px inspector. Panes are divided by 1px rules, never by gaps.
+  -->
+
+  <Panel>
+
+    <DockPanel LastChildFill="True">
+
+      <!-- Title bar. -->
+      <Border DockPanel.Dock="Top"
+              Height="{DynamicResource ToolbarHeight}"
+              Background="{DynamicResource Panel}"
+              BorderBrush="{DynamicResource Rule}"
+              BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto" Margin="8,0">
+
+          <TextBlock Grid.Column="0" Text="≡" Foreground="{DynamicResource Muted}"
+                     VerticalAlignment="Center" Width="24" TextAlignment="Center"
+                     AutomationProperties.Name="Menu" />
+
+          <TextBlock Grid.Column="1" Text="Courier" FontWeight="Medium" VerticalAlignment="Center" />
+
+          <Border Grid.Column="2" Width="1" Height="20" Background="{DynamicResource Rule}" Margin="8,0" />
+
+          <!-- Workspace picker. -->
+          <Border Grid.Column="3" Classes="paper" Height="24" Margin="0,0,4,0"
+                  BorderBrush="{DynamicResource Rule}" BorderThickness="1"
+                  CornerRadius="{DynamicResource ControlRadius}" Padding="8,0">
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <TextBlock Classes="mono" Text="Local" VerticalAlignment="Center" />
+              <TextBlock Classes="meta" Text="▾" VerticalAlignment="Center" />
+            </StackPanel>
+          </Border>
+
+          <!--
+            Environment picker. The ▲ glyph marks an environment holding local-only values, in the
+            secret colour — the same pair used on the environments table and the capsule review.
+          -->
+          <Button Grid.Column="4" Classes="bare" Height="24" Padding="0"
+                  Command="{Binding OpenDialogCommand}"
+                  CommandParameter="{x:Static vm:DialogKind.Environments}"
+                  AutomationProperties.Name="Switch environment">
+            <Border Classes="paper" BorderBrush="{DynamicResource Rule}" BorderThickness="1"
+                    CornerRadius="{DynamicResource ControlRadius}" Padding="8,0" Height="24">
+              <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <TextBlock Text="▲" FontSize="11" Foreground="{DynamicResource Secret}"
+                           VerticalAlignment="Center"
+                           IsVisible="{Binding EnvironmentHasSecrets}"
+                           ToolTip.Tip="This environment holds values kept only on this machine." />
+                <TextBlock Classes="mono" Text="{Binding EnvironmentName}" VerticalAlignment="Center" />
+                <TextBlock Classes="meta" Text="▾" VerticalAlignment="Center" />
+              </StackPanel>
+            </Border>
+          </Button>
+
+          <!-- Command palette entry. -->
+          <Button Grid.Column="6" Classes="bare" Height="24" Padding="0" Margin="12,0,12,0"
+                  Command="{Binding OpenDialogCommand}"
+                  CommandParameter="{x:Static vm:DialogKind.CommandPalette}"
+                  AutomationProperties.Name="Search endpoints, tabs and commands">
+            <Border Classes="paper" Width="280" Height="24"
+                    BorderBrush="{DynamicResource Rule}" BorderThickness="1"
+                    CornerRadius="{DynamicResource ControlRadius}" Padding="8,0">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Classes="meta" VerticalAlignment="Center"
+                           Text="Search endpoints, tabs, commands" />
+                <TextBlock Grid.Column="1" Classes="mono meta" VerticalAlignment="Center" Text="Ctrl+K" />
+              </Grid>
+            </Border>
+          </Button>
+
+        </Grid>
+      </Border>
+
+      <!-- Status bar. The privacy instrument, permanently visible. UI_SPEC 4.1, SEC-04. -->
+      <views:StatusBarView DockPanel.Dock="Bottom" DataContext="{Binding}" />
+
+      <!--
+        Body: rail | centre | inspector, as a DockPanel rather than a Grid.
+
+        Docking is what makes the inspector's auto-collapse below 1200px (UI_SPEC 6) a single
+        IsVisible flip: the centre pane reclaims the space with no column bookkeeping, and the rail
+        and inspector keep their fixed widths whatever the window does.
+      -->
+      <DockPanel LastChildFill="True">
+
+        <views:CollectionTreeView DockPanel.Dock="Left"
+                                  Width="{DynamicResource RailWidth}"
+                                  DataContext="{Binding Tree}" />
+
+        <GridSplitter DockPanel.Dock="Left" Width="1"
+                      ResizeDirection="Columns"
+                      Background="{DynamicResource Rule}" />
+
+        <views:InspectorView DockPanel.Dock="Right"
+                             Width="{DynamicResource InspectorWidth}"
+                             DataContext="{Binding}"
+                             IsVisible="{Binding IsInspectorVisible}" />
+
+        <GridSplitter DockPanel.Dock="Right" Width="1"
+                      ResizeDirection="Columns"
+                      Background="{DynamicResource Rule}"
+                      IsVisible="{Binding IsInspectorVisible}" />
+
+        <views:WorkspaceView DataContext="{Binding}" />
+
+      </DockPanel>
+
+    </DockPanel>
+
+    <!--
+      Modal surfaces. A scrim plus one dialog, matching the mock's states. The scrim is the only
+      place an overlay appears; nothing else in the application floats.
+    -->
+    <Border Background="{DynamicResource Scrim}" IsVisible="{Binding IsScrimVisible}" />
+
+    <dialogs:DialogHost DataContext="{Binding}" IsVisible="{Binding IsDialogOpen}" />
+
+  </Panel>
+
+</Window>

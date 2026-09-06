@@ -1,0 +1,65 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             x:Class="Courier.App.Views.TabHeaderView"
+             x:DataType="vm:TabViewModel">
+
+  <!--
+    One tab header. Fixed 180px, never shrinks. UI_SPEC 4.2.
+
+    A suspended tab renders identically to a live one — Title, Method and VerbBrush stay resident
+    on the view-model precisely so this can draw without waking anything. There is deliberately no
+    marker, no dimming and no tooltip that reveals suspension: the user should never learn the
+    concept exists.
+  -->
+
+  <Border Name="Root"
+          Classes.active="{Binding IsActive}"
+          Width="{DynamicResource TabWidth}"
+          Height="{DynamicResource TabHeight}"
+          Background="{DynamicResource Panel}"
+          BorderBrush="{DynamicResource Rule}"
+          BorderThickness="0,0,1,0"
+          Padding="8,0">
+
+    <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+
+      <!-- The verb badge. Often the only thing the user reads. -->
+      <TextBlock Grid.Column="0" Classes="mono" FontSize="11" Margin="0,0,6,0"
+                 VerticalAlignment="Center"
+                 Text="{Binding Method}"
+                 Foreground="{Binding Method, Converter={StaticResource VerbBrushConverter}}" />
+
+      <TextBlock Grid.Column="1" VerticalAlignment="Center"
+                 Text="{Binding DisplayTitle}"
+                 ToolTip.Tip="{Binding Title}" />
+
+      <!-- Unsaved changes show as a filled dot in place of the close affordance until hover. -->
+      <TextBlock Grid.Column="2" Text="●" FontSize="9" VerticalAlignment="Center"
+                 Foreground="{DynamicResource Ink}"
+                 IsVisible="{Binding IsDirty}"
+                 AutomationProperties.Name="Unsaved changes" />
+
+      <TextBlock Grid.Column="2" Text="×" VerticalAlignment="Center"
+                 Foreground="{DynamicResource Muted}"
+                 IsVisible="{Binding !IsDirty}" />
+
+    </Grid>
+  </Border>
+
+  <UserControl.Styles>
+    <!--
+      The active tab reads as the paper surface continuing up into the strip, which is the same
+      trick the request pane uses. No accent fill: UI_SPEC 7 puts a coloured primary out of bounds,
+      and that applies to selection chrome too.
+    -->
+    <Style Selector="Border#Root.active">
+      <Setter Property="Background" Value="{DynamicResource Paper}" />
+    </Style>
+
+    <Style Selector="Border#Root:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Hover}" />
+    </Style>
+  </UserControl.Styles>
+
+</UserControl>

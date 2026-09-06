@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>courier</AssemblyName>
+    <RootNamespace>Courier.Cli</RootNamespace>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>courier</ToolCommandName>
+    <PackageId>Courier.Cli</PackageId>
+    <IsPackable>true</IsPackable>
+    <Description>Run Courier collections with assertions, and generate collections from source, in CI.</Description>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <PublishAot Condition="'$(PublishAot)' == ''">false</PublishAot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Courier.Core/Courier.Core.csproj" />
+    <ProjectReference Include="../Courier.Scanner/Courier.Scanner.csproj" />
+    <ProjectReference Include="../Courier.Scripting/Courier.Scripting.csproj" />
+    <ProjectReference Include="../Courier.Platform.Posix/Courier.Platform.Posix.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+</Project>

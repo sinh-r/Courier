@@ -1,0 +1,50 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             x:Class="Courier.App.Views.Dialogs.TabOverflowView"
+             x:DataType="vm:MainWindowViewModel">
+
+  <!--
+    The +n list. UI_SPEC 4.2: overflow does not shrink tabs, it collapses into a control that opens
+    a filterable, keyboard-navigable list showing verb, path and environment.
+
+    This is also what makes the tab strip cheap: with overflow collapsing rather than scrolling,
+    the strip never realizes more than the handful of headers that fit.
+  -->
+
+  <Border Classes="floating" Width="560" MaxHeight="480"
+          HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,80,0,0">
+
+    <DockPanel LastChildFill="True">
+
+      <Border DockPanel.Dock="Top" Height="32" Padding="10,0"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="Auto,*">
+          <TextBlock Grid.Column="0" Classes="meta" Text="⌕" VerticalAlignment="Center" Margin="0,0,8,0" />
+          <TextBox Grid.Column="1" Name="FilterBox" BorderThickness="0" Background="Transparent"
+                   Padding="0" VerticalAlignment="Center"
+                   PlaceholderText="filter open tabs"
+                   AutomationProperties.Name="Filter open tabs" />
+        </Grid>
+      </Border>
+
+      <ListBox ItemsSource="{Binding Tabs.Items}" Name="TabList"
+               AutomationProperties.Name="Open tabs">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:TabViewModel">
+            <Grid ColumnDefinitions="56,*,130" Height="{DynamicResource RowHeight}">
+              <TextBlock Grid.Column="0" Classes="mono" FontSize="11" VerticalAlignment="Center"
+                         Text="{Binding Method}"
+                         Foreground="{Binding Method, Converter={StaticResource VerbBrushConverter}}" />
+              <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center" Text="{Binding Title}" />
+              <TextBlock Grid.Column="2" Classes="meta" VerticalAlignment="Center"
+                         Text="{Binding State.EnvironmentName}" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+
+    </DockPanel>
+  </Border>
+
+</UserControl>

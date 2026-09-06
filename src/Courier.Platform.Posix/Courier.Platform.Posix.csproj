@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Best-effort fallbacks so a contributor on macOS or Linux can build and run the app.
+    These are honest about what they cannot do: the secret store warns loudly, the trust
+    store defers to OpenSSL, and integrated Windows auth is unavailable rather than faked.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Courier.Core/Courier.Core.csproj" />
+  </ItemGroup>
+
+</Project>

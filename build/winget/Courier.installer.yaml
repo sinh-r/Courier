@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+#
+# The managed deployment path (NFR-03). winget also covers updates, which is why Courier has no
+# auto-updater of its own: SEC-01 forbids one that phones home, and winget already solves it for
+# the managed case.
+
+PackageIdentifier: Courier.Courier
+PackageVersion: 0.1.0
+MinimumOSVersion: 10.0.19041.0
+InstallerType: wix
+Scope: machine
+InstallModes:
+  - interactive
+  - silent
+  - silentWithProgress
+UpgradeBehavior: install
+ReleaseDate: 2026-09-06
+
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/courier-api/courier/releases/download/v0.1.0/Courier-0.1.0-x64.msi
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+  - Architecture: arm64
+    InstallerUrl: https://github.com/courier-api/courier/releases/download/v0.1.0/Courier-0.1.0-arm64.msi
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+
+FileExtensions:
+  - capsule
+
+ManifestType: installer
+ManifestVersion: 1.6.0

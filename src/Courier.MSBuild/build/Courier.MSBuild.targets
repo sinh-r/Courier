@@ -1,0 +1,26 @@
+<Project>
+
+  <UsingTask TaskName="Courier.MSBuild.CourierScanTask"
+             AssemblyFile="$(MSBuildThisFileDirectory)../tasks/netstandard2.0/Courier.MSBuild.dll" />
+
+  <!--
+    Runs after the build, not before: the scanner reads source, so it does not need the output, and
+    running it first would put a tool invocation between the developer and their first compile
+    error. PERF-06 keeps the incremental case under three seconds either way.
+  -->
+  <Target Name="CourierScan"
+          AfterTargets="Build"
+          Condition="'$(CourierScanEnabled)' == 'true' AND '$(DesignTimeBuild)' != 'true'">
+
+    <CourierScanTask SourcePath="$(CourierSourcePath)"
+                     CollectionPath="$(CourierCollectionPath)"
+                     ToolPath="$(CourierToolPath)"
+                     BaseUrlVariable="$(CourierBaseUrlVariable)"
+                     TreatScanErrorsAsWarnings="$(CourierTreatScanErrorsAsWarnings)">
+      <Output TaskParameter="EndpointCount" PropertyName="CourierEndpointCount" />
+      <Output TaskParameter="UnresolvedCount" PropertyName="CourierUnresolvedCount" />
+    </CourierScanTask>
+
+  </Target>
+
+</Project>

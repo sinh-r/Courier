@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:edit="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit"
+             x:Class="Courier.App.Controls.BodyEditor">
+
+  <!--
+    The body editor. CORE-02: JSON, XML, form-urlencoded, multipart, GraphQL, binary and raw, with
+    syntax highlighting, folding and format-on-demand.
+
+    PERF-04 gives 16ms keystroke-to-render at a 1MB document, so highlighting and validation are
+    debounced off the UI thread and nothing re-parses per keystroke. See BodyEditor.axaml.cs.
+  -->
+
+  <DockPanel LastChildFill="True">
+
+    <Border DockPanel.Dock="Top" Height="{DynamicResource RowHeight}"
+            BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
+      <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+        <ComboBox Name="KindPicker" Width="120" SelectedIndex="1" Height="18" FontSize="11.5">
+          <ComboBoxItem Content="none" />
+          <ComboBoxItem Content="json" />
+          <ComboBoxItem Content="xml" />
+          <ComboBoxItem Content="form" />
+          <ComboBoxItem Content="multipart" />
+          <ComboBoxItem Content="graphql" />
+          <ComboBoxItem Content="binary" />
+          <ComboBoxItem Content="raw" />
+        </ComboBox>
+        <Button Name="FormatButton" Classes="bare" Content="format" Height="18" />
+        <TextBlock Name="ValidationMessage" Classes="meta" VerticalAlignment="Center" />
+      </StackPanel>
+    </Border>
+
+    <Border Background="{DynamicResource Paper}">
+      <edit:TextEditor Name="Editor"
+                       ShowLineNumbers="True"
+                       FontFamily="{DynamicResource Mono}"
+                       FontSize="12.5"
+                       Background="{DynamicResource Paper}"
+                       Foreground="{DynamicResource Ink}"
+                       WordWrap="False"
+                       AutomationProperties.Name="Request body" />
+    </Border>
+
+  </DockPanel>
+
+</UserControl>

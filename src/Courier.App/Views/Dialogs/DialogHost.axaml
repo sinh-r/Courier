@@ -1,0 +1,25 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             xmlns:dialogs="clr-namespace:Courier.App.Views.Dialogs"
+             x:Class="Courier.App.Views.Dialogs.DialogHost"
+             x:DataType="vm:MainWindowViewModel">
+
+  <!--
+    One host for every modal surface, matching the mock's states. The primary engineer "will not
+    tolerate a modal that interrupts a request" (UI_SPEC 2), so nothing here opens on its own: each
+    of these is reached by an explicit action, and Escape closes all of them.
+  -->
+
+  <Panel>
+    <dialogs:FirstRunView IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=FirstRun}" />
+    <dialogs:SyncFromCodeDialog IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=SyncFromCode}" />
+    <dialogs:CapsuleExportDialog IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=ExportCapsule}" />
+    <dialogs:CapsuleDropView IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=CapsuleDrop}" />
+    <dialogs:TelemetryReconstructDialog IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=ReconstructFromTelemetry}" />
+    <dialogs:CommandPaletteView IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=CommandPalette}" />
+    <dialogs:TabOverflowView IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=TabOverflow}" />
+    <dialogs:SettingsView IsVisible="{Binding Dialog, Converter={StaticResource DialogIsSettingsConverter}}" />
+  </Panel>
+
+</UserControl>

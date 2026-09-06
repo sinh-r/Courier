@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+
+PackageIdentifier: Courier.Courier
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: Courier contributors
+PublisherUrl: https://github.com/courier-api/courier
+PackageName: Courier
+License: Apache-2.0
+LicenseUrl: https://github.com/courier-api/courier/blob/main/LICENSE
+ShortDescription: A local-first API client for Windows enterprise .NET teams.
+Description: |-
+  Courier is a desktop API client for backend engineers working on internal, authenticated
+  enterprise APIs — the kind behind Entra ID, mutual TLS, and a corporate proxy that re-signs
+  certificates.
+
+  Nothing leaves the machine. There is no account, no sync and no telemetry. Collections are plain
+  YAML files on disk that git already versions, and credentials stay in Windows Credential Manager.
+
+  The collection can build itself from your code: point Courier at a .NET solution and it derives
+  every endpoint from the controllers, then keeps them current on every build without destroying
+  anything you customised.
+
+  A failing request is one file. Export a capsule — the request, the response, the trace id, secrets
+  stripped — and hand it to whoever can debug it.
+Tags:
+  - api
+  - http
+  - rest
+  - dotnet
+  - offline
+  - privacy
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

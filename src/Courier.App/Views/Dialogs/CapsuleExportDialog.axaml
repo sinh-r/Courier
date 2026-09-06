@@ -1,0 +1,143 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             xmlns:caps="clr-namespace:Courier.Core.Capsules;assembly=Courier.Core"
+             x:Class="Courier.App.Views.Dialogs.CapsuleExportDialog"
+             x:DataType="vm:CapsuleExportViewModel">
+
+  <!--
+    The redaction review. UI_SPEC 5.2: "This screen is why people will trust sharing."
+
+    Three tiers with distinct treatment, and the weighting is deliberate — included is neutral
+    because there is nothing to decide, replaced carries the trust colours because Courier is
+    confident and is showing its working, and flagged gets the most visual weight because it is
+    the only tier that needs a human.
+  -->
+
+  <Border Classes="floating" MaxWidth="720" MaxHeight="680"
+          HorizontalAlignment="Center" VerticalAlignment="Center">
+
+    <DockPanel LastChildFill="True">
+
+      <Border DockPanel.Dock="Top" Padding="16,12"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+        <StackPanel Spacing="6">
+          <TextBlock Classes="title" Text="Export capsule" />
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <TextBlock Classes="mono" FontSize="11" Text="{Binding Method}"
+                       Foreground="{Binding Method, Converter={StaticResource VerbBrushConverter}}" />
+            <TextBlock Classes="mono" Text="{Binding Route}" />
+            <TextBlock Classes="mono" Text="{Binding StatusText}"
+                       Foreground="{Binding Status, Converter={StaticResource StatusBrushConverter}}" />
+            <TextBlock Classes="mono meta" Text="{Binding CapturedAt}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Border DockPanel.Dock="Bottom" Padding="16,12"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,1,0,0">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Grid.Column="0" Classes="mono meta" VerticalAlignment="Center"
+                     Text="{Binding FileSummary}" />
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+            <Button Content="Copy" Name="CopyButton" />
+            <Button Classes="primary" Content="Save file" Name="SaveButton" />
+            <Button Content="Attach to work item" Name="AttachButton" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <ScrollViewer Padding="16,10">
+        <StackPanel Spacing="18">
+
+          <!-- Tier one: included as-is. Neutral. Nothing to decide. -->
+          <StackPanel Spacing="4">
+            <TextBlock Classes="heading" Text="Included" />
+            <ItemsControl ItemsSource="{Binding Included}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="caps:IncludedItem">
+                  <Grid ColumnDefinitions="16,180,*" Height="20" Margin="8,0,0,0">
+                    <TextBlock Grid.Column="0" Classes="meta" Text="✓" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="{Binding Name}" />
+                    <TextBlock Grid.Column="2" Classes="meta" VerticalAlignment="Center" Text="{Binding Detail}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Grid ColumnDefinitions="16,180,*" Height="20" Margin="8,0,0,0">
+              <TextBlock Grid.Column="0" Classes="meta" Text="✓" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="Environment name" />
+              <TextBlock Grid.Column="2" Classes="meta" VerticalAlignment="Center"
+                         Text="{Binding EnvironmentLine}" />
+            </Grid>
+          </StackPanel>
+
+          <!-- Tier two: auto-replaced. Trust colours, and every one shows its working. -->
+          <StackPanel Spacing="4">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Grid.Column="0" Classes="heading" Text="Replaced with placeholders" />
+              <TextBlock Grid.Column="1" Classes="meta"
+                         Text="{Binding Replaced.Count, StringFormat='{}{0} items'}" />
+            </Grid>
+            <ItemsControl ItemsSource="{Binding Replaced}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="caps:ReplacedItem">
+                  <Grid ColumnDefinitions="16,200,140,*" Height="20" Margin="8,0,0,0">
+                    <TextBlock Grid.Column="0" Classes="meta" Text="▲" VerticalAlignment="Center"
+                               Foreground="{DynamicResource Secret}" />
+                    <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center"
+                               Text="{Binding Location}" />
+                    <TextBlock Grid.Column="2" Classes="mono meta" VerticalAlignment="Center"
+                               Text="{Binding Preview}" />
+                    <TextBlock Grid.Column="3" Classes="mono" VerticalAlignment="Center"
+                               Foreground="{DynamicResource Share}"
+                               Text="{Binding Placeholder}"
+                               ToolTip.Tip="{Binding Reason}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+
+          <!--
+            Tier three: needs a human. CAP-04 requires a decision here, so there is no default
+            action and the row cannot be scrolled past without noticing.
+          -->
+          <Border Background="{DynamicResource Panel}"
+                  BorderBrush="{DynamicResource Secret}"
+                  BorderThickness="2,0,0,0"
+                  Padding="12,8"
+                  IsVisible="{Binding Flagged.Count, Converter={StaticResource IsNotZeroConverter}}">
+            <StackPanel Spacing="6">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="▲" Foreground="{DynamicResource Secret}" />
+                <TextBlock Classes="heading" Text="Review before sending" />
+              </StackPanel>
+              <ItemsControl ItemsSource="{Binding Flagged}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:FlaggedDecisionViewModel">
+                    <Grid ColumnDefinitions="220,160,*,Auto" Height="26">
+                      <TextBlock Grid.Column="0" Classes="mono" VerticalAlignment="Center"
+                                 Text="{Binding Location}" />
+                      <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center"
+                                 Text="{Binding Preview}" />
+                      <TextBlock Grid.Column="2" Classes="meta" VerticalAlignment="Center"
+                                 Text="{Binding Reason}" />
+                      <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Button Content="Redact" Height="20" Command="{Binding RedactCommand}" />
+                        <Button Content="Keep" Height="20" Command="{Binding KeepValueCommand}" />
+                      </StackPanel>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+
+        </StackPanel>
+      </ScrollViewer>
+
+    </DockPanel>
+  </Border>
+
+</UserControl>

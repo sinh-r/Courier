@@ -1,0 +1,48 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             x:Class="Courier.App.Views.StatusBarView"
+             x:DataType="vm:MainWindowViewModel">
+
+  <!--
+    SEC-04 and UI_SPEC 4.1. The leftmost slot always reads "Offline · no sync" with a filled dot.
+    That claim is the product's whole thesis; it never scrolls away and it is never conditional.
+  -->
+  <Border Height="{DynamicResource StatusBarHeight}"
+          Background="{DynamicResource Panel}"
+          BorderBrush="{DynamicResource Rule}"
+          BorderThickness="0,1,0,0"
+          Padding="8,0">
+
+    <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto">
+
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center"
+                  AutomationProperties.Name="Courier is offline and does not sync">
+        <TextBlock Text="⬤" FontSize="9" Foreground="{DynamicResource Ink}" VerticalAlignment="Center" />
+        <TextBlock Classes="meta" Foreground="{DynamicResource Ink}" VerticalAlignment="Center"
+                   Text="{Binding OfflineIndicator}" />
+      </StackPanel>
+
+      <Border Grid.Column="1" Width="1" Height="12" Background="{DynamicResource Rule}" Margin="10,0" />
+
+      <TextBlock Grid.Column="2" Classes="meta" VerticalAlignment="Center"
+                 Text="{Binding CollectionSyncStatus}" />
+
+      <TextBlock Grid.Column="3" Classes="meta mono" VerticalAlignment="Center" Margin="14,0,0,0"
+                 IsVisible="{Binding ClientCertificateSubject, Converter={x:Static ObjectConverters.IsNotNull}}"
+                 Text="{Binding ClientCertificateSubject, StringFormat='mTLS: {0}'}" />
+
+      <TextBlock Grid.Column="5" Classes="meta mono" VerticalAlignment="Center" Margin="0,0,14,0"
+                 Text="{Binding ProxyStatus}" />
+
+      <TextBlock Grid.Column="6" Classes="meta" VerticalAlignment="Center" Margin="0,0,14,0"
+                 Text="{Binding Tabs.CountLabel}" />
+
+      <TextBlock Grid.Column="7" Classes="meta" VerticalAlignment="Center"
+                 Text="{Binding NetworkSummary}"
+                 ToolTip.Tip="Every destination this session has contacted. Export the full statement from Settings." />
+
+    </Grid>
+  </Border>
+
+</UserControl>

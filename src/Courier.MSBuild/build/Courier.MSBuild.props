@@ -1,0 +1,21 @@
+<Project>
+
+  <!--
+    Defaults a consuming project can override before the targets run. SCAN-11: the collection
+    updates on every build, so these have to be sensible without configuration.
+  -->
+  <PropertyGroup>
+    <CourierScanEnabled Condition="'$(CourierScanEnabled)' == ''">true</CourierScanEnabled>
+    <CourierSourcePath Condition="'$(CourierSourcePath)' == ''">$(MSBuildProjectDirectory)</CourierSourcePath>
+    <CourierCollectionPath Condition="'$(CourierCollectionPath)' == ''">$(MSBuildProjectDirectory)\collection</CourierCollectionPath>
+    <CourierToolPath Condition="'$(CourierToolPath)' == ''">courier</CourierToolPath>
+    <CourierBaseUrlVariable Condition="'$(CourierBaseUrlVariable)' == ''">baseUrl</CourierBaseUrlVariable>
+
+    <!--
+      A scanner problem must not stop a developer compiling. Set this to false in CI, where a
+      collection that silently stopped updating is the thing you want to hear about.
+    -->
+    <CourierTreatScanErrorsAsWarnings Condition="'$(CourierTreatScanErrorsAsWarnings)' == ''">true</CourierTreatScanErrorsAsWarnings>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,122 @@
+# Courier
+
+A local-first API client for Windows enterprise .NET teams.
+
+No account. No sync. No telemetry. Collections are plain YAML files on disk that git already
+versions, and credentials stay in Windows Credential Manager.
+
+---
+
+## What makes it different
+
+**Nothing leaves the machine.** There is no account system and no server this project operates, so
+there is nowhere for your collections, tokens or endpoint inventories to be uploaded to. Every
+outbound socket in the process goes through one auditable chokepoint, and the build fails if any
+other code opens one.
+
+**Enterprise auth that works.** Entra ID with broker SSO, mutual TLS from the Windows certificate
+store, corporate proxies with PAC and TLS inspection, and NTLM/Kerberos with the current Windows
+identity. This is the part no other client does.
+
+**The collection builds itself from your code.** Point Courier at a .NET solution and it derives
+every endpoint from the controllers, then keeps them current on every build — without destroying
+anything you customised.
+
+**A failing request is one file.** Export a *capsule* — the request, the response, the trace id,
+secrets stripped — and hand it to whoever can debug it.
+
+## Getting started
+
+```powershell
+git clone https://github.com/courier-api/courier
+cd courier
+
+dotnet build Courier.slnx
+dotnet run --project src/Courier.App -f net10.0-windows10.0.19041.0
+```
+
+For the configuration that ships — single-file, self-contained, ReadyToRun:
+
+```powershell
+./build/publish.ps1 -Runtime win-x64
+```
+
+## The CLI
+
+```powershell
+dotnet tool install -g Courier.Cli
+
+courier scan ./src/Orders.Api --output ./collections/orders
+courier run ./collections/orders --environment QA-Internal --junit results.xml
+courier export ./collections/orders --format curl --request orders
+courier capsule inspect ./orders-500.capsule --redactions
+```
+
+`courier run` exits non-zero on a failing assertion and writes JSON or JUnit XML, so it drops into
+CI as-is.
+
+## Build-time collection generation
+
+```xml
+<PackageReference Include="Courier.MSBuild" Version="0.1.0" PrivateAssets="all" />
+<PropertyGroup>
+  <CourierCollectionPath>$(MSBuildProjectDirectory)\..\collections\orders</CourierCollectionPath>
+</PropertyGroup>
+```
+
+The collection updates on every build without the app open. The generator only ever writes
+`endpoints.generated.yaml`; your edits live in `endpoints.overlay.yaml` and are never touched.
+
+## Repository layout
+
+```
+src/
+  Courier.Core/              collection model, HTTP, variables, auth, capsules, egress gate
+  Courier.Scanner/           Roslyn source analysis
+  Courier.Scripting/         Jint sandbox, pm.* shim, assertions, collection runner
+  Courier.Telemetry/         App Insights, Datadog, Azure DevOps
+  Courier.Platform.Windows/  credential store, certificate store, WinHTTP proxy, WAM broker
+  Courier.Platform.Posix/    best-effort fallbacks
+  Courier.Cli/               dotnet tool
+  Courier.MSBuild/           build-task package
+  Courier.App/               Avalonia
+tests/                       unit tests and the performance budget gate
+samples/                     reference API solutions the scanner is tested against
+docs/                        specifications and the security statement
+build/                       publish, MSI, winget
+```
+
+## Tests
+
+```powershell
+./build/run-tests.ps1
+./build/run-tests.ps1 -IncludePerf
+```
+
+`xunit.v3` targets Microsoft.Testing.Platform, where a test project is an executable. Use
+`dotnet run --project <test project>` rather than `dotnet test`.
+
+The performance budgets in [REQUIREMENTS §6.1](docs/REQUIREMENTS.md) are release gates, and a
+regression fails the build.
+
+## Documentation
+
+| | |
+|---|---|
+| [Collection format](docs/COLLECTION_FORMAT.md) | The on-disk format, versioned so the files outlive the tool |
+| [Capsule format](docs/CAPSULE_FORMAT.md) | The container and the redaction guarantee |
+| [Security and privacy](docs/SECURITY_AND_PRIVACY.md) | Data locations, network behaviour, threat model, review checklist |
+| [Architecture](docs/ARCHITECTURE.md) | For contributors: the four designs that cannot be retrofitted |
+| [Needs live validation](docs/NEEDS_LIVE_VALIDATION.md) | Every path not yet exercised against the real thing |
+| [Requirements](docs/REQUIREMENTS.md) · [Technical spec](docs/TECH_SPEC.md) | The originals |
+
+## Status
+
+Not released. Every requirement has an implementation and the performance budgets pass, but the
+enterprise and cloud integrations have not been exercised against a real tenant, proxy, monitoring
+backend or work item tracker. [NEEDS_LIVE_VALIDATION.md](docs/NEEDS_LIVE_VALIDATION.md) lists each
+one and how to check it. Nothing on that list should be described as working until it is.
+
+## Licence
+
+Apache 2.0. The patent grant matters for enterprise adoption approval.

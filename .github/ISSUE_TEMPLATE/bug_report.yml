@@ -1,0 +1,99 @@
+name: Bug report
+description: Something behaves incorrectly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Courier is pre-alpha. Please check `docs/NEEDS_LIVE_VALIDATION.md` first — the enterprise
+        and cloud integrations have never been exercised against a real tenant, proxy or
+        monitoring backend, so the area you hit may be known-unverified rather than broken.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a collection at ...
+        2. Select the ... environment
+        3. Send ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Sending requests / response viewer
+        - Collections, environments and variables
+        - Authentication (Entra, OAuth2, Basic, API key, AWS)
+        - Certificates, proxy and TLS trust
+        - Scanning a .NET solution
+        - Capsules (export, import, redaction)
+        - Telemetry bridge (App Insights, Datadog)
+        - Scripting and tests
+        - CLI or MSBuild task
+        - Performance
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: network
+    attributes:
+      label: What sits between you and the target host
+      description: >
+        Required for anything involving authentication, certificates or connection failures. A
+        corporate proxy, TLS inspection, a VPN or a domain policy determines almost all of this
+        behaviour, and it is the part a stack trace does not show.
+      placeholder: |
+        Proxy: PAC script, authenticating (Negotiate)
+        TLS inspection: yes, corporate root CA installed by IT
+        Domain-joined: yes
+        Auth: Entra with WAM broker
+
+  - type: textarea
+    id: performance
+    attributes:
+      label: Load characteristics
+      description: >
+        Required for anything involving speed or memory. REQUIREMENTS section 6.1 specifies the
+        budgets against a 4-core, 16GB, HDD-backed machine, so your hardware matters.
+      placeholder: |
+        Open tabs: ~40
+        Response size: ~12 MB JSON
+        Machine: 4-core, 16GB, HDD
+
+  - type: input
+    id: version
+    attributes:
+      label: Courier version
+      description: From the release you downloaded, or the commit hash if you built from source.
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 23H2 (22631.3593)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or stack trace
+      description: >
+        From %LOCALAPPDATA%\Courier\logs. Secret values are removed before writing, but read
+        before pasting — redact anything that identifies a real customer, host or work item.
+      render: text

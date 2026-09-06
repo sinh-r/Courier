@@ -1,0 +1,71 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             x:Class="Courier.App.Views.Dialogs.FirstRunView"
+             x:DataType="vm:MainWindowViewModel">
+
+  <!--
+    First run. UI_SPEC 5.10: no account, no sign-in, exactly three doors, and one quiet line about
+    where data is stored locally.
+
+    The absence of a sign-in step is the product's opening argument, so this screen says nothing
+    about accounts at all — not even to reassure. There is nothing to reassure about.
+  -->
+
+  <Border Background="{DynamicResource Paper}">
+    <StackPanel MaxWidth="720" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="24">
+
+      <StackPanel Spacing="6">
+        <TextBlock Classes="title" Text="Courier" />
+        <TextBlock Classes="muted" TextWrapping="Wrap"
+                   Text="An API client that keeps everything on this machine. No account, no sync, no telemetry." />
+      </StackPanel>
+
+      <StackPanel Spacing="1">
+
+        <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Rule}" BorderThickness="1" Padding="16">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Grid.Column="0" Spacing="3">
+              <TextBlock Classes="heading" Text="Open a folder of collections" />
+              <TextBlock Classes="meta" TextWrapping="Wrap"
+                         Text="Plain files that git already versions. Nothing is imported or copied." />
+            </StackPanel>
+            <Button Grid.Column="1" Classes="primary" Content="Choose folder"
+                    VerticalAlignment="Center" Name="ChooseFolderButton" />
+          </Grid>
+        </Border>
+
+        <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Rule}" BorderThickness="1,0,1,1" Padding="16">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Grid.Column="0" Spacing="3">
+              <TextBlock Classes="heading" Text="Scan a .NET solution" />
+              <TextBlock Classes="meta" TextWrapping="Wrap"
+                         Text="Courier reads your controllers and builds the collection, then keeps it current on every build." />
+            </StackPanel>
+            <Button Grid.Column="1" Content="Pick a .sln" VerticalAlignment="Center" Name="PickSolutionButton" />
+          </Grid>
+        </Border>
+
+        <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Rule}" BorderThickness="1,0,1,1" Padding="16">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Grid.Column="0" Spacing="3">
+              <TextBlock Classes="heading" Text="Import from Postman" />
+              <TextBlock Classes="meta" TextWrapping="Wrap"
+                         Text="Collections and environments from an export file. Secrets go to the credential store, not the file." />
+            </StackPanel>
+            <Button Grid.Column="1" Content="Choose export" VerticalAlignment="Center" Name="ImportPostmanButton" />
+          </Grid>
+        </Border>
+
+      </StackPanel>
+
+      <!-- The quiet line. SEC-05's full page is a click away; this is the one-sentence version. -->
+      <TextBlock Classes="meta" TextWrapping="Wrap"
+                 Text="Collections stay where you put them. Settings and history: %LOCALAPPDATA%\Courier. Secrets: Windows Credential Manager." />
+
+      <Button Content="Close" HorizontalAlignment="Left" Command="{Binding CloseDialogCommand}" />
+
+    </StackPanel>
+  </Border>
+
+</UserControl>

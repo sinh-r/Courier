@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Courier.App.Controls.KeyValueGrid">
+
+  <!--
+    Params and headers. A checkbox per row rather than a delete, so disabling a header is not
+    destructive and the row stays in the file for the next time it is needed.
+  -->
+  <DockPanel LastChildFill="True">
+
+    <Border DockPanel.Dock="Top" Height="{DynamicResource RowHeight}"
+            BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
+      <Grid ColumnDefinitions="24,220,*,180">
+        <TextBlock Grid.Column="1" Classes="meta" Text="Name" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="2" Classes="meta" Text="Value" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="3" Classes="meta" Text="Description" VerticalAlignment="Center" />
+      </Grid>
+    </Border>
+
+    <ItemsControl Name="Rows">
+      <ItemsControl.ItemTemplate>
+        <!--
+          Params and headers are different types with the same shape, so this template is
+          reflection-bound rather than compiled. It is the one place in the app that opts out.
+        -->
+        <DataTemplate x:CompileBindings="False">
+          <Border BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
+            <Grid ColumnDefinitions="24,220,*,180" Height="{DynamicResource RowHeight}">
+              <CheckBox Grid.Column="0" IsChecked="{Binding Enabled, Mode=OneWay}" />
+              <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Name}" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="2" Classes="mono" Text="{Binding Value}" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="3" Classes="meta" Text="{Binding Description}" VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+  </DockPanel>
+
+</UserControl>

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Courier.Core/Courier.Core.csproj" />
+    <ProjectReference Include="../../src/Courier.Telemetry/Courier.Telemetry.csproj" />
+    <ProjectReference Include="../../src/Courier.Platform.Posix/Courier.Platform.Posix.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+
+  </ItemGroup>
+
+</Project>

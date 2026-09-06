@@ -1,0 +1,110 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             xmlns:controls="clr-namespace:Courier.App.Controls"
+             x:Class="Courier.App.Views.RequestEditorView"
+             x:DataType="vm:MainWindowViewModel">
+
+  <Border Background="{DynamicResource Paper}">
+    <DockPanel LastChildFill="True">
+
+      <!--
+        Capsule banner. Shown on a tab that arrived from an imported capsule. CAP-06 requires
+        stating which placeholders resolved and which did not before allowing a send.
+      -->
+      <Border DockPanel.Dock="Top"
+              Background="{DynamicResource Panel}"
+              BorderBrush="{DynamicResource Rule}"
+              BorderThickness="0,0,0,1"
+              Padding="8,4"
+              IsVisible="{Binding Tabs.Active.State.Capsule, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False, TargetNullValue=False}">
+        <StackPanel Orientation="Horizontal" Spacing="14">
+          <TextBlock Classes="mono" Text="{Binding Tabs.Active.State.Capsule.FileName}" />
+          <TextBlock Classes="meta"
+                     Text="{Binding Tabs.Active.State.Capsule.ExportedBy, StringFormat='imported from {0}'}" />
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <TextBlock Classes="meta" Text="▲" Foreground="{DynamicResource Share}" />
+            <TextBlock Classes="meta" Foreground="{DynamicResource Share}"
+                       Text="{Binding Tabs.Active.State.Capsule.Resolved.Count, StringFormat='{}{0} placeholders resolved'}" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="4"
+                      IsVisible="{Binding Tabs.Active.State.Capsule.Unresolved.Count, Converter={StaticResource IsNotZeroConverter}}">
+            <TextBlock Classes="meta" Text="▲" Foreground="{DynamicResource Secret}" />
+            <TextBlock Classes="meta" Foreground="{DynamicResource Secret}"
+                       Text="{Binding Tabs.Active.State.Capsule.Unresolved.Count, StringFormat='{}{0} unresolved'}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <!-- URL bar. -->
+      <Border DockPanel.Dock="Top" Height="32" Padding="8,0"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="Auto,4,*,8,Auto" VerticalAlignment="Center">
+
+          <ComboBox Grid.Column="0" Width="92" SelectedIndex="0"
+                    AutomationProperties.Name="HTTP method">
+            <ComboBoxItem Content="GET" />
+            <ComboBoxItem Content="POST" />
+            <ComboBoxItem Content="PUT" />
+            <ComboBoxItem Content="PATCH" />
+            <ComboBoxItem Content="DELETE" />
+            <ComboBoxItem Content="HEAD" />
+            <ComboBoxItem Content="OPTIONS" />
+          </ComboBox>
+
+          <!--
+            Variable references stay visible as {{name}} and resolve on hover, so the user can see
+            what will actually be sent without the URL becoming unreadable. CORE-04.
+          -->
+          <TextBox Grid.Column="2"
+                   Text="{Binding Tabs.Active.State.Url}"
+                   PlaceholderText="{}{{baseUrl}}/api/v2/orders/{id}"
+                   AutomationProperties.Name="Request URL" />
+
+          <!--
+            Send, or Cancel with an elapsed timer while in flight. UI_SPEC 8 asks how to treat a
+            request longer than ~2s; the mock answers with the elapsed time beside a Cancel, which
+            reports a fact rather than decorating the wait.
+          -->
+          <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="meta mono" VerticalAlignment="Center"
+                       IsVisible="{Binding Tabs.Active.IsSending}"
+                       Text="{Binding Tabs.Active.Elapsed, Converter={StaticResource ElapsedConverter}}" />
+            <Button Content="Cancel" IsVisible="{Binding Tabs.Active.IsSending}" />
+            <Button Classes="primary" Content="Send" Width="64"
+                    IsVisible="{Binding !Tabs.Active.IsSending}"
+                    AutomationProperties.Name="Send request" />
+          </StackPanel>
+
+        </Grid>
+      </Border>
+
+      <!-- Request sections. -->
+      <TabControl DockPanel.Dock="Top" Padding="0" Background="Transparent">
+
+        <TabItem Header="Params">
+          <controls:KeyValueGrid ItemsSource="{Binding Tabs.Active.State.Query}" />
+        </TabItem>
+
+        <TabItem Header="Headers">
+          <controls:KeyValueGrid ItemsSource="{Binding Tabs.Active.State.Headers}" />
+        </TabItem>
+
+        <TabItem Header="Body" IsSelected="True">
+          <controls:BodyEditor />
+        </TabItem>
+
+        <TabItem Header="Auth">
+          <controls:RequestAuthPanel DataContext="{Binding}" />
+        </TabItem>
+
+        <TabItem Header="Scripts">
+          <controls:ScriptEditor />
+        </TabItem>
+
+      </TabControl>
+
+    </DockPanel>
+  </Border>
+
+</UserControl>

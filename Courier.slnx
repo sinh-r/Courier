@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Courier.App/Courier.App.csproj" />
+    <Project Path="src/Courier.Cli/Courier.Cli.csproj" />
+    <Project Path="src/Courier.Core/Courier.Core.csproj" />
+    <Project Path="src/Courier.MSBuild/Courier.MSBuild.csproj" />
+    <Project Path="src/Courier.Platform.Posix/Courier.Platform.Posix.csproj" />
+    <Project Path="src/Courier.Platform.Windows/Courier.Platform.Windows.csproj" />
+    <Project Path="src/Courier.Scanner/Courier.Scanner.csproj" />
+    <Project Path="src/Courier.Scripting/Courier.Scripting.csproj" />
+    <Project Path="src/Courier.Telemetry/Courier.Telemetry.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Courier.App.UiTests/Courier.App.UiTests.csproj" />
+    <Project Path="tests/Courier.Core.Tests/Courier.Core.Tests.csproj" />
+    <Project Path="tests/Courier.Perf.Tests/Courier.Perf.Tests.csproj" />
+    <Project Path="tests/Courier.Scanner.Tests/Courier.Scanner.Tests.csproj" />
+    <Project Path="tests/Courier.Scripting.Tests/Courier.Scripting.Tests.csproj" />
+  </Folder>
+</Solution>

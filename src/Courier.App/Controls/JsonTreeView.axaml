@@ -1,0 +1,74 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             xmlns:controls="clr-namespace:Courier.App.Controls"
+             x:Class="Courier.App.Controls.JsonTreeView"
+             x:DataType="vm:ResponseViewModel">
+
+  <!--
+    The virtualized JSON tree. Rows come from JsonTreeProjection, which is a flat list of node
+    indices recomputed from a bitset, so a 118,402-node document is an ItemsRepeater over ints
+    rather than a control tree.
+  -->
+
+  <DockPanel LastChildFill="True">
+
+    <!-- Truncation banner. Says what is actually on screen rather than implying it is everything. -->
+    <Border DockPanel.Dock="Top"
+            Background="{DynamicResource Panel}"
+            BorderBrush="{DynamicResource Rule}"
+            BorderThickness="0,0,0,1"
+            Padding="8,3"
+            IsVisible="{Binding IsTruncatedForDisplay, FallbackValue=False, TargetNullValue=False}">
+      <StackPanel Orientation="Horizontal" Spacing="10">
+        <TextBlock Classes="meta" Text="▲" Foreground="{DynamicResource Secret}" VerticalAlignment="Center" />
+        <TextBlock Classes="meta" VerticalAlignment="Center"
+                   Text="Response truncated for display · first 4 MB shown" />
+        <Button Classes="bare" Content="Load all" Height="18" Name="LoadAllButton" />
+        <Button Classes="bare" Content="Save to file" Height="18" Name="SaveToFileButton" />
+      </StackPanel>
+    </Border>
+
+    <!-- Breadcrumb for the selected node: results › [418] › lines › [2]. -->
+    <Border DockPanel.Dock="Bottom"
+            Height="{DynamicResource RowHeight}"
+            Background="{DynamicResource Panel}"
+            BorderBrush="{DynamicResource Rule}"
+            BorderThickness="0,1,0,0"
+            Padding="8,0">
+      <TextBlock Name="Breadcrumb" Classes="mono meta" VerticalAlignment="Center" />
+    </Border>
+
+    <ScrollViewer Name="Scroller"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto">
+      <ItemsControl Name="Rows">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <!--
+              Uniform 19px rows, so the panel computes extent arithmetically and realizes only the
+              rows on screen. This is the control that has to hold 60fps at 118,402 nodes.
+            -->
+            <VirtualizingStackPanel Orientation="Vertical" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="controls:JsonRow">
+            <Grid Height="19" ColumnDefinitions="Auto,Auto,Auto,*" Margin="{Binding IndentMargin}">
+              <TextBlock Grid.Column="0" Classes="mono meta" Width="12"
+                         Text="{Binding Chevron}" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center"
+                         Text="{Binding Name}" Foreground="{DynamicResource Ink}" />
+              <TextBlock Grid.Column="2" Classes="mono meta" VerticalAlignment="Center"
+                         Text="{Binding Separator}" Margin="0,0,6,0" />
+              <TextBlock Grid.Column="3" Classes="mono" VerticalAlignment="Center"
+                         Text="{Binding Value}" Foreground="{Binding ValueBrush}" />
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+  </DockPanel>
+
+</UserControl>

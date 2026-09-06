@@ -1,0 +1,101 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             x:Class="Courier.App.Views.CollectionTreeView"
+             x:DataType="vm:CollectionTreeViewModel">
+
+  <Border Background="{DynamicResource Panel}">
+    <DockPanel LastChildFill="True">
+
+      <!-- Header. 24px, matching every other row in the application. -->
+      <Border DockPanel.Dock="Top" Height="{DynamicResource RowHeight}"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Grid.Column="0" Classes="heading" Text="Collections" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Classes="mono meta" Text="+ ⌕ ⋯" VerticalAlignment="Center" />
+        </Grid>
+      </Border>
+
+      <!-- Filter. -->
+      <Border DockPanel.Dock="Top" Height="{DynamicResource RowHeight}"
+              Background="{DynamicResource Paper}"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
+        <Grid ColumnDefinitions="Auto,*">
+          <TextBlock Grid.Column="0" Classes="meta" Text="⌕" VerticalAlignment="Center" Margin="0,0,6,0" />
+          <TextBox Grid.Column="1" Text="{Binding Filter}" PlaceholderText="filter"
+                   BorderThickness="0" Background="Transparent" Padding="0"
+                   VerticalAlignment="Center"
+                   AutomationProperties.Name="Filter collections" />
+        </Grid>
+      </Border>
+
+      <!--
+        Provenance legend. SCAN-12 asks for three states distinguished without noise, and the
+        legend is what stops the glyphs being a private language.
+      -->
+      <Border DockPanel.Dock="Bottom" Height="{DynamicResource RowHeight}"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,1,0,0" Padding="8,0">
+        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <TextBlock Classes="meta" Text="■" />
+            <TextBlock Classes="meta" Text="from code" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <TextBlock Classes="meta" Text="◧" />
+            <TextBlock Classes="meta" Text="edited" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <TextBlock Classes="meta" Text="○" />
+            <TextBlock Classes="meta" Text="yours" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <!-- Empty state. UI_SPEC 3.7: empty states are invitations. -->
+      <Border IsVisible="{Binding IsEmpty}" Padding="12" VerticalAlignment="Top">
+        <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Muted}"
+                   Text="No collections yet. Open a folder, or point Courier at a .NET solution and it will build one." />
+      </Border>
+
+      <TreeView ItemsSource="{Binding Roots}"
+                SelectedItem="{Binding Selected}"
+                Background="Transparent"
+                BorderThickness="0"
+                IsVisible="{Binding !IsEmpty}"
+                AutomationProperties.Name="Collection tree">
+
+        <TreeView.ItemTemplate>
+          <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="vm:TreeNode">
+            <Grid ColumnDefinitions="14,40,*,Auto,Auto" Height="{DynamicResource RowHeight}">
+
+              <!-- Provenance. Glyph and colour together; never colour alone. -->
+              <TextBlock Grid.Column="0" Classes="meta" VerticalAlignment="Center"
+                         Text="{Binding ProvenanceGlyph}"
+                         ToolTip.Tip="{Binding ProvenanceLabel}"
+                         AutomationProperties.Name="{Binding ProvenanceLabel}" />
+
+              <!-- Verb badge, in verb colour, left of the name. -->
+              <TextBlock Grid.Column="1" Classes="mono" FontSize="11" VerticalAlignment="Center"
+                         Text="{Binding Verb}"
+                         Foreground="{Binding Verb, Converter={StaticResource VerbBrushConverter}}" />
+
+              <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="{Binding Name}" />
+
+              <!-- Inline git status. STOR-05. -->
+              <TextBlock Grid.Column="3" Classes="mono meta" VerticalAlignment="Center" Margin="6,0,0,0"
+                         Text="{Binding GitGlyph}"
+                         ToolTip.Tip="{Binding GitState}" />
+
+              <TextBlock Grid.Column="4" Classes="meta" VerticalAlignment="Center" Margin="6,0,0,0"
+                         Text="{Binding ChildRequestCount}"
+                         IsVisible="{Binding ChildRequestCount, Converter={StaticResource IsNotZeroConverter}}" />
+
+            </Grid>
+          </TreeDataTemplate>
+        </TreeView.ItemTemplate>
+      </TreeView>
+
+    </DockPanel>
+  </Border>
+
+</UserControl>

@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             x:Class="Courier.App.Controls.RequestAuthPanel"
+             x:DataType="vm:MainWindowViewModel">
+
+  <!--
+    Per-request auth. The profile carries the configuration; the secret lives in the credential
+    store and is never shown here, only located. P2.
+  -->
+  <StackPanel Margin="8" Spacing="8">
+
+    <Grid ColumnDefinitions="120,*">
+      <TextBlock Grid.Column="0" Classes="meta" Text="Profile" VerticalAlignment="Center" />
+      <ComboBox Grid.Column="1" HorizontalAlignment="Left" Width="240"
+                AutomationProperties.Name="Auth profile" />
+    </Grid>
+
+    <Grid ColumnDefinitions="120,*">
+      <TextBlock Grid.Column="0" Classes="meta" Text="Identity" VerticalAlignment="Center" />
+      <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center"
+                 Text="{Binding Inspector.Identity}" />
+    </Grid>
+
+    <Grid ColumnDefinitions="120,*">
+      <TextBlock Grid.Column="0" Classes="meta" Text="Expires" VerticalAlignment="Center" />
+      <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center"
+                 Text="{Binding Inspector.ExpiryText}" />
+    </Grid>
+
+    <Grid ColumnDefinitions="120,*">
+      <TextBlock Grid.Column="0" Classes="meta" Text="Scopes" VerticalAlignment="Center" />
+      <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center" TextWrapping="Wrap"
+                 Text="{Binding Inspector.ScopesText}" />
+    </Grid>
+
+    <StackPanel Orientation="Horizontal" Spacing="6">
+      <Button Content="Refresh token" />
+      <Button Content="Decode token"
+              Command="{Binding OpenDialogCommand}"
+              CommandParameter="{x:Static vm:DialogKind.AuthProfile}" />
+    </StackPanel>
+
+  </StackPanel>
+
+</UserControl>

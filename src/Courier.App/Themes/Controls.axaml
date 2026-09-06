@@ -1,0 +1,237 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    Every control is restyled explicitly. The base theme is Avalonia.Themes.Simple rather than
+    Fluent because Fluent's rounded, shadowed, accent-filled defaults are precisely what UI_SPEC 7
+    puts out of bounds, and overriding them one property at a time leaves gaps that show up as a
+    stray 4px radius on a control nobody thought to check.
+
+    Motion is effectively none (UI_SPEC 3.6). Panes resize instantly, tabs switch instantly, trees
+    expand instantly. The three permitted animations live in the views that own them.
+  -->
+
+  <Style Selector="Window">
+    <Setter Property="Background" Value="{DynamicResource Panel}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Sans}" />
+    <Setter Property="FontSize" Value="{DynamicResource BodySize}" />
+    <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+    <Setter Property="TransparencyBackgroundFallback" Value="{DynamicResource Panel}" />
+  </Style>
+
+  <Style Selector="TextBlock">
+    <Setter Property="FontFamily" Value="{DynamicResource Sans}" />
+    <Setter Property="FontSize" Value="{DynamicResource BodySize}" />
+    <Setter Property="LineHeight" Value="{DynamicResource BodyLineHeight}" />
+    <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </Style>
+
+  <!-- Anything the user might select and copy. UI_SPEC 3.4. -->
+  <Style Selector="TextBlock.mono">
+    <Setter Property="FontFamily" Value="{DynamicResource Mono}" />
+    <Setter Property="FontSize" Value="{DynamicResource PayloadSize}" />
+    <Setter Property="LineHeight" Value="{DynamicResource PayloadLineHeight}" />
+  </Style>
+
+  <Style Selector="TextBlock.meta">
+    <Setter Property="FontSize" Value="{DynamicResource MetadataSize}" />
+    <Setter Property="LineHeight" Value="{DynamicResource MetadataLineHeight}" />
+    <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+  </Style>
+
+  <Style Selector="TextBlock.heading">
+    <Setter Property="FontSize" Value="{DynamicResource SectionHeadingSize}" />
+    <Setter Property="FontWeight" Value="Medium" />
+  </Style>
+
+  <Style Selector="TextBlock.title">
+    <Setter Property="FontSize" Value="{DynamicResource DialogTitleSize}" />
+    <Setter Property="LineHeight" Value="24" />
+    <Setter Property="FontWeight" Value="Medium" />
+  </Style>
+
+  <Style Selector="TextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+  </Style>
+
+  <!--
+    Buttons name their outcome and never carry an accent fill (UI_SPEC 3.3, 3.7). A "primary"
+    action is distinguished by a 1px ink border, not by colour.
+  -->
+  <Style Selector="Button">
+    <Setter Property="Background" Value="{DynamicResource Paper}" />
+    <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Rule}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlRadius}" />
+    <Setter Property="Padding" Value="10,0" />
+    <Setter Property="Height" Value="24" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="FontFamily" Value="{DynamicResource Sans}" />
+    <Setter Property="FontSize" Value="{DynamicResource BodySize}" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+
+  <Style Selector="Button:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Hover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Muted}" />
+  </Style>
+
+  <Style Selector="Button:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Panel}" />
+  </Style>
+
+  <Style Selector="Button:disabled /template/ ContentPresenter">
+    <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    <Setter Property="Opacity" Value="0.7" />
+  </Style>
+
+  <Style Selector="Button.primary">
+    <Setter Property="BorderBrush" Value="{DynamicResource Ink}" />
+    <Setter Property="FontWeight" Value="Medium" />
+  </Style>
+
+  <!-- A borderless button for toolbar glyphs and tab close affordances. -->
+  <Style Selector="Button.bare">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="4,0" />
+  </Style>
+
+  <Style Selector="Button.bare:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Hover}" />
+  </Style>
+
+  <Style Selector="TextBox">
+    <Setter Property="Background" Value="{DynamicResource Paper}" />
+    <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Rule}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlRadius}" />
+    <Setter Property="Padding" Value="6,2" />
+    <Setter Property="MinHeight" Value="24" />
+    <Setter Property="FontFamily" Value="{DynamicResource Mono}" />
+    <Setter Property="FontSize" Value="{DynamicResource PayloadSize}" />
+    <Setter Property="CaretBrush" Value="{DynamicResource Select}" />
+    <Setter Property="SelectionBrush" Value="{DynamicResource SelectMuted}" />
+    <Setter Property="SelectionForegroundBrush" Value="{DynamicResource Ink}" />
+  </Style>
+
+  <Style Selector="TextBox:focus">
+    <Setter Property="BorderBrush" Value="{DynamicResource Select}" />
+  </Style>
+
+  <Style Selector="TextBox.chrome">
+    <Setter Property="FontFamily" Value="{DynamicResource Sans}" />
+    <Setter Property="FontSize" Value="{DynamicResource BodySize}" />
+  </Style>
+
+  <Style Selector="ComboBox">
+    <Setter Property="Background" Value="{DynamicResource Paper}" />
+    <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Rule}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlRadius}" />
+    <Setter Property="MinHeight" Value="24" />
+    <Setter Property="Height" Value="24" />
+    <Setter Property="Padding" Value="8,0" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="FontFamily" Value="{DynamicResource Mono}" />
+    <Setter Property="FontSize" Value="{DynamicResource PayloadSize}" />
+  </Style>
+
+  <Style Selector="CheckBox">
+    <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Sans}" />
+    <Setter Property="FontSize" Value="{DynamicResource BodySize}" />
+    <Setter Property="MinHeight" Value="20" />
+  </Style>
+
+  <!--
+    Focus is visible at all times and never suppressed (UI_SPEC 6). A 1px select-coloured ring,
+    which is the only place the select colour is allowed to appear outside a selected row.
+  -->
+  <Style Selector=":is(Control):focus-visible">
+    <Setter Property="FocusAdorner">
+      <FocusAdornerTemplate>
+        <Border BorderBrush="{DynamicResource Select}" BorderThickness="1" Margin="-1" />
+      </FocusAdornerTemplate>
+    </Setter>
+  </Style>
+
+  <!-- Panes are divided by 1px rules, never by shadow or gap. UI_SPEC 3.5. -->
+  <Style Selector="Border.pane">
+    <Setter Property="Background" Value="{DynamicResource Panel}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Rule}" />
+    <Setter Property="CornerRadius" Value="0" />
+  </Style>
+
+  <Style Selector="Border.paper">
+    <Setter Property="Background" Value="{DynamicResource Paper}" />
+    <Setter Property="CornerRadius" Value="0" />
+  </Style>
+
+  <!--
+    The one tolerated elevation: menus, popovers and the command palette. Everything else is flat
+    and gridded, and nothing floats.
+  -->
+  <Style Selector="Border.floating">
+    <Setter Property="Background" Value="{DynamicResource Paper}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Rule}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="BoxShadow" Value="0 4 12 0 #24000000" />
+  </Style>
+
+  <Style Selector="GridSplitter">
+    <Setter Property="Background" Value="{DynamicResource Rule}" />
+    <Setter Property="MinWidth" Value="1" />
+    <Setter Property="MinHeight" Value="1" />
+  </Style>
+
+  <Style Selector="GridSplitter:pointerover">
+    <Setter Property="Background" Value="{DynamicResource Select}" />
+  </Style>
+
+  <Style Selector="ScrollBar">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <!-- Tree and table rows are 24px, and selection uses the select colour, never a verb or status one. -->
+  <Style Selector="ListBoxItem">
+    <Setter Property="Height" Value="{DynamicResource RowHeight}" />
+    <Setter Property="Padding" Value="{DynamicResource RowPadding}" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Hover}" />
+  </Style>
+
+  <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SelectBackground}" />
+    <Setter Property="TextBlock.Foreground" Value="{DynamicResource SelectForeground}" />
+  </Style>
+
+  <Style Selector="ListBox">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+
+  <Style Selector="ToolTip">
+    <Setter Property="Background" Value="{DynamicResource Paper}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Rule}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="Padding" Value="8,4" />
+    <Setter Property="FontFamily" Value="{DynamicResource Sans}" />
+    <Setter Property="FontSize" Value="{DynamicResource MetadataSize}" />
+  </Style>
+
+</Styles>

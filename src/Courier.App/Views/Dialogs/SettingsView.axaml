@@ -1,0 +1,388 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             xmlns:storage="clr-namespace:Courier.Core.Storage;assembly=Courier.Core"
+             xmlns:abs="clr-namespace:Courier.Core.Abstractions;assembly=Courier.Core"
+             x:Class="Courier.App.Views.Dialogs.SettingsView"
+             x:DataType="vm:MainWindowViewModel">
+
+  <!--
+    One settings shell with a left nav, as the mock has it: Environments, Auth profiles, Trust and
+    network, Storage, Keyboard.
+  -->
+
+  <Border Classes="floating" Width="960" Height="620"
+          HorizontalAlignment="Center" VerticalAlignment="Center">
+
+    <DockPanel LastChildFill="True">
+
+      <Border DockPanel.Dock="Top" Height="40" Padding="16,0"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Grid.Column="0" Classes="title" VerticalAlignment="Center" Text="Settings" />
+          <Button Grid.Column="1" Classes="bare" Content="×" Command="{Binding CloseDialogCommand}"
+                  AutomationProperties.Name="Close settings" />
+        </Grid>
+      </Border>
+
+      <!-- Left nav. -->
+      <Border DockPanel.Dock="Left" Width="180" Background="{DynamicResource Panel}"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,1,0">
+        <StackPanel Margin="0,8">
+          <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                  Height="{DynamicResource RowHeight}" Padding="16,0" Content="Environments"
+                  Command="{Binding OpenDialogCommand}" CommandParameter="{x:Static vm:DialogKind.Environments}" />
+          <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                  Height="{DynamicResource RowHeight}" Padding="16,0" Content="Auth profiles"
+                  Command="{Binding OpenDialogCommand}" CommandParameter="{x:Static vm:DialogKind.AuthProfile}" />
+          <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                  Height="{DynamicResource RowHeight}" Padding="16,0" Content="Trust and network"
+                  Command="{Binding OpenDialogCommand}" CommandParameter="{x:Static vm:DialogKind.TrustAndNetwork}" />
+          <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                  Height="{DynamicResource RowHeight}" Padding="16,0" Content="Storage"
+                  Command="{Binding OpenDialogCommand}" CommandParameter="{x:Static vm:DialogKind.Storage}" />
+          <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                  Height="{DynamicResource RowHeight}" Padding="16,0" Content="Keyboard"
+                  Command="{Binding OpenDialogCommand}" CommandParameter="{x:Static vm:DialogKind.Keyboard}" />
+        </StackPanel>
+      </Border>
+
+      <Panel>
+
+        <!--
+          Environments. SEC-03, CORE-12, UI_SPEC 5.5: two columns per variable, shared (goes in
+          git) and local (this machine only, in the OS credential store), with trust colours on the
+          headers and a lock glyph on local.
+        -->
+        <ScrollViewer Padding="16"
+                      IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=Environments}">
+          <StackPanel Spacing="12">
+
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+                <TextBlock Classes="heading" Text="{Binding EnvironmentName}" VerticalAlignment="Center" />
+                <TextBlock Classes="mono meta" VerticalAlignment="Center"
+                           Text="collections/env.qa-internal.yaml" />
+              </StackPanel>
+              <Button Grid.Column="1" Content="+ add variable" Name="AddVariableButton" />
+            </Grid>
+
+            <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1">
+              <StackPanel>
+
+                <Border Height="{DynamicResource RowHeight}" Padding="8,0"
+                        BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+                  <Grid ColumnDefinitions="200,*,*">
+                    <TextBlock Grid.Column="0" Classes="meta" Text="Variable" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                      <TextBlock Text="●" Foreground="{DynamicResource Share}" FontSize="9" />
+                      <TextBlock Classes="meta" Text="Shared · goes in git"
+                                 Foreground="{DynamicResource Share}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                      <TextBlock Text="▲" Foreground="{DynamicResource Secret}" FontSize="10" />
+                      <TextBlock Classes="meta" Text="Local · this machine, credential store"
+                                 Foreground="{DynamicResource Secret}" />
+                    </StackPanel>
+                  </Grid>
+                </Border>
+
+                <ItemsControl ItemsSource="{Binding Environments.Variables}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:EnvironmentVariableViewModel">
+                      <StackPanel>
+                        <Border Height="{DynamicResource RowHeight}" Padding="8,0"
+                                BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+                          <Grid ColumnDefinitions="200,*,*">
+                            <TextBlock Grid.Column="0" Classes="mono" VerticalAlignment="Center"
+                                       Text="{Binding Name}" />
+                            <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center"
+                                       Text="{Binding SharedDisplay}" />
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
+                                        VerticalAlignment="Center">
+                              <TextBlock Text="▲" FontSize="10" Foreground="{DynamicResource Secret}"
+                                         IsVisible="{Binding IsLocal}" />
+                              <TextBlock Classes="mono" Text="{Binding LocalDisplay}" />
+                              <TextBlock Classes="meta" Text="{Binding LocalSource}" />
+                            </StackPanel>
+                          </Grid>
+                        </Border>
+
+                        <!--
+                          The inline flag. SEC-03: a secret-shaped value in the shared column is
+                          warned about before it is committed, with the two actions that resolve it.
+                        -->
+                        <Border Background="{DynamicResource Panel}"
+                                BorderBrush="{DynamicResource Secret}" BorderThickness="2,0,0,0"
+                                Padding="10,6" IsVisible="{Binding HasSharedSecretWarning}">
+                          <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Classes="meta" TextWrapping="Wrap"
+                                       VerticalAlignment="Center"
+                                       Text="This looks like a secret and it is in the shared column, so it will be committed." />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                              <Button Content="Move to local" Height="20"
+                                      Command="{Binding MoveToLocalCommand}" />
+                              <Button Content="It is not a secret" Height="20"
+                                      Command="{Binding DismissWarningCommand}" />
+                            </StackPanel>
+                          </Grid>
+                        </Border>
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+              </StackPanel>
+            </Border>
+
+            <TextBlock Classes="meta" TextWrapping="Wrap"
+                       Text="Shared values live in the collection folder. Local values live in the operating system credential store and are never written to any file Courier creates." />
+
+          </StackPanel>
+        </ScrollViewer>
+
+        <!--
+          Auth profile. UI_SPEC 5.6: Windows sign-in as the primary route, manual client
+          credentials secondary, and a decoded token panel that deserves real estate because it
+          turns a 401 from a mystery into a five-second diagnosis.
+        -->
+        <ScrollViewer Padding="16"
+                      IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=AuthProfile}">
+          <StackPanel Spacing="14">
+
+            <TextBlock Classes="heading" Text="Entra · QA" />
+            <TextBlock Classes="meta" Text="Applies to Orders.Api and Payments" />
+
+            <Border BorderBrush="{DynamicResource Ink}" BorderThickness="1" Padding="14">
+              <StackPanel Spacing="8">
+                <TextBlock Classes="heading" Text="Use my Windows sign-in" />
+                <TextBlock Classes="meta" TextWrapping="Wrap"
+                           Text="Integrated Windows authentication against the tenant. No secret stored anywhere." />
+                <Grid ColumnDefinitions="90,*" Margin="0,4,0,0">
+                  <TextBlock Grid.Column="0" Classes="meta" Text="Tenant" />
+                  <TextBlock Grid.Column="1" Classes="mono" Text="{Binding AuthProfileEditor.Tenant}" />
+                </Grid>
+                <Grid ColumnDefinitions="90,*">
+                  <TextBlock Grid.Column="0" Classes="meta" Text="Client" />
+                  <TextBlock Grid.Column="1" Classes="mono" Text="{Binding AuthProfileEditor.ClientId}" />
+                </Grid>
+                <Grid ColumnDefinitions="90,*">
+                  <TextBlock Grid.Column="0" Classes="meta" Text="Scope" />
+                  <TextBlock Grid.Column="1" Classes="mono" Text="{Binding AuthProfileEditor.ScopeLine}" />
+                </Grid>
+              </StackPanel>
+            </Border>
+
+            <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1" Padding="14">
+              <StackPanel Spacing="6">
+                <TextBlock Classes="heading" Text="Client credentials" />
+                <TextBlock Classes="meta" TextWrapping="Wrap"
+                           Text="Client id and secret. The secret goes to Credential Manager, never to the collection file." />
+                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                  <TextBlock Text="▲" Foreground="{DynamicResource Secret}" />
+                  <TextBlock Classes="meta" Foreground="{DynamicResource Secret}" Text="Secret required" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+            <!-- The decoded token panel. ENT-04: a plain table, and never a validity verdict. -->
+            <StackPanel Spacing="6">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Classes="heading" Text="Decoded token" />
+                <TextBlock Grid.Column="1" Classes="meta" Text="{Binding AuthProfileEditor.TokenTimingLine}" />
+              </Grid>
+
+              <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1">
+                <ItemsControl ItemsSource="{Binding AuthProfileEditor.Claims}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:TokenClaimViewModel">
+                      <Border Height="{DynamicResource RowHeight}" Padding="8,0"
+                              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+                        <Grid ColumnDefinitions="90,*,Auto">
+                          <TextBlock Grid.Column="0" Classes="mono meta" VerticalAlignment="Center"
+                                     Text="{Binding Name}" />
+                          <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center"
+                                     Text="{Binding Value}" />
+                          <TextBlock Grid.Column="2" Classes="meta" VerticalAlignment="Center"
+                                     Foreground="{DynamicResource Secret}"
+                                     Text="{Binding Warning}" />
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Border>
+
+              <TextBlock Classes="meta" TextWrapping="Wrap"
+                         Text="Decoded, not validated. Courier is not the resource server and does not have the signing keys, so it reports what the token says about itself and nothing more." />
+            </StackPanel>
+
+          </StackPanel>
+        </ScrollViewer>
+
+        <!--
+          Trust and network. UI_SPEC 5.7: every row states its source — from Windows certificate
+          store, from system proxy, set by you.
+        -->
+        <ScrollViewer Padding="16"
+                      IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=TrustAndNetwork}">
+          <StackPanel Spacing="16">
+
+            <StackPanel Spacing="6">
+              <TextBlock Classes="heading" Text="Client certificate" />
+              <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1">
+                <StackPanel>
+                  <Border Height="{DynamicResource RowHeight}" Padding="8,0"
+                          BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+                    <Grid ColumnDefinitions="220,120,110,150,*">
+                      <TextBlock Grid.Column="0" Classes="meta" Text="Subject" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="1" Classes="meta" Text="Thumbprint" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="2" Classes="meta" Text="Expires" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="3" Classes="meta" Text="Host pattern" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="4" Classes="meta" Text="Source" VerticalAlignment="Center" />
+                    </Grid>
+                  </Border>
+                  <ItemsControl ItemsSource="{Binding Trust.Certificates}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="abs:CertificateCandidate">
+                        <Border Height="{DynamicResource RowHeight}" Padding="8,0"
+                                BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+                          <Grid ColumnDefinitions="220,120,110,150,*">
+                            <TextBlock Grid.Column="0" Classes="mono" VerticalAlignment="Center"
+                                       Text="{Binding Subject}" />
+                            <TextBlock Grid.Column="1" Classes="mono meta" VerticalAlignment="Center"
+                                       Text="{Binding Thumbprint}" />
+                            <TextBlock Grid.Column="2" Classes="mono meta" VerticalAlignment="Center"
+                                       Text="{Binding NotAfter, StringFormat='{}{0:yyyy-MM-dd}'}" />
+                            <TextBlock Grid.Column="3" Classes="mono meta" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="4" Classes="meta" VerticalAlignment="Center"
+                                       Text="{Binding Source}" />
+                          </Grid>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <StackPanel Spacing="6">
+              <TextBlock Classes="heading" Text="Proxy" />
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Classes="mono" Text="{Binding Trust.ProxyUri}" />
+                <TextBlock Grid.Column="1" Classes="meta" Text="{Binding Trust.ProxySource}" />
+              </Grid>
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Classes="mono meta" Text="{Binding Trust.BypassLine}" />
+                <TextBlock Grid.Column="1" Classes="meta" Text="set by you" />
+              </Grid>
+            </StackPanel>
+
+            <StackPanel Spacing="6">
+              <TextBlock Classes="heading" Text="Per-host trust" />
+              <ItemsControl ItemsSource="{Binding Trust.Exceptions}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="abs:HostTrustException">
+                    <Grid ColumnDefinitions="220,*,Auto" Height="{DynamicResource RowHeight}">
+                      <TextBlock Grid.Column="0" Classes="mono" VerticalAlignment="Center" Text="{Binding Host}" />
+                      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <TextBlock Text="▲" Foreground="{DynamicResource Secret}" />
+                        <TextBlock Classes="meta" Text="allowed for this host only" />
+                      </StackPanel>
+                      <TextBlock Grid.Column="2" Classes="meta" VerticalAlignment="Center"
+                                 Text="{Binding RecordedUtc, StringFormat='set by you · {0:yyyy-MM-dd}'}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+
+            <!--
+              A TLS failure, stated the way UI_SPEC 3.7 requires: what happened and what to do.
+              There is no global "disable verification" here and there never will be — ENT-11 gives
+              a per-host exception and nothing wider.
+            -->
+            <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Error}"
+                    BorderThickness="2,0,0,0" Padding="12,8"
+                    IsVisible="{Binding Trust.HasFailure}">
+              <StackPanel Spacing="8">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Classes="mono" Text="⊘" Foreground="{DynamicResource Error}" />
+                  <TextBlock TextWrapping="Wrap" Text="{Binding Trust.FailureHeadline}" />
+                </StackPanel>
+                <TextBlock Classes="meta" TextWrapping="Wrap" Text="{Binding Trust.FailureRemedy}" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Content="Allow for this host" Name="AllowHostButton" />
+                  <Button Content="Show certificate chain" Name="ShowChainButton" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+          </StackPanel>
+        </ScrollViewer>
+
+        <!--
+          Storage. SEC-05: every location where data is stored on disk, with a one-click reveal and
+          a destructive clear per category.
+        -->
+        <ScrollViewer Padding="16"
+                      IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=Storage}">
+          <StackPanel Spacing="12">
+
+            <TextBlock Classes="heading" Text="Where Courier stores data on this machine" />
+
+            <ItemsControl ItemsSource="{Binding StorageLocationsList}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="storage:StorageLocation">
+                  <Border BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="0,8">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <StackPanel Grid.Column="0" Spacing="2">
+                        <TextBlock Classes="heading" Text="{Binding Category}" />
+                        <TextBlock Classes="mono meta" Text="{Binding Path}" />
+                        <TextBlock Classes="meta" TextWrapping="Wrap" Text="{Binding Contents}" />
+                      </StackPanel>
+                      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Button Content="Reveal" Height="20" />
+                        <Button Content="Clear" Height="20" />
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- SEC-06. Generated from what the process actually did, not written by hand. -->
+            <StackPanel Spacing="6" Margin="0,8,0,0">
+              <TextBlock Classes="heading" Text="Network behaviour statement" />
+              <TextBlock Classes="meta" TextWrapping="Wrap"
+                         Text="An auditable statement of every destination this build can contact and every one it has contacted this session, for security review sign-off." />
+              <Button Content="Export statement" HorizontalAlignment="Left" Name="ExportStatementButton" />
+            </StackPanel>
+
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- Keyboard. NFR-04: full keyboard operability, and the list that proves it. -->
+        <ScrollViewer Padding="16"
+                      IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=Keyboard}">
+          <StackPanel Spacing="8">
+            <TextBlock Classes="heading" Text="Keyboard" />
+            <ItemsControl ItemsSource="{Binding KeyBindings}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:KeyBindingViewModel">
+                  <Grid ColumnDefinitions="160,*" Height="{DynamicResource RowHeight}">
+                    <TextBlock Grid.Column="0" Classes="mono" VerticalAlignment="Center" Text="{Binding Gesture}" />
+                    <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="{Binding Description}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+
+      </Panel>
+
+    </DockPanel>
+  </Border>
+
+</UserControl>

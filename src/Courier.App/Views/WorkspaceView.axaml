@@ -1,0 +1,80 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             xmlns:views="clr-namespace:Courier.App.Views"
+             x:Class="Courier.App.Views.WorkspaceView"
+             x:DataType="vm:MainWindowViewModel">
+
+  <DockPanel LastChildFill="True">
+
+    <!--
+      Tab strip. UI_SPEC 4.2 calls this "the thing Postman gets wrong", so: fixed 180px tabs,
+      middle truncation, verb badge left of the title, a dirty dot in place of the close affordance
+      until hover, and overflow that collapses into +n rather than shrinking anything.
+
+      Only the headers that fit are realized — six or eight — whether eight tabs are open or a
+      hundred. That is what makes PERF-03 a question about rehydrating one tab, not about laying
+      out a hundred headers.
+    -->
+    <Border DockPanel.Dock="Top"
+            Height="{DynamicResource TabHeight}"
+            Background="{DynamicResource Panel}"
+            BorderBrush="{DynamicResource Rule}"
+            BorderThickness="0,0,0,1">
+
+      <Grid ColumnDefinitions="*,Auto,Auto">
+
+        <ItemsControl Grid.Column="0" ItemsSource="{Binding Tabs.VisibleHeaders}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:TabViewModel">
+              <views:TabHeaderView />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Overflow. Opens a filterable, keyboard-navigable list of every open tab. -->
+        <Button Grid.Column="1" Classes="bare" Width="52"
+                Height="{DynamicResource TabHeight}"
+                Command="{Binding OpenDialogCommand}"
+                CommandParameter="{x:Static vm:DialogKind.TabOverflow}"
+                IsVisible="{Binding Tabs.OverflowCount, Converter={StaticResource IsNotZeroConverter}}"
+                AutomationProperties.Name="Show all open tabs">
+          <TextBlock Classes="meta" Text="{Binding Tabs.OverflowCount, StringFormat='+{0}'}"
+                     VerticalAlignment="Center" HorizontalAlignment="Center" />
+        </Button>
+
+        <Button Grid.Column="2" Classes="bare" Width="28"
+                Height="{DynamicResource TabHeight}"
+                Command="{Binding NewTabCommand}"
+                AutomationProperties.Name="New request">
+          <TextBlock Text="+" Foreground="{DynamicResource Muted}"
+                     VerticalAlignment="Center" HorizontalAlignment="Center" />
+        </Button>
+
+      </Grid>
+    </Border>
+
+    <!-- History as a fourth pane along the bottom. UI_SPEC 8's other open question, shipped. -->
+    <views:HistoryPaneView DockPanel.Dock="Bottom"
+                           Height="180"
+                           DataContext="{Binding}"
+                           IsVisible="{Binding HistoryPlacement, Converter={StaticResource HistoryIsBottomConverter}}" />
+
+    <!--
+      Request over response, split 45/55 and draggable. The splitter is a 1px rule, like every
+      other division in the application.
+    -->
+    <Grid RowDefinitions="45*,1,55*">
+      <views:RequestEditorView Grid.Row="0" DataContext="{Binding}" />
+      <GridSplitter Grid.Row="1" ResizeDirection="Rows" Background="{DynamicResource Rule}" />
+      <views:ResponseView Grid.Row="2" DataContext="{Binding}" />
+    </Grid>
+
+  </DockPanel>
+
+</UserControl>

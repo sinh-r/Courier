@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Courier.Scripting</PackageId>
+    <Description>Sandboxed JavaScript runtime and pm.* compatibility shim for Courier.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Courier.Core/Courier.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Jint" />
+    <PackageReference Include="JsonSchema.Net" />
+    <PackageReference Include="JsonPath.Net" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Courier.Scripting.Tests" />
+  </ItemGroup>
+
+</Project>

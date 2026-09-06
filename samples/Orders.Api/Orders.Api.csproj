@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    A reference API for the scanner's golden tests. It is deliberately ordinary: attribute routing,
+    a versioned prefix, DTOs with validation attributes, and authorization policies that look like
+    scopes. If the scanner cannot read this, it cannot read anything.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>

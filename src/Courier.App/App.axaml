@@ -1,0 +1,40 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:services="clr-namespace:Courier.App.Services"
+             x:Class="Courier.App.CourierApplication"
+             RequestedThemeVariant="Default">
+
+  <Application.Styles>
+    <!--
+      Simple, not Fluent. UI_SPEC 7 puts rounded cards, soft shadows and coloured primary buttons
+      out of bounds, and Simple is the base that fights that the least.
+    -->
+    <SimpleTheme />
+    <StyleInclude Source="avares://Courier/Themes/Controls.axaml" />
+  </Application.Styles>
+
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://Courier/Themes/Tokens.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+
+      <!-- One place that maps a verb, a status or a trust flag to a colour. UI_SPEC 3.1. -->
+      <services:VerbBrushConverter x:Key="VerbBrushConverter" />
+      <services:StatusBrushConverter x:Key="StatusBrushConverter" />
+      <services:StatusGlyphConverter x:Key="StatusGlyphConverter" />
+      <services:TrustBrushConverter x:Key="TrustBrushConverter" />
+      <services:ProvenanceGlyphConverter x:Key="ProvenanceGlyphConverter" />
+      <services:ProvenanceLabelConverter x:Key="ProvenanceLabelConverter" />
+      <services:SizeConverter x:Key="SizeConverter" />
+      <services:IsNotZeroConverter x:Key="IsNotZeroConverter" />
+      <services:ShortTimeConverter x:Key="ShortTimeConverter" />
+      <services:ElapsedConverter x:Key="ElapsedConverter" />
+      <services:HistoryIsBottomConverter x:Key="HistoryIsBottomConverter" />
+      <services:HistoryIsInInspectorConverter x:Key="HistoryIsInInspectorConverter" />
+      <services:DialogIsConverter x:Key="DialogIsConverter" />
+      <services:DialogIsSettingsConverter x:Key="DialogIsSettingsConverter" />
+    </ResourceDictionary>
+  </Application.Resources>
+
+</Application>

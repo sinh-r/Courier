@@ -1,0 +1,90 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             xmlns:storage="clr-namespace:Courier.Core.Storage;assembly=Courier.Core"
+             x:Class="Courier.App.Views.HistoryPaneView"
+             x:DataType="vm:MainWindowViewModel">
+
+  <!--
+    History as a fourth pane along the bottom. UI_SPEC 8 leaves the placement open; the mock ships
+    a toggle, so both are built and this is the pane half.
+
+    CORE-06: local, searchable, retained for a configurable window, with replay. The line stating
+    the count and that it is kept locally is the point — it is a privacy claim, not a statistic.
+  -->
+
+  <Border Background="{DynamicResource Panel}"
+          BorderBrush="{DynamicResource Rule}"
+          BorderThickness="0,1,0,0">
+
+    <DockPanel LastChildFill="True">
+
+      <Border DockPanel.Dock="Top" Height="{DynamicResource RowHeight}"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+          <TextBlock Grid.Column="0" Classes="heading" Text="History" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Classes="meta" Text="all tabs" VerticalAlignment="Center" Margin="10,0,0,0" />
+          <TextBlock Grid.Column="3" Classes="meta" VerticalAlignment="Center"
+                     Text="{Binding HistoryCountLabel}" />
+        </Grid>
+      </Border>
+
+      <!-- Column headers, aligned to the same 24px grid as every other table. -->
+      <Border DockPanel.Dock="Top" Height="{DynamicResource RowHeight}"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
+        <Grid ColumnDefinitions="56,64,*,64,80,130,110">
+          <TextBlock Grid.Column="0" Classes="meta" Text="Time" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Classes="meta" Text="Verb" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="2" Classes="meta" Text="Path" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="3" Classes="meta" Text="Status" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="4" Classes="meta" Text="Duration" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="5" Classes="meta" Text="Environment" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="6" Classes="meta" Text="Trace" VerticalAlignment="Center" />
+        </Grid>
+      </Border>
+
+      <ListBox ItemsSource="{Binding History}" AutomationProperties.Name="Request history">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="storage:HistoryEntry">
+            <Grid ColumnDefinitions="56,64,*,64,80,130,110" Height="{DynamicResource RowHeight}">
+
+              <TextBlock Grid.Column="0" Classes="mono meta" VerticalAlignment="Center"
+                         Text="{Binding StartedUtc, Converter={StaticResource ShortTimeConverter}}" />
+
+              <TextBlock Grid.Column="1" Classes="mono" FontSize="11" VerticalAlignment="Center"
+                         Text="{Binding Method}"
+                         Foreground="{Binding Method, Converter={StaticResource VerbBrushConverter}}" />
+
+              <TextBlock Grid.Column="2" Classes="mono" VerticalAlignment="Center" Text="{Binding Path}" />
+
+              <!--
+                A request that never left shows ⊘ rather than a status number. UI_SPEC 3.3 keeps
+                that distinct from a server error, because it is a different kind of problem.
+              -->
+              <TextBlock Grid.Column="3" Classes="mono" VerticalAlignment="Center"
+                         Text="{Binding Status}"
+                         Foreground="{Binding Status, Converter={StaticResource StatusBrushConverter}}"
+                         IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+              <TextBlock Grid.Column="3" Classes="mono" VerticalAlignment="Center" Text="⊘"
+                         Foreground="{DynamicResource Error}"
+                         IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNull}}" />
+
+              <TextBlock Grid.Column="4" Classes="mono meta" VerticalAlignment="Center"
+                         Text="{Binding Elapsed, Converter={StaticResource ElapsedConverter}}" />
+
+              <TextBlock Grid.Column="5" Classes="mono meta" VerticalAlignment="Center"
+                         Text="{Binding EnvironmentName}" />
+
+              <TextBlock Grid.Column="6" Classes="mono meta" VerticalAlignment="Center"
+                         Text="{Binding TraceId}" />
+
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+
+    </DockPanel>
+  </Border>
+
+</UserControl>

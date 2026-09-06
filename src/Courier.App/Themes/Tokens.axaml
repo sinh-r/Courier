@@ -1,0 +1,155 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    The governing idea, from UI_SPEC 3.1: the interface is achromatic, and colour appears only
+    where it carries meaning the user would otherwise have to read. HTTP verbs, status classes,
+    secret-vs-shareable, added-vs-removed, pass-vs-fail. Nothing else is coloured — not buttons,
+    not headings, not the sidebar, not decoration.
+
+    If you are about to add a colour here, it needs a meaning first.
+  -->
+
+  <ResourceDictionary.ThemeDictionaries>
+
+    <ResourceDictionary x:Key="Light">
+      <!-- Neutrals: slightly warm graphite, deliberately not blue-grey. -->
+      <Color x:Key="PaperColor">#FBFAF8</Color>
+      <Color x:Key="PanelColor">#F2F1ED</Color>
+      <Color x:Key="RuleColor">#DCDAD3</Color>
+      <Color x:Key="InkColor">#22241F</Color>
+      <Color x:Key="MutedColor">#6C6F66</Color>
+      <Color x:Key="DeskColor">#E7E5DF</Color>
+
+      <!-- The one non-semantic colour, and only on focus and selection. Never a button fill. -->
+      <Color x:Key="SelectColor">#1F3A5F</Color>
+      <Color x:Key="SelectBackgroundColor">#1F3A5F</Color>
+      <Color x:Key="SelectForegroundColor">#FBFAF8</Color>
+      <Color x:Key="SelectMutedColor">#C7D4E4</Color>
+      <Color x:Key="HoverColor">#E8E6E0</Color>
+
+      <!-- Semantic: HTTP verbs. Used on the badge and nowhere else. -->
+      <Color x:Key="GetColor">#2D6A4F</Color>
+      <Color x:Key="PostColor">#8A5A12</Color>
+      <Color x:Key="PutColor">#1F3A5F</Color>
+      <Color x:Key="PatchColor">#6B4E9E</Color>
+      <Color x:Key="DeleteColor">#A32C2C</Color>
+
+      <!-- Semantic: status classes and outcomes. -->
+      <Color x:Key="OkColor">#2D6A4F</Color>
+      <Color x:Key="WarnColor">#8A5A12</Color>
+      <Color x:Key="ErrorColor">#A32C2C</Color>
+
+      <!-- Semantic: trust. The same pair everywhere — environments, capsules, certificates. -->
+      <Color x:Key="SecretColor">#8A5A12</Color>
+      <Color x:Key="ShareColor">#2D6A4F</Color>
+
+      <Color x:Key="ScrimColor">#38000000</Color>
+      <Color x:Key="ShadowColor">#24000000</Color>
+    </ResourceDictionary>
+
+    <ResourceDictionary x:Key="Dark">
+      <!-- A full first-class mirror, not an afterthought. UI_SPEC 3.2. -->
+      <Color x:Key="PaperColor">#1A1B19</Color>
+      <Color x:Key="PanelColor">#222320</Color>
+      <Color x:Key="RuleColor">#33352F</Color>
+      <Color x:Key="InkColor">#EBEAE5</Color>
+      <Color x:Key="MutedColor">#93968C</Color>
+      <Color x:Key="DeskColor">#141513</Color>
+
+      <Color x:Key="SelectColor">#7FA8D9</Color>
+      <Color x:Key="SelectBackgroundColor">#2E4763</Color>
+      <Color x:Key="SelectForegroundColor">#EBEAE5</Color>
+      <Color x:Key="SelectMutedColor">#5A7EA8</Color>
+      <Color x:Key="HoverColor">#2A2C27</Color>
+
+      <!-- Lightened so every semantic colour still clears WCAG AA on the dark surfaces. -->
+      <Color x:Key="GetColor">#6FBF95</Color>
+      <Color x:Key="PostColor">#D9A24B</Color>
+      <Color x:Key="PutColor">#7FA8D9</Color>
+      <Color x:Key="PatchColor">#B39BE0</Color>
+      <Color x:Key="DeleteColor">#E58585</Color>
+
+      <Color x:Key="OkColor">#6FBF95</Color>
+      <Color x:Key="WarnColor">#D9A24B</Color>
+      <Color x:Key="ErrorColor">#E58585</Color>
+
+      <Color x:Key="SecretColor">#D9A24B</Color>
+      <Color x:Key="ShareColor">#6FBF95</Color>
+
+      <Color x:Key="ScrimColor">#66000000</Color>
+      <Color x:Key="ShadowColor">#59000000</Color>
+    </ResourceDictionary>
+
+  </ResourceDictionary.ThemeDictionaries>
+
+  <!-- Brushes. Views bind to these, never to a Color, so the theme swap is one place. -->
+  <SolidColorBrush x:Key="Paper" Color="{DynamicResource PaperColor}" />
+  <SolidColorBrush x:Key="Panel" Color="{DynamicResource PanelColor}" />
+  <SolidColorBrush x:Key="Rule" Color="{DynamicResource RuleColor}" />
+  <SolidColorBrush x:Key="Ink" Color="{DynamicResource InkColor}" />
+  <SolidColorBrush x:Key="Muted" Color="{DynamicResource MutedColor}" />
+  <SolidColorBrush x:Key="Desk" Color="{DynamicResource DeskColor}" />
+  <SolidColorBrush x:Key="Select" Color="{DynamicResource SelectColor}" />
+  <SolidColorBrush x:Key="SelectBackground" Color="{DynamicResource SelectBackgroundColor}" />
+  <SolidColorBrush x:Key="SelectForeground" Color="{DynamicResource SelectForegroundColor}" />
+  <SolidColorBrush x:Key="SelectMuted" Color="{DynamicResource SelectMutedColor}" />
+  <SolidColorBrush x:Key="Hover" Color="{DynamicResource HoverColor}" />
+
+  <SolidColorBrush x:Key="VerbGet" Color="{DynamicResource GetColor}" />
+  <SolidColorBrush x:Key="VerbPost" Color="{DynamicResource PostColor}" />
+  <SolidColorBrush x:Key="VerbPut" Color="{DynamicResource PutColor}" />
+  <SolidColorBrush x:Key="VerbPatch" Color="{DynamicResource PatchColor}" />
+  <SolidColorBrush x:Key="VerbDelete" Color="{DynamicResource DeleteColor}" />
+
+  <SolidColorBrush x:Key="Ok" Color="{DynamicResource OkColor}" />
+  <SolidColorBrush x:Key="Warn" Color="{DynamicResource WarnColor}" />
+  <SolidColorBrush x:Key="Error" Color="{DynamicResource ErrorColor}" />
+
+  <SolidColorBrush x:Key="Secret" Color="{DynamicResource SecretColor}" />
+  <SolidColorBrush x:Key="Share" Color="{DynamicResource ShareColor}" />
+
+  <SolidColorBrush x:Key="Scrim" Color="{DynamicResource ScrimColor}" />
+
+  <!--
+    Typography. Two families with a hard rule dividing them (UI_SPEC 3.4): sans for all chrome,
+    mono for all data. Anything the user might select and copy is monospace.
+
+    Both faces are embedded rather than fetched. NFR-06 requires full air-gapped operation, so a
+    webfont link would be a bug, not a convenience.
+  -->
+  <FontFamily x:Key="Sans">avares://Courier/Assets/Fonts#IBM Plex Sans</FontFamily>
+  <FontFamily x:Key="Mono">avares://Courier/Assets/Fonts#IBM Plex Mono</FontFamily>
+
+  <!-- Scale at 100% display scaling. -->
+  <x:Double x:Key="DialogTitleSize">18</x:Double>
+  <x:Double x:Key="SectionHeadingSize">13</x:Double>
+  <x:Double x:Key="BodySize">13</x:Double>
+  <x:Double x:Key="PayloadSize">12.5</x:Double>
+  <x:Double x:Key="MetadataSize">11.5</x:Double>
+
+  <x:Double x:Key="BodyLineHeight">18</x:Double>
+  <x:Double x:Key="PayloadLineHeight">19</x:Double>
+  <x:Double x:Key="MetadataLineHeight">16</x:Double>
+
+  <!--
+    Density and grid, UI_SPEC 3.5. 4px base unit. These are not suggestions: a row that is 26px
+    tall instead of 24 makes the tree and the header table stop lining up, and the whole design
+    reads as approximate rather than precise.
+  -->
+  <x:Double x:Key="RowHeight">24</x:Double>
+  <x:Double x:Key="ToolbarHeight">36</x:Double>
+  <x:Double x:Key="TabHeight">30</x:Double>
+  <x:Double x:Key="TabWidth">180</x:Double>
+  <x:Double x:Key="StatusBarHeight">22</x:Double>
+  <x:Double x:Key="RailWidth">260</x:Double>
+  <x:Double x:Key="InspectorWidth">300</x:Double>
+
+  <Thickness x:Key="PanelPadding">8</Thickness>
+  <Thickness x:Key="RowPadding">8,0</Thickness>
+
+  <!-- 3px on inputs and buttons; 0 on panels, panes and table cells. There are no cards. -->
+  <CornerRadius x:Key="ControlRadius">3</CornerRadius>
+  <CornerRadius x:Key="FlatRadius">0</CornerRadius>
+
+</ResourceDictionary>

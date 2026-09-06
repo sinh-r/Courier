@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Budget gates, not micro-benchmarks. REQUIREMENTS 6.1 calls these release gates, so a
+    regression here fails the build. Run in Release only; Debug numbers are meaningless.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <Optimize>true</Optimize>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Courier.Core/Courier.Core.csproj" />
+    <ProjectReference Include="../../src/Courier.Scanner/Courier.Scanner.csproj" />
+    <ProjectReference Include="../../src/Courier.App/Courier.App.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+  </ItemGroup>
+
+</Project>

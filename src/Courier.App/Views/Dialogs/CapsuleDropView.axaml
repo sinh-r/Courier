@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             x:Class="Courier.App.Views.Dialogs.CapsuleDropView"
+             x:DataType="vm:MainWindowViewModel">
+
+  <!--
+    The drop target. UI_SPEC 5.3, and CAP-09's promise stated on the screen where it matters most:
+    a capsule arrives from someone else, so the first thing the recipient reads is that opening it
+    does nothing on its own.
+  -->
+
+  <Border Classes="floating" Width="520" Padding="32"
+          HorizontalAlignment="Center" VerticalAlignment="Center">
+    <StackPanel Spacing="12" HorizontalAlignment="Center">
+
+      <TextBlock Classes="title" Text="Drop to import capsule" HorizontalAlignment="Center" />
+
+      <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1" Padding="24"
+              HorizontalAlignment="Stretch">
+        <StackPanel Spacing="6" HorizontalAlignment="Center">
+          <TextBlock Classes="mono" Name="FileName" HorizontalAlignment="Center" />
+          <TextBlock Classes="meta" Name="FileSize" HorizontalAlignment="Center" />
+        </StackPanel>
+      </Border>
+
+      <TextBlock Classes="meta" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                 Text="Opens in a new tab. Nothing is sent until you press Send." />
+
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+        <Button Content="Cancel" Command="{Binding CloseDialogCommand}" />
+        <Button Classes="primary" Content="Import" Name="ImportButton" />
+      </StackPanel>
+
+    </StackPanel>
+  </Border>
+
+</UserControl>

@@ -1,0 +1,131 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             xmlns:controls="clr-namespace:Courier.App.Controls"
+             x:Class="Courier.App.Views.ResponseView"
+             x:DataType="vm:MainWindowViewModel">
+
+  <Border Background="{DynamicResource Paper}">
+    <DockPanel LastChildFill="True">
+
+      <!--
+        Status line. The status colour is the only colour in this row, and it always travels with
+        a glyph — a colour-blind reader and a greyscale bug-report screenshot both have to work.
+      -->
+      <Border DockPanel.Dock="Top"
+              Height="{DynamicResource RowHeight}"
+              Background="{DynamicResource Panel}"
+              BorderBrush="{DynamicResource Rule}"
+              BorderThickness="0,0,0,1"
+              Padding="8,0"
+              IsVisible="{Binding Tabs.Active.Response, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False, TargetNullValue=False}">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+
+          <TextBlock Grid.Column="0" Classes="mono" VerticalAlignment="Center" Margin="0,0,5,0"
+                     Text="{Binding Tabs.Active.Response.Status, Converter={StaticResource StatusGlyphConverter}}"
+                     Foreground="{Binding Tabs.Active.Response.Status, Converter={StaticResource StatusBrushConverter}}" />
+
+          <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center" FontWeight="Medium"
+                     Text="{Binding Tabs.Active.Response.StatusText}"
+                     Foreground="{Binding Tabs.Active.Response.Status, Converter={StaticResource StatusBrushConverter}}" />
+
+          <TextBlock Grid.Column="2" Classes="mono meta" VerticalAlignment="Center" Margin="14,0,0,0"
+                     Text="{Binding Tabs.Active.Response.ElapsedText}" />
+
+          <TextBlock Grid.Column="3" Classes="mono meta" VerticalAlignment="Center" Margin="14,0,0,0"
+                     Text="{Binding Tabs.Active.Response.SizeText}" />
+
+          <!-- The capsule affordance sits with the response, where the failing call is. CAP-01. -->
+          <Button Grid.Column="5" Classes="bare" Height="18"
+                  Command="{Binding OpenDialogCommand}"
+                  CommandParameter="{x:Static vm:DialogKind.ExportCapsule}"
+                  AutomationProperties.Name="Export this request and response as a capsule">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <TextBlock Classes="meta" Text="⧉" />
+              <TextBlock Classes="meta" Text="Export capsule" />
+            </StackPanel>
+          </Button>
+
+        </Grid>
+      </Border>
+
+      <!-- Section tabs. The tests count carries pass/fail colour, and a glyph with it. -->
+      <Border DockPanel.Dock="Top"
+              Height="{DynamicResource RowHeight}"
+              BorderBrush="{DynamicResource Rule}"
+              BorderThickness="0,0,0,1"
+              Padding="8,0"
+              IsVisible="{Binding Tabs.Active.Response, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False, TargetNullValue=False}">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+
+          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+            <TextBlock Text="Body" FontWeight="Medium" />
+            <TextBlock Text="Headers" />
+            <TextBlock Text="Tests" />
+            <TextBlock Text="Server" />
+          </StackPanel>
+
+          <!-- Pretty / Raw / Preview. CORE-03. -->
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <TextBlock Classes="meta" Text="Pretty" Foreground="{DynamicResource Ink}" />
+            <TextBlock Classes="meta" Text="Raw" />
+            <TextBlock Classes="meta" Text="Preview" />
+          </StackPanel>
+
+        </Grid>
+      </Border>
+
+      <!-- Search over the raw bytes, with a live match count. PERF-05. -->
+      <Border DockPanel.Dock="Top"
+              Height="{DynamicResource RowHeight}"
+              BorderBrush="{DynamicResource Rule}"
+              BorderThickness="0,0,0,1"
+              Padding="8,0"
+              IsVisible="{Binding Tabs.Active.Response, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False, TargetNullValue=False}">
+        <Grid ColumnDefinitions="Auto,220,Auto,Auto,*,Auto">
+          <TextBlock Grid.Column="0" Classes="meta" Text="⌕" VerticalAlignment="Center" Margin="0,0,6,0" />
+          <TextBox Grid.Column="1" Name="SearchBox" BorderThickness="0" Background="Transparent"
+                   Padding="0" VerticalAlignment="Center"
+                   AutomationProperties.Name="Search the response" />
+          <TextBlock Grid.Column="2" Classes="meta" VerticalAlignment="Center" Margin="10,0,0,0"
+                     Text="{Binding Tabs.Active.Response.MatchesText}" />
+          <TextBlock Grid.Column="3" Classes="mono meta" VerticalAlignment="Center" Margin="10,0,0,0"
+                     Text="{Binding Tabs.Active.Response.MatchPositionText}" />
+          <TextBlock Grid.Column="5" Classes="mono meta" VerticalAlignment="Center"
+                     Text="{Binding Tabs.Active.Response.StructureText}" />
+        </Grid>
+      </Border>
+
+      <!-- Transport failure. A different kind of problem from "the server said no". -->
+      <Border DockPanel.Dock="Top" Padding="8" Background="{DynamicResource Panel}"
+              IsVisible="{Binding Tabs.Active.Response.TransportFailed, FallbackValue=False, TargetNullValue=False}">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Classes="mono" Text="⊘" Foreground="{DynamicResource Error}" VerticalAlignment="Top" />
+          <StackPanel Spacing="2">
+            <TextBlock Text="{Binding Tabs.Active.Response.Result.Failure.Explanation}" TextWrapping="Wrap" />
+            <TextBlock Classes="meta mono" TextWrapping="Wrap"
+                       Text="{Binding Tabs.Active.Response.Result.Failure.Detail}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Panel>
+        <!--
+          The tree binds to the response, so its IsVisible must be evaluated against the shell
+          rather than against its own DataContext. $parent[UserControl] is that shell.
+        -->
+        <controls:JsonTreeView
+            DataContext="{Binding Tabs.Active.Response}"
+            IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).Tabs.Active.Response, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False, TargetNullValue=False}" />
+
+        <!-- UI_SPEC 3.7: empty states are invitations, and they never apologise. -->
+        <TextBlock Classes="muted" Margin="12"
+                   VerticalAlignment="Top" HorizontalAlignment="Left"
+                   Text="No response yet. Press Send."
+                   IsVisible="{Binding Tabs.Active.Response, Converter={x:Static ObjectConverters.IsNull}, FallbackValue=True, TargetNullValue=True}" />
+      </Panel>
+
+    </DockPanel>
+  </Border>
+
+</UserControl>

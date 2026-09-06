@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Windows implementations of the Core abstractions: Credential Manager, certificate store,
+    WinHTTP proxy resolution, WAM broker, integrated auth. Nothing here is referenced by Core.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>true</IsPackable>
+    <PackageId>Courier.Platform.Windows</PackageId>
+    <Description>Windows credential store, certificate store, proxy and broker integration for Courier.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Courier.Core/Courier.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Identity.Client" />
+    <PackageReference Include="Microsoft.Identity.Client.Broker" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Courier.Core.Tests" />
+  </ItemGroup>
+
+</Project>

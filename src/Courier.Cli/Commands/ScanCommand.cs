@@ -1,0 +1,203 @@
+using System.CommandLine;
+using System.Text.Json;
+using Courier.Core.Collections;
+using Courier.Scanner;
+
+namespace Courier.Cli.Commands;
+
+/// <summary>
+/// <c>courier scan</c>. STOR-07: collection generation in a pipeline, without the desktop app.
+/// </summary>
+/// <remarks>
+/// Also what the MSBuild task shells out to (SCAN-11). That is why the JSON report is a first-class
+/// output rather than an afterthought: the task parses it, and a build-time integration that has to
+/// scrape human-readable console text is one console tweak away from breaking.
+/// </remarks>
+internal static class ScanCommand
+{
+    public static Command Build()
+    {
+        var pathArgument = new Argument<string>("path")
+        {
+            Description = "A folder or .sln to scan.",
+        };
+
+        var outputOption = new Option<string?>("--output", "-o")
+        {
+            Description = "Collection folder to write endpoints.generated.yaml into. Omit to print a summary only.",
+        };
+
+        var jsonOption = new Option<string?>("--json")
+        {
+            Description = "Write a machine-readable scan report to this path.",
+        };
+
+        var baseUrlOption = new Option<string>("--base-url-variable")
+        {
+            Description = "Variable name to prefix generated URLs with.",
+            DefaultValueFactory = _ => "baseUrl",
+        };
+
+        var failOnUnresolvedOption = new Option<bool>("--fail-on-unresolved")
+        {
+            Description = "Exit non-zero if any endpoint could not be fully derived.",
+        };
+
+        var command = new Command("scan", "Derive an API collection from .NET source.")
+        {
+            pathArgument,
+            outputOption,
+            jsonOption,
+            baseUrlOption,
+            failOnUnresolvedOption,
+        };
+
+        command.SetAction(parse => Execute(
+            parse.GetValue(pathArgument)!,
+            parse.GetValue(outputOption),
+            parse.GetValue(jsonOption),
+            parse.GetValue(baseUrlOption)!,
+            parse.GetValue(failOnUnresolvedOption)));
+
+        return command;
+    }
+
+    private static int Execute(
+        string path,
+        string? output,
+        string? jsonPath,
+        string baseUrlVariable,
+        bool failOnUnresolved)
+    {
+        var scanner = new SolutionScanner();
+        var serializer = new CollectionSerializer();
+
+        var previous = output is not null ? ReadPreviousHashes(output) : null;
+        var result = scanner.Scan(path, previous?.Hashes, previous?.Endpoints);
+
+        Console.WriteLine(
+            $"{result.Endpoints.Count} endpoints, {result.Unresolved.Count} unresolved, "
+            + $"{result.Environments.Count} environments, in {result.Elapsed.TotalMilliseconds:0} ms");
+
+        // REQUIREMENTS 9: unresolved endpoints are reported, never omitted. On a build agent that
+        // means printing them, because nobody is going to open a UI to find out.
+        foreach (var unresolved in result.Unresolved)
+        {
+            Console.WriteLine($"  unresolved  {unresolved.DeclaringType}.{unresolved.ActionName}");
+            Console.WriteLine($"              {unresolved.Reason}");
+        }
+
+        if (output is not null)
+        {
+            Write(output, result, serializer, baseUrlVariable);
+            Console.WriteLine($"Wrote {Path.Combine(output, CollectionFormat.GeneratedFileName)}");
+        }
+
+        if (jsonPath is not null)
+        {
+            File.WriteAllText(jsonPath, ToJson(result));
+            Console.WriteLine($"Wrote {jsonPath}");
+        }
+
+        return failOnUnresolved && result.Unresolved.Count > 0 ? 1 : 0;
+    }
+
+    /// <summary>
+    /// Writes only the machine-owned file. SCAN-09 and P3: the overlay holding the user's payloads
+    /// is never touched, which is what makes running this on every build safe.
+    /// </summary>
+    private static void Write(
+        string folder,
+        ScanResult result,
+        CollectionSerializer serializer,
+        string baseUrlVariable)
+    {
+        Directory.CreateDirectory(folder);
+
+        var set = new GeneratedEndpointSet
+        {
+            Source = result.Tier.ToString(),
+            GeneratedUtc = DateTimeOffset.UtcNow,
+            Endpoints = [.. result.Endpoints.Select(e => e.ToRequest(baseUrlVariable))],
+        };
+
+        File.WriteAllText(
+            Path.Combine(folder, CollectionFormat.GeneratedFileName),
+            serializer.SerializeGenerated(set));
+
+        // The overlay is created empty if it does not exist, and left alone if it does.
+        var overlayPath = Path.Combine(folder, CollectionFormat.OverlayFileName);
+        if (!File.Exists(overlayPath))
+        {
+            File.WriteAllText(overlayPath, serializer.SerializeOverlay(new OverlaySet()));
+        }
+
+        WriteScanCache(folder, result);
+    }
+
+    private static void WriteScanCache(string folder, ScanResult result) =>
+        File.WriteAllText(
+            Path.Combine(folder, ".courier-scan-cache.json"),
+            JsonSerializer.Serialize(
+                new ScanCache(result.FileHashes, result.Endpoints),
+                new JsonSerializerOptions { WriteIndented = false }));
+
+    private static ScanCache? ReadPreviousHashes(string folder)
+    {
+        var path = Path.Combine(folder, ".courier-scan-cache.json");
+
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<ScanCache>(File.ReadAllText(path));
+        }
+        catch (JsonException)
+        {
+            // A stale or hand-edited cache costs a full rescan, which is correct rather than fatal.
+            return null;
+        }
+    }
+
+    private static string ToJson(ScanResult result) => JsonSerializer.Serialize(
+        new
+        {
+            tier = result.Tier.ToString(),
+            elapsedMs = (long)result.Elapsed.TotalMilliseconds,
+            endpoints = result.Endpoints.Select(e => new
+            {
+                id = e.Id,
+                method = e.Method,
+                route = e.RouteTemplate,
+                declaringType = e.DeclaringType,
+                action = e.ActionName,
+                file = e.SourceFile,
+                line = e.Line,
+                scopes = e.RequiredScopes,
+                authorization = e.Authorization.Describe(),
+                notes = e.PartialResolutionNotes,
+            }),
+            unresolved = result.Unresolved.Select(u => new
+            {
+                declaringType = u.DeclaringType,
+                action = u.ActionName,
+                file = u.SourceFile,
+                line = u.Line,
+                reason = u.Reason,
+            }),
+            environments = result.Environments.Select(e => new
+            {
+                name = e.Name,
+                baseUrl = e.BaseUrl,
+                source = e.Source,
+            }),
+        },
+        new JsonSerializerOptions { WriteIndented = true });
+
+    private sealed record ScanCache(
+        IReadOnlyDictionary<string, string> Hashes,
+        IReadOnlyList<ScannedEndpoint> Endpoints);
+}

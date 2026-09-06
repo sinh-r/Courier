@@ -1,0 +1,57 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             x:Class="Courier.App.Views.Dialogs.CommandPaletteView"
+             x:DataType="vm:MainWindowViewModel">
+
+  <!--
+    Ctrl+K. CORE-08, UI_SPEC 5.11: this is how power users navigate 60 tabs, so it should feel like
+    the fastest thing in the app.
+
+    Rows carry a typed prefix so an endpoint, an open tab, a command and an environment are
+    distinguishable at a glance without four different colours.
+  -->
+
+  <Border Classes="floating" Width="640" MaxHeight="440"
+          HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,72,0,0">
+
+    <DockPanel LastChildFill="True">
+
+      <Border DockPanel.Dock="Top" Height="36" Padding="12,0"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <TextBlock Grid.Column="0" Classes="mono meta" Text="›" VerticalAlignment="Center" Margin="0,0,8,0" />
+          <TextBox Grid.Column="1" Name="QueryBox" BorderThickness="0" Background="Transparent"
+                   Padding="0" VerticalAlignment="Center" FontSize="13"
+                   AutomationProperties.Name="Search endpoints, tabs, environments and commands" />
+          <TextBlock Grid.Column="2" Classes="meta" VerticalAlignment="Center"
+                     Text="{Binding Palette.ResultCountLabel}" />
+        </Grid>
+      </Border>
+
+      <Border DockPanel.Dock="Bottom" Height="{DynamicResource RowHeight}" Padding="12,0"
+              Background="{DynamicResource Panel}"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,1,0,0">
+        <TextBlock Classes="meta" VerticalAlignment="Center" Text="{Binding Palette.KeyHints}" />
+      </Border>
+
+      <ListBox ItemsSource="{Binding Palette.Results}"
+               SelectedIndex="{Binding Palette.SelectedIndex}"
+               Name="ResultList"
+               AutomationProperties.Name="Results">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:PaletteEntry">
+            <Grid ColumnDefinitions="52,*,Auto" Height="{DynamicResource RowHeight}">
+              <TextBlock Grid.Column="0" Classes="mono" FontSize="11" VerticalAlignment="Center"
+                         Text="{Binding Badge}" Foreground="{Binding BadgeBrush}" />
+              <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center" Text="{Binding Title}" />
+              <TextBlock Grid.Column="2" Classes="meta" VerticalAlignment="Center" Text="{Binding Hint}" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+
+    </DockPanel>
+  </Border>
+
+</UserControl>

@@ -1,0 +1,278 @@
+# Builds the Windows binaries, attests their provenance, publishes SHA256 sums alongside them,
+# and attaches everything to a GitHub Release.
+#
+# Two things this workflow is deliberately doing:
+#
+#  1. The provenance attestation and published hashes are not cosmetic. They give a
+#     security-conscious user something verifiable while the binary is still unsigned - which
+#     matters more here than for most tools, because Courier's entire pitch is that it does not
+#     send your collections anywhere, and "trust me" is a poor way to make that claim.
+#  2. Release artifacts are built here and only here. Never build a release locally and upload it
+#     by hand: a signing service verifies binaries came from CI, and a hand-built artifact breaks
+#     the repo-to-binary chain the attestation exists to prove.
+#
+# The signing step is present and inert. It runs only when the repository has a SIGNPATH_API_TOKEN
+# secret, so releases keep shipping unsigned until a certificate is available and start shipping
+# signed the moment the token is added, with no workflow edit at that moment.
+#
+# Its position is load-bearing and narrower than "somewhere before Create release": signing
+# changes the file, so it must precede BOTH the attestation and the hash. Sign after either and
+# the attestation covers a digest nobody can download, or the published .sha256 does not match the
+# published binary. Order is:
+#
+#     Publish -> Upload unsigned -> Sign -> Attest -> Compute SHA256 -> Create release
+#
+# NFR-03 also wants an MSI and a winget manifest. The MSI is built here; the winget manifest is
+# updated on main at the end, for the same reason the version bump is automated at all - a stale
+# manifest fails at install time with a hash mismatch that looks like tampering rather than
+# neglect.
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    # Hoisted here because the `secrets` context is NOT available in a step-level `if` - GitHub's
+    # context availability table lists only github/needs/strategy/matrix/job/runner/env/vars/
+    # steps/inputs there. `env` is, so this is how the signing step below can ask "do we have a
+    # token yet" at all.
+    env:
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Deterministic builds embed source revision information; a shallow clone gives the
+          # wrong one, and NFR-08 asks a reviewer to verify this binary against this source.
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore Courier.slnx
+
+      - name: Build
+        run: dotnet build Courier.slnx -c Release --no-restore -warnaserror
+
+      # Do not ship a build that does not pass its own tests. See build/Run-Tests.ps1 for why this
+      # is not `dotnet test`.
+      - name: Test
+        shell: pwsh
+        run: ./build/Run-Tests.ps1 -Configuration Release -NoBuild
+
+      # Publish switches live in build/publish.ps1 rather than in the csproj: setting
+      # RuntimeIdentifier in the project file makes every ordinary build RID-specific.
+      #
+      # ReadyToRun is load-bearing, not an optimisation - PERF-01 gives 1.5s cold start and a
+      # framework-dependent build misses it by roughly five times. Compression stays off because
+      # it trades about 100ms of startup for disk size, and startup is the budget.
+      #
+      # Trimming and AOT stay off: Avalonia is reflection-heavy and neither has been validated
+      # against the full UI. See docs/NEEDS_LIVE_VALIDATION.md section 12 - trimming is the
+      # untried lever on the one budget currently unmet.
+      - name: Publish the portable build
+        shell: pwsh
+        run: ./build/publish.ps1 -Runtime win-x64
+
+      # A second publish producing a genuinely single file. IncludeNativeLibrariesForSelfExtract
+      # is what makes it one: Skia, HarfBuzz, e_sqlite3 and the MSAL broker runtime are all native,
+      # and without this they sit beside the exe and a lone Courier.exe fails at runtime rather
+      # than at build time. Both artifacts ship - the zip for anyone who wants the folder, the
+      # single file for anyone who wants one thing to download.
+      - name: Publish the single-file build
+        run: >
+          dotnet publish src/Courier.App/Courier.App.csproj
+          --framework net10.0-windows10.0.19041.0
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:PublishReadyToRun=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=false
+          -p:DebugType=none
+          -p:ContinuousIntegrationBuild=true
+          -o publish
+
+      - name: Verify the expected artifacts exist
+        shell: pwsh
+        run: |
+          if (-not (Test-Path publish/Courier.exe)) {
+            Get-ChildItem publish
+            throw "publish/Courier.exe not found - check <AssemblyName> in Courier.App.csproj"
+          }
+          Get-Item publish/Courier.exe | Select-Object Name, Length
+          Get-ChildItem artifacts/*.zip | Select-Object Name, Length
+
+      # id: the signing step below needs this step's artifact-id output to tell the signing
+      # service which artifact to sign.
+      - name: Upload unsigned artifact
+        id: unsigned
+        uses: actions/upload-artifact@v7
+        with:
+          name: unsigned
+          path: publish/Courier.exe
+
+      # Inert until SIGNPATH_API_TOKEN exists (see the header). The organization id and slugs are
+      # repository *variables* rather than secrets - they are not sensitive, and keeping them out
+      # of `secrets` means a missing one fails loudly instead of silently expanding to an empty
+      # string. Downloads the signed binary back over publish/Courier.exe, so every step after
+      # this one - attestation, hash, release - sees the signed file.
+      - name: Sign with SignPath
+        if: env.SIGNPATH_API_TOKEN != ''
+        uses: SignPath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: publish
+
+      # Reports whether this release is signed, so the run log answers the question without anyone
+      # having to inspect the binary. Get-AuthenticodeSignature is also what a user runs to check
+      # it themselves. TECH_SPEC section 5 is blunt that an unsigned binary will not survive
+      # corporate application control, which is exactly the environment Courier targets.
+      - name: Report signing status
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature publish/Courier.exe
+          if ($sig.Status -eq 'Valid') {
+            Write-Host "Signed by: $($sig.SignerCertificate.Subject)"
+          } else {
+            Write-Host "UNSIGNED (Authenticode status: $($sig.Status)). Expected until a certificate is available."
+          }
+
+      # NFR-03. Built after signing so the MSI carries the signed binary, and the MSI itself is
+      # signed separately when a certificate exists.
+      - name: Build the MSI
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $version = if ('${{ github.ref_name }}' -match '^v') { '${{ github.ref_name }}' -replace '^v', '' } else { '0.1.0' }
+          ./build/msi/build-msi.ps1 -Version $version -Platform x64
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            publish/Courier.exe
+            artifacts/Courier-win-x64-portable.zip
+
+      - name: Compute SHA256
+        shell: pwsh
+        run: |
+          foreach ($file in @('publish/Courier.exe', 'artifacts/Courier-win-x64-portable.zip')) {
+            if (Test-Path $file) {
+              Get-FileHash $file -Algorithm SHA256 |
+                Select-Object -ExpandProperty Hash |
+                Out-File -Encoding ascii "$file.sha256"
+              Write-Host "$file  $(Get-Content "$file.sha256")"
+            }
+          }
+
+      # Tag pushes cut a release. A manual workflow_dispatch run stops short of that, so the
+      # workflow can be exercised end to end without burning a version number.
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            publish/Courier.exe
+            publish/Courier.exe.sha256
+            artifacts/Courier-win-x64-portable.zip
+            artifacts/Courier-win-x64-portable.zip.sha256
+            artifacts/*.msi
+          generate_release_notes: true
+          body: |
+            ## Verifying this download
+
+            This release is built by GitHub Actions from the tagged commit and nothing else. Every
+            artifact carries a build provenance attestation and a published SHA256.
+
+            ```powershell
+            Get-FileHash Courier.exe -Algorithm SHA256      # compare against Courier.exe.sha256
+            gh attestation verify Courier.exe --repo ${{ github.repository }}
+            ```
+
+            Binaries are **not yet Authenticode signed**. Corporate application control will
+            likely block them until that changes.
+
+            ## Before you rely on it
+
+            Every requirement has an implementation and the tests pass, but the enterprise and
+            cloud integrations have never talked to a real tenant, proxy, monitoring backend or
+            work item tracker — and one performance budget is not met. Both are enumerated in
+            `docs/NEEDS_LIVE_VALIDATION.md`. Nothing on that list should be described as working
+            until its check passes.
+
+      # The winget manifest has to follow every release. Doing it here rather than by hand is the
+      # whole point: a stale manifest fails at install time with a hash mismatch that looks like
+      # tampering rather than like neglect.
+      #
+      # Safe to push to main from here: GitHub does not start new workflow runs for pushes made
+      # with the default GITHUB_TOKEN, so this cannot trigger ci.yml or re-enter this workflow.
+      #
+      # Runs last on purpose. The release is already published by this point, so if this step
+      # fails the release still exists - and it fails loudly rather than silently.
+      - name: Update the winget manifest on main
+        if: startsWith(github.ref, 'refs/tags/v')
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}' -replace '^v', ''
+          $msi = Get-ChildItem artifacts/*x64.msi -ErrorAction SilentlyContinue | Select-Object -First 1
+
+          if (-not $msi) {
+            Write-Host 'No MSI was produced, so there is nothing for the manifest to point at.'
+            exit 0
+          }
+
+          $hash = (Get-FileHash $msi.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Manifest target: $version / $hash"
+
+          # The tag build is a detached HEAD; the manifest lives on main.
+          git fetch origin main
+          git checkout -B main origin/main
+
+          foreach ($path in @('build/winget/Courier.installer.yaml', 'build/winget/Courier.yaml', 'build/winget/Courier.locale.en-US.yaml')) {
+            $m = Get-Content $path -Raw
+            $m = $m -replace 'PackageVersion: .*', "PackageVersion: $version"
+            Set-Content $path -Value $m -NoNewline -Encoding utf8
+          }
+
+          # Targeted replacements rather than a YAML round-trip, which would reformat the file and
+          # drop its comments.
+          $installer = Get-Content build/winget/Courier.installer.yaml -Raw
+          $installer = $installer -replace 'download/v[0-9][^/"]*/Courier-', "download/v$version/Courier-"
+          $installer = $installer -replace 'Courier-[0-9][^-]*-x64\.msi', "Courier-$version-x64.msi"
+          $installer = $installer -replace '(?<=Architecture: x64\r?\n\s+InstallerUrl: [^\r\n]+\r?\n\s+InstallerSha256: )[a-fA-F0-9]{64}', $hash
+          Set-Content build/winget/Courier.installer.yaml -Value $installer -NoNewline -Encoding utf8
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add build/winget
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host 'Manifest already matches this release; nothing to commit.'
+            exit 0
+          }
+
+          git commit -m "winget manifest: $version"
+          git push origin main
+          Write-Host 'Manifest updated on main.'

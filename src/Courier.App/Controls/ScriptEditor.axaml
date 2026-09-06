@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:edit="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit"
+             x:Class="Courier.App.Controls.ScriptEditor">
+
+  <!--
+    Pre-request and post-response scripting. TEST-01, TEST-02.
+
+    The note about the supported pm.* surface is deliberate and permanent: REQUIREMENTS 9 warns
+    that pm.* compatibility "is a promise that invites unbounded work", and the mitigation is to
+    publish the supported list and never claim full compatibility.
+  -->
+
+  <Grid RowDefinitions="Auto,*,1,Auto,*">
+
+    <Border Grid.Row="0" Height="{DynamicResource RowHeight}"
+            BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Grid.Column="0" Classes="heading" Text="Pre-request" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="1" Classes="meta" VerticalAlignment="Center"
+                   Text="pm.* supported surface is listed in the docs; unsupported calls report by name" />
+      </Grid>
+    </Border>
+
+    <edit:TextEditor Grid.Row="1" Name="PreRequest"
+                     ShowLineNumbers="True"
+                     FontFamily="{DynamicResource Mono}" FontSize="12.5"
+                     Background="{DynamicResource Paper}" Foreground="{DynamicResource Ink}"
+                     AutomationProperties.Name="Pre-request script" />
+
+    <Border Grid.Row="2" Background="{DynamicResource Rule}" />
+
+    <Border Grid.Row="3" Height="{DynamicResource RowHeight}"
+            BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
+      <TextBlock Classes="heading" Text="Post-response" VerticalAlignment="Center" />
+    </Border>
+
+    <edit:TextEditor Grid.Row="4" Name="PostResponse"
+                     ShowLineNumbers="True"
+                     FontFamily="{DynamicResource Mono}" FontSize="12.5"
+                     Background="{DynamicResource Paper}" Foreground="{DynamicResource Ink}"
+                     AutomationProperties.Name="Post-response script" />
+
+  </Grid>
+
+</UserControl>

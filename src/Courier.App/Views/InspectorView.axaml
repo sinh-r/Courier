@@ -1,0 +1,143 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             xmlns:storage="clr-namespace:Courier.Core.Storage;assembly=Courier.Core"
+             x:Class="Courier.App.Views.InspectorView"
+             x:DataType="vm:MainWindowViewModel">
+
+  <!--
+    The inspector. UI_SPEC 4.3: a stack of collapsible sections whose contents depend on the active
+    tab, remembering their expanded state per user rather than per tab.
+
+    UI_SPEC 8 leaves open whether it should be tabbed once four or more sections exist. The mock
+    ships a toggle for both, so both are here and the user decides.
+  -->
+
+  <Border Background="{DynamicResource Panel}"
+          BorderBrush="{DynamicResource Rule}"
+          BorderThickness="1,0,0,0">
+
+    <DockPanel LastChildFill="True">
+
+      <Border DockPanel.Dock="Top" Height="{DynamicResource RowHeight}"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Grid.Column="0" Classes="heading" Text="Inspector" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Classes="bare" Height="18"
+                  Command="{Binding ToggleInspectorLayoutCommand}"
+                  AutomationProperties.Name="Switch between stacked and tabbed sections">
+            <TextBlock Classes="mono meta" Text="⊟" />
+          </Button>
+        </Grid>
+      </Border>
+
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel>
+
+          <!-- Auth. ENT-04's decoded token panel in miniature; the full table is in settings. -->
+          <Expander IsExpanded="{Binding Inspector.AuthExpanded}" Header="Auth">
+            <StackPanel Margin="8" Spacing="4">
+              <Grid ColumnDefinitions="84,*">
+                <TextBlock Grid.Column="0" Classes="meta" Text="Profile" />
+                <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Inspector.Profile.Name}" />
+              </Grid>
+              <Grid ColumnDefinitions="84,*">
+                <TextBlock Grid.Column="0" Classes="meta" Text="Identity" />
+                <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Inspector.Identity}" />
+              </Grid>
+              <Grid ColumnDefinitions="84,*">
+                <TextBlock Grid.Column="0" Classes="meta" Text="Expires" />
+                <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Inspector.ExpiryText}" />
+              </Grid>
+              <Grid ColumnDefinitions="84,*">
+                <TextBlock Grid.Column="0" Classes="meta" Text="Scopes" />
+                <TextBlock Grid.Column="1" Classes="mono" TextWrapping="Wrap"
+                           Text="{Binding Inspector.ScopesText}" />
+              </Grid>
+              <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                <Button Content="Refresh" Height="20" />
+                <Button Content="Decode token" Height="20"
+                        Command="{Binding OpenDialogCommand}"
+                        CommandParameter="{x:Static vm:DialogKind.AuthProfile}" />
+              </StackPanel>
+            </StackPanel>
+          </Expander>
+
+          <!-- Trace. TEL-01, TEL-02. -->
+          <Expander IsExpanded="{Binding Inspector.TraceExpanded}" Header="Trace">
+            <StackPanel Margin="8" Spacing="4">
+              <Grid ColumnDefinitions="84,*">
+                <TextBlock Grid.Column="0" Classes="meta" Text="Trace id" />
+                <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Inspector.TraceIdShort}" />
+              </Grid>
+              <Grid ColumnDefinitions="84,*">
+                <TextBlock Grid.Column="0" Classes="meta" Text="Dependencies" />
+                <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Inspector.DependencyCount}" />
+              </Grid>
+              <Grid ColumnDefinitions="84,*">
+                <TextBlock Grid.Column="0" Classes="meta" Text="Exceptions" />
+                <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Inspector.ExceptionCount}" />
+              </Grid>
+              <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                <Button Content="Open trace" Height="20"
+                        Command="{Binding OpenDialogCommand}"
+                        CommandParameter="{x:Static vm:DialogKind.ReconstructFromTelemetry}" />
+                <Button Content="Copy id" Height="20" />
+              </StackPanel>
+            </StackPanel>
+          </Expander>
+
+          <!-- History for this tab. The all-tabs view lives in the bottom pane. CORE-06. -->
+          <Expander IsExpanded="{Binding Inspector.HistoryExpanded}" Header="History"
+                    IsVisible="{Binding HistoryPlacement, Converter={StaticResource HistoryIsInInspectorConverter}}">
+            <ItemsControl ItemsSource="{Binding Inspector.TabHistory}" Margin="8,4">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="storage:HistoryEntry">
+                  <Grid ColumnDefinitions="44,Auto,*" Height="20">
+                    <TextBlock Grid.Column="0" Classes="mono meta" VerticalAlignment="Center"
+                               Text="{Binding StartedUtc, Converter={StaticResource ShortTimeConverter}}" />
+                    <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center" Width="34"
+                               Text="{Binding Status}"
+                               Foreground="{Binding Status, Converter={StaticResource StatusBrushConverter}}" />
+                    <TextBlock Grid.Column="2" Classes="mono meta" VerticalAlignment="Center"
+                               Text="{Binding Elapsed, Converter={StaticResource ElapsedConverter}}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Expander>
+
+          <Expander IsExpanded="{Binding Inspector.CapsuleExpanded}" Header="Capsule">
+            <StackPanel Margin="8" Spacing="6">
+              <TextBlock Classes="meta" TextWrapping="Wrap"
+                         Text="Export this exchange as a single file with secrets replaced by placeholders." />
+              <Button Content="Export capsule"
+                      Command="{Binding OpenDialogCommand}"
+                      CommandParameter="{x:Static vm:DialogKind.ExportCapsule}" />
+            </StackPanel>
+          </Expander>
+
+          <!-- Certificate. ENT-08: which client certificate this request will present. -->
+          <Expander IsExpanded="{Binding Inspector.CertificateExpanded}" Header="Certificate">
+            <StackPanel Margin="8" Spacing="4">
+              <Grid ColumnDefinitions="84,*">
+                <TextBlock Grid.Column="0" Classes="meta" Text="Subject" />
+                <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Inspector.CertificateSubject}" />
+              </Grid>
+              <Grid ColumnDefinitions="84,*">
+                <TextBlock Grid.Column="0" Classes="meta" Text="Thumbprint" />
+                <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Inspector.CertificateThumbprint}" />
+              </Grid>
+              <Button Content="Trust and network" Height="20" Margin="0,4,0,0"
+                      Command="{Binding OpenDialogCommand}"
+                      CommandParameter="{x:Static vm:DialogKind.TrustAndNetwork}" />
+            </StackPanel>
+          </Expander>
+
+        </StackPanel>
+      </ScrollViewer>
+
+    </DockPanel>
+  </Border>
+
+</UserControl>

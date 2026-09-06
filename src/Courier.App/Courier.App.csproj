@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Multi-targeted so a contributor on Linux or macOS can build and run the app (TECH_SPEC 1.3).
+    The Windows TFM pulls in Courier.Platform.Windows; the bare TFM falls back to Posix.
+  -->
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net10.0-windows10.0.19041.0</TargetFrameworks>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>Courier</AssemblyName>
+    <RootNamespace>Courier.App</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <TieredPGO>true</TieredPGO>
+    
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Courier.Core/Courier.Core.csproj" />
+    <ProjectReference Include="../Courier.Scanner/Courier.Scanner.csproj" />
+    <ProjectReference Include="../Courier.Scripting/Courier.Scripting.csproj" />
+    <ProjectReference Include="../Courier.Telemetry/Courier.Telemetry.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <ProjectReference Include="../Courier.Platform.Windows/Courier.Platform.Windows.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="!$(TargetFramework.Contains('-windows'))">
+    <ProjectReference Include="../Courier.Platform.Posix/Courier.Platform.Posix.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Simple" />
+    <PackageReference Include="Avalonia.AvaloniaEdit" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Courier.App.UiTests" />
+    <InternalsVisibleTo Include="Courier.Perf.Tests" />
+  </ItemGroup>
+
+</Project>

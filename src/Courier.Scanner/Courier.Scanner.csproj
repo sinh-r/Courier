@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Courier.Scanner</PackageId>
+    <Description>Roslyn source analysis that derives an API collection from ASP.NET Core controllers and minimal APIs.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Courier.Core/Courier.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" />
+    <PackageReference Include="Microsoft.Build.Locator" />
+
+    <!--
+      MSBuildLocator resolves the real MSBuild assemblies from the installed SDK at runtime, so
+      these must be compile-time only. Shipping our own copies is what causes the assembly-load
+      failures MSBL001 warns about, and the semantic tier is the one thing that must not break on
+      a machine with a different SDK than the build agent.
+    -->
+    <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Build.Utilities.Core" ExcludeAssets="runtime" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Courier.Scanner.Tests" />
+  </ItemGroup>
+
+</Project>

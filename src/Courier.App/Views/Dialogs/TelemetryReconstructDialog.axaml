@@ -1,0 +1,105 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             x:Class="Courier.App.Views.Dialogs.TelemetryReconstructDialog"
+             x:DataType="vm:TelemetryReconstructViewModel">
+
+  <!--
+    Reconstruct a runnable request from telemetry. TEL-04, TEL-05, UI_SPEC 5.4.
+
+    The fidelity indicator is the honest part: a monitoring backend only has what the application
+    chose to log, so the result list says per row whether a full body is available or only the
+    route and headers, rather than producing a request that silently omits its payload.
+  -->
+
+  <Border Classes="floating" MaxWidth="760" MaxHeight="560"
+          HorizontalAlignment="Center" VerticalAlignment="Center">
+
+    <DockPanel LastChildFill="True">
+
+      <Border DockPanel.Dock="Top" Padding="16,12"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+        <StackPanel Spacing="4">
+          <TextBlock Classes="title" Text="Reconstruct from telemetry" />
+          <TextBlock Classes="meta mono" Text="{Binding BackendSummary}" />
+        </StackPanel>
+      </Border>
+
+      <Border DockPanel.Dock="Top" Padding="16,10"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="110,*">
+            <TextBlock Grid.Column="0" Classes="meta" Text="Trace id" VerticalAlignment="Center" />
+            <TextBox Grid.Column="1" Text="{Binding TraceId}"
+                     AutomationProperties.Name="Trace id" />
+          </Grid>
+          <Grid ColumnDefinitions="110,*">
+            <TextBlock Grid.Column="0" Classes="meta" Text="Or URL contains" VerticalAlignment="Center" />
+            <TextBox Grid.Column="1" Text="{Binding UrlContains}"
+                     AutomationProperties.Name="URL contains" />
+          </Grid>
+          <Grid ColumnDefinitions="110,*,Auto">
+            <TextBlock Grid.Column="0" Classes="meta" Text="Window" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1" HorizontalAlignment="Left" Width="180" SelectedIndex="1">
+              <ComboBoxItem Content="last 1h" />
+              <ComboBoxItem Content="last 24h" />
+              <ComboBoxItem Content="last 7d" />
+            </ComboBox>
+            <Button Grid.Column="2" Classes="primary" Content="Search" Name="SearchButton" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <Border DockPanel.Dock="Bottom" Padding="16,12"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,1,0,0">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Grid.Column="0" Classes="meta" TextWrapping="Wrap" VerticalAlignment="Center"
+                     Text="Bodies are only available where the app logged them. Missing fields arrive as placeholders you fill in." />
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+            <Button Content="Cancel" Name="CancelButton" />
+            <Button Classes="primary" Content="Open as request" Name="OpenButton" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <DockPanel LastChildFill="True">
+        <Border DockPanel.Dock="Top" Height="{DynamicResource RowHeight}" Padding="16,0"
+                BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+          <Grid ColumnDefinitions="56,64,*,64,190,160">
+            <TextBlock Grid.Column="0" Classes="meta" Text="Time" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Classes="meta" Text="Verb" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="2" Classes="meta" Text="Path" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="3" Classes="meta" Text="Status" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="4" Classes="meta" Text="Fidelity" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="5" Classes="meta" Text="Source" VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <ListBox ItemsSource="{Binding Results}" SelectedIndex="0" Padding="8,0"
+                 AutomationProperties.Name="Telemetry results">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:TelemetryResultViewModel">
+              <Grid ColumnDefinitions="56,64,*,64,190,160" Height="{DynamicResource RowHeight}">
+                <TextBlock Grid.Column="0" Classes="mono meta" VerticalAlignment="Center" Text="{Binding Time}" />
+                <TextBlock Grid.Column="1" Classes="mono" FontSize="11" VerticalAlignment="Center"
+                           Text="{Binding Method}"
+                           Foreground="{Binding Method, Converter={StaticResource VerbBrushConverter}}" />
+                <TextBlock Grid.Column="2" Classes="mono" VerticalAlignment="Center" Text="{Binding Path}" />
+                <TextBlock Grid.Column="3" Classes="mono" VerticalAlignment="Center"
+                           Text="{Binding Status}"
+                           Foreground="{Binding Status, Converter={StaticResource StatusBrushConverter}}" />
+                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                  <TextBlock Classes="mono" Text="{Binding FidelityGlyph}" />
+                  <TextBlock Classes="meta" Text="{Binding FidelityLabel}" />
+                </StackPanel>
+                <TextBlock Grid.Column="5" Classes="meta" VerticalAlignment="Center" Text="{Binding Source}" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+
+    </DockPanel>
+  </Border>
+
+</UserControl>

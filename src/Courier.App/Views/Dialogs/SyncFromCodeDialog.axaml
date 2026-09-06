@@ -1,0 +1,147 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             xmlns:scan="clr-namespace:Courier.App.ViewModels"
+             x:Class="Courier.App.Views.Dialogs.SyncFromCodeDialog"
+             x:DataType="vm:SyncReviewViewModel">
+
+  <!--
+    The moment that sells the tool. UI_SPEC 5.1: point at a .sln, get a proposed collection; on
+    later builds, see what changed.
+
+    The reassurance line about saved payloads is load-bearing and appears every time. UI_SPEC is
+    explicit: the top fear about generated collections is that regenerating destroys your work, so
+    the screen says otherwise on every pass, and the checkbox is checked by default.
+  -->
+
+  <Border Classes="floating" MaxWidth="720" MaxHeight="640"
+          HorizontalAlignment="Center" VerticalAlignment="Center">
+
+    <DockPanel LastChildFill="True">
+
+      <Border DockPanel.Dock="Top" Padding="16,12"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+        <StackPanel Spacing="4">
+          <TextBlock Classes="title" Text="Sync from code" />
+          <TextBlock Classes="meta mono" Text="{Binding Summary}" />
+        </StackPanel>
+      </Border>
+
+      <Border DockPanel.Dock="Bottom" Padding="16,12"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,1,0,0">
+        <StackPanel Spacing="12">
+
+          <CheckBox IsChecked="{Binding KeepUserWork}"
+                    Content="Keep my saved payloads and variables"
+                    AutomationProperties.Name="Keep my saved payloads and variables" />
+
+          <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="Review later" Name="ReviewLaterButton" />
+            <Button Classes="primary" Content="{Binding ApplyLabel}" Name="ApplyButton" />
+          </StackPanel>
+
+        </StackPanel>
+      </Border>
+
+      <ScrollViewer Padding="16,8">
+        <StackPanel Spacing="14">
+
+          <!-- Added. -->
+          <StackPanel Spacing="4" IsVisible="{Binding Added.Count, Converter={StaticResource IsNotZeroConverter}}">
+            <TextBlock Classes="heading" Foreground="{DynamicResource Share}"
+                       Text="{Binding Added.Count, StringFormat='+ {0} added'}" />
+            <ItemsControl ItemsSource="{Binding Added}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="scan:EndpointChangeViewModel">
+                  <Grid ColumnDefinitions="64,*,Auto" Height="20" Margin="12,0,0,0">
+                    <TextBlock Grid.Column="0" Classes="mono" FontSize="11" VerticalAlignment="Center"
+                               Text="{Binding Method}"
+                               Foreground="{Binding Method, Converter={StaticResource VerbBrushConverter}}" />
+                    <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center" Text="{Binding Route}" />
+                    <TextBlock Grid.Column="2" Classes="meta" VerticalAlignment="Center" Text="{Binding Detail}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+
+          <!-- Changed, with the per-field body and auth diff the mock shows. -->
+          <StackPanel Spacing="4" IsVisible="{Binding Changed.Count, Converter={StaticResource IsNotZeroConverter}}">
+            <TextBlock Classes="heading" Text="{Binding Changed.Count, StringFormat='~ {0} changed'}" />
+            <ItemsControl ItemsSource="{Binding Changed}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="scan:EndpointChangeViewModel">
+                  <StackPanel Margin="12,2" Spacing="2">
+                    <Grid ColumnDefinitions="64,*">
+                      <TextBlock Grid.Column="0" Classes="mono" FontSize="11" VerticalAlignment="Center"
+                                 Text="{Binding Method}"
+                                 Foreground="{Binding Method, Converter={StaticResource VerbBrushConverter}}" />
+                      <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center" Text="{Binding Route}" />
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding FieldChanges}" Margin="64,0,0,0">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="scan:FieldChangeViewModel">
+                          <Grid ColumnDefinitions="52,16,*" Height="19">
+                            <TextBlock Grid.Column="0" Classes="meta" VerticalAlignment="Center"
+                                       Text="{Binding Section}" />
+                            <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center"
+                                       Text="{Binding Marker}"
+                                       Foreground="{Binding MarkerBrush}" />
+                            <TextBlock Grid.Column="2" Classes="mono" VerticalAlignment="Center"
+                                       Text="{Binding Description}" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+
+          <!-- Removed, always carrying the promise that the user's work survives. P3. -->
+          <StackPanel Spacing="4" IsVisible="{Binding Removed.Count, Converter={StaticResource IsNotZeroConverter}}">
+            <TextBlock Classes="heading" Foreground="{DynamicResource Error}"
+                       Text="{Binding Removed.Count, StringFormat='− {0} removed'}" />
+            <ItemsControl ItemsSource="{Binding Removed}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="scan:EndpointChangeViewModel">
+                  <Grid ColumnDefinitions="64,*,Auto" Height="20" Margin="12,0,0,0">
+                    <TextBlock Grid.Column="0" Classes="mono" FontSize="11" VerticalAlignment="Center"
+                               Text="{Binding Method}"
+                               Foreground="{Binding Method, Converter={StaticResource VerbBrushConverter}}" />
+                    <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center" Text="{Binding Route}" />
+                    <TextBlock Grid.Column="2" Classes="meta" VerticalAlignment="Center"
+                               Text="your saved payloads are kept" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+
+          <!--
+            Unresolved endpoints. REQUIREMENTS 9: an endpoint that cannot be derived is listed as
+            unresolved, never omitted. Silence here is the hostile outcome.
+          -->
+          <StackPanel Spacing="4" IsVisible="{Binding Unresolved.Count, Converter={StaticResource IsNotZeroConverter}}">
+            <TextBlock Classes="heading" Foreground="{DynamicResource Secret}"
+                       Text="{Binding Unresolved.Count, StringFormat='▲ {0} could not be resolved'}" />
+            <ItemsControl ItemsSource="{Binding Unresolved}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="scan:EndpointChangeViewModel">
+                  <StackPanel Margin="12,2">
+                    <TextBlock Classes="mono" Text="{Binding Route}" />
+                    <TextBlock Classes="meta" TextWrapping="Wrap" Text="{Binding Detail}" />
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+
+        </StackPanel>
+      </ScrollViewer>
+
+    </DockPanel>
+  </Border>
+
+</UserControl>
