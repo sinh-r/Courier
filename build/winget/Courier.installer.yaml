@@ -19,7 +19,7 @@ ReleaseDate: 2026-09-06
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/courier-api/courier/releases/download/v0.1.0/Courier-0.1.0-x64.msi
-    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    InstallerSha256: 1ae4dd657473b704517e2f72b787a682ce6cb908e84e4f9ea2040a683d5e2fe5
   - Architecture: arm64
     InstallerUrl: https://github.com/courier-api/courier/releases/download/v0.1.0/Courier-0.1.0-arm64.msi
     InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
