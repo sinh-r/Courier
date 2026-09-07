@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -9,7 +10,9 @@ using CommunityToolkit.Mvvm.Input;
 using Courier.App.Services;
 using Courier.Core.Abstractions;
 using Courier.Core.Collections;
+using Courier.Core.Export;
 using Courier.Core.Http;
+using Courier.Core.Import;
 using Courier.Core.Privacy;
 using Courier.Core.Storage;
 using Courier.Core.Variables;
@@ -85,7 +88,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Tree = new CollectionTreeViewModel(services);
         Inspector = new InspectorViewModel(services);
         Palette = new CommandPaletteViewModel(this);
-        Environments = new EnvironmentsViewModel();
+        Environments = new EnvironmentsViewModel(services.SecretStore);
+        Environments.EnvironmentCreated += name =>
+        {
+            RefreshAvailableEnvironments();
+            EnvironmentName = name;
+            Environments.Load(Tree.Folder, ActiveEnvironment);
+        };
         AuthProfileEditor = new AuthProfileEditorViewModel();
         Trust = new TrustSettingsViewModel();
         SyncReview = new SyncReviewViewModel();
@@ -218,7 +227,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public bool IsScrimVisible => Dialog is not DialogKind.None and not DialogKind.FirstRun;
 
     [RelayCommand]
-    public void OpenDialog(DialogKind kind) => Dialog = kind;
+    public void OpenDialog(DialogKind kind)
+    {
+        Dialog = kind;
+
+        if (kind == DialogKind.Environments)
+        {
+            Environments.Load(Tree.Folder, ActiveEnvironment);
+        }
+    }
 
     [RelayCommand]
     public void CloseDialog() => Dialog = DialogKind.None;
@@ -261,6 +278,64 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     public void OpenRequest(RequestDefinition request) =>
         Tabs.Open(TabState.FromDefinition(request, Tree.CollectionName, EnvironmentName));
+
+    /// <summary>
+    /// Parses a pasted curl command into a new tab. CORE-09. Reused by both entry points: the URL
+    /// box's paste-intercept, and the "Paste curl from clipboard" menu item.
+    /// </summary>
+    public void ImportCurl(string command)
+    {
+        var request = CurlImporter.Parse(command);
+        var state = TabState.FromDefinition(request, Tree.CollectionName, EnvironmentName);
+
+        // The stripped -u password and a rejected --insecure have nowhere else to land — the
+        // capsule banner is the one mechanism the tab already has for "this came from somewhere,
+        // and here is what needs your attention".
+        if (request.UnresolvedNotes.Count > 0)
+        {
+            state.Capsule = new CapsuleOrigin(
+                FileName: "pasted curl",
+                ExportedBy: null,
+                ImportedUtc: DateTimeOffset.UtcNow,
+                Resolved: [],
+                Unresolved: request.UnresolvedNotes);
+        }
+
+        Tabs.Open(state);
+    }
+
+    /// <summary>The "Paste curl from clipboard" menu item — the entry point that needs no text box.</summary>
+    [RelayCommand]
+    public async Task ImportCurlFromClipboardAsync()
+    {
+        if (TopLevel?.Clipboard is not { } clipboard)
+        {
+            return;
+        }
+
+        var text = await clipboard.TryGetTextAsync().ConfigureAwait(true);
+
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            ImportCurl(text);
+        }
+    }
+
+    /// <summary>
+    /// Copies the active tab as a runnable curl command. CORE-10. Never resolves variables — the
+    /// recipient binds their own <c>{{name}}</c> references, same as every other exporter.
+    /// </summary>
+    [RelayCommand]
+    public async Task CopyAsCurlAsync()
+    {
+        if (Tabs.Active?.State is not { } state || TopLevel?.Clipboard is not { } clipboard)
+        {
+            return;
+        }
+
+        var curl = RequestExporters.ToCurl(state.ToDefinition(), windowsLineContinuation: OperatingSystem.IsWindows());
+        await clipboard.SetTextAsync(curl).ConfigureAwait(true);
+    }
 
     /// <summary>
     /// Sends the active tab's request. CORE-01. Delegates the actual preparation to

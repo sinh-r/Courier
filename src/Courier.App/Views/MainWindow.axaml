@@ -46,6 +46,13 @@
                           Height="{DynamicResource RowHeight}" Padding="12,0" Content="Import from code…"
                           Command="{Binding ImportFromCodeCommand}" />
                   <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                          Height="{DynamicResource RowHeight}" Padding="12,0" Content="Paste curl from clipboard"
+                          Command="{Binding ImportCurlFromClipboardCommand}" />
+                  <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                          Height="{DynamicResource RowHeight}" Padding="12,0" Content="Copy as curl"
+                          Command="{Binding CopyAsCurlCommand}"
+                          IsEnabled="{Binding Tabs.Active, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                  <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                           Height="{DynamicResource RowHeight}" Padding="12,0" Content="Export capsule…"
                           Command="{Binding OpenCapsuleExportCommand}" />
                   <Border Height="1" Background="{DynamicResource Rule}" Margin="0,4" />

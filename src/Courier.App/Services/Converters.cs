@@ -64,6 +64,14 @@ public sealed class TrustBrushConverter : OneWayConverter<bool, IBrush>
     protected override IBrush Convert(bool value) => VerbBrushes.ForTrust(value);
 }
 
+/// <summary>Selected/unselected text colour for the response tab strip.</summary>
+public sealed class ActiveTabBrushConverter : OneWayConverter<bool, IBrush>
+{
+    protected override IBrush Convert(bool value) => VerbBrushes.ForActiveTab(value);
+
+    protected override object Fallback => VerbBrushes.ForActiveTab(false);
+}
+
 public sealed class ProvenanceGlyphConverter : OneWayConverter<Provenance, string>
 {
     protected override string Convert(Provenance value) => VerbBrushes.ProvenanceGlyph(value);

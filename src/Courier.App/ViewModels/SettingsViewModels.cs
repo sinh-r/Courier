@@ -3,40 +3,212 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Courier.Core.Abstractions;
 using Courier.Core.Auth;
+using Courier.Core.Collections;
 using Courier.Core.Privacy;
 
 namespace Courier.App.ViewModels;
 
 /// <summary>
-/// The environments table. SEC-03, CORE-12.
+/// The environments table. SEC-03, CORE-12. Backed by <see cref="CollectionLoader.SaveEnvironment"/>
+/// and <see cref="ISecretStore"/> — see <c>Load</c>/<c>Save</c> for the shared/local split this
+/// projects to and from disk.
 /// </summary>
 public sealed partial class EnvironmentsViewModel : ObservableObject
 {
-    [ObservableProperty]
-    private string _name = "QA-Internal";
+    private readonly ISecretStore _secrets;
+    private string? _folder;
 
-    [ObservableProperty]
-    private string _filePath = string.Empty;
+    public EnvironmentsViewModel(ISecretStore secrets) => _secrets = secrets;
 
-    public ObservableCollection<EnvironmentVariableViewModel> Variables { get; } = [];
-}
-
-/// <summary>
-/// One variable, in one of two columns. The split is the point: shared goes in git, local goes to
-/// the credential store, and the two are never the same slot.
-/// </summary>
-public sealed partial class EnvironmentVariableViewModel : ObservableObject
-{
     [ObservableProperty]
     private string _name = string.Empty;
 
     [ObservableProperty]
+    private string _filePath = string.Empty;
+
+    [ObservableProperty]
+    private string _newEnvironmentName = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasFolder;
+
+    public ObservableCollection<EnvironmentVariableViewModel> Variables { get; } = [];
+
+    public bool HasEnvironment => Name.Length > 0;
+
+    /// <summary>
+    /// Raised after <see cref="NewEnvironmentCommand"/> saves, so the shell can make it the active
+    /// environment and refresh the title-bar picker.
+    /// </summary>
+    public event Action<string>? EnvironmentCreated;
+
+    /// <summary>
+    /// Projects the currently active environment into editable rows. Called when the Environments
+    /// settings pane opens and whenever the active environment changes. A null <paramref name="environment"/>
+    /// is not an error — a freshly scanned collection with no derived <c>baseUrl</c>, or one nobody
+    /// has picked an environment in yet, has nothing to edit until <see cref="NewEnvironmentCommand"/>
+    /// makes one.
+    /// </summary>
+    public void Load(string? folder, EnvironmentDefinition? environment)
+    {
+        _folder = folder;
+        HasFolder = folder is not null;
+        Variables.Clear();
+
+        Name = environment?.Name ?? string.Empty;
+        FilePath = environment is null
+            ? string.Empty
+            : $"{CollectionFormat.EnvironmentsFolder}/{environment.Name}{CollectionFormat.EnvironmentFileExtension}";
+
+        if (environment is not null)
+        {
+            foreach (var (key, value) in environment.Shared)
+            {
+                Variables.Add(new EnvironmentVariableViewModel { Name = key, SharedValue = value });
+            }
+
+            foreach (var localName in environment.LocalNames)
+            {
+                Variables.Add(new EnvironmentVariableViewModel
+                {
+                    Name = localName,
+                    IsLocal = true,
+                    OriginalLocalName = localName,
+                });
+            }
+        }
+
+        OnPropertyChanged(nameof(HasEnvironment));
+    }
+
+    [RelayCommand]
+    private void AddVariable() => Variables.Add(new EnvironmentVariableViewModel());
+
+    [RelayCommand]
+    private async Task DeleteVariableAsync(EnvironmentVariableViewModel row)
+    {
+        Variables.Remove(row);
+
+        if (row.OriginalLocalName is { } existing)
+        {
+            await _secrets.DeleteAsync(new SecretKey(SecretKey.EnvironmentScope, $"{Name}/{existing}"));
+        }
+
+        await SaveAsync();
+    }
+
+    /// <summary>
+    /// The only place anything is written: a shared row's value goes straight into the YAML; a
+    /// local row's value (if any is pending, from a just-clicked "Move to local") goes to
+    /// <see cref="ISecretStore"/> and the row keeps only its name. A local row renamed since it was
+    /// loaded is re-keyed rather than orphaned, since <see cref="EnvironmentDefinition.SecretKeyFor"/>
+    /// embeds the variable name.
+    /// </summary>
+    [RelayCommand]
+    private async Task SaveAsync()
+    {
+        if (_folder is null || string.IsNullOrWhiteSpace(Name))
+        {
+            return;
+        }
+
+        var definition = new EnvironmentDefinition { Name = Name };
+
+        foreach (var row in Variables)
+        {
+            if (string.IsNullOrWhiteSpace(row.Name))
+            {
+                continue;
+            }
+
+            if (!row.IsLocal)
+            {
+                definition.Shared[row.Name] = row.SharedValue ?? string.Empty;
+                continue;
+            }
+
+            definition.LocalNames.Add(row.Name);
+
+            if (row.PendingLocalValue is { } value)
+            {
+                await _secrets.SetAsync(new SecretKey(SecretKey.EnvironmentScope, $"{Name}/{row.Name}"), value);
+                row.ClearPendingLocalValue();
+            }
+            else if (row.OriginalLocalName is { } original && !string.Equals(original, row.Name, StringComparison.Ordinal))
+            {
+                var oldKey = new SecretKey(SecretKey.EnvironmentScope, $"{Name}/{original}");
+                var existingValue = await _secrets.GetAsync(oldKey);
+                if (existingValue is not null)
+                {
+                    await _secrets.SetAsync(new SecretKey(SecretKey.EnvironmentScope, $"{Name}/{row.Name}"), existingValue);
+                    await _secrets.DeleteAsync(oldKey);
+                }
+            }
+
+            row.OriginalLocalName = row.Name;
+        }
+
+        CollectionLoader.SaveEnvironment(_folder, definition);
+    }
+
+    /// <summary>
+    /// Environments today only ever come from a scan, so a collection whose source derives none —
+    /// or one nobody has picked an environment in — would otherwise have nothing to edit. CORE-12.
+    /// </summary>
+    [RelayCommand]
+    private void NewEnvironment()
+    {
+        if (_folder is null || string.IsNullOrWhiteSpace(NewEnvironmentName))
+        {
+            return;
+        }
+
+        var definition = new EnvironmentDefinition { Name = NewEnvironmentName.Trim() };
+        CollectionLoader.SaveEnvironment(_folder, definition);
+
+        NewEnvironmentName = string.Empty;
+        EnvironmentCreated?.Invoke(definition.Name);
+    }
+}
+
+/// <summary>
+/// One variable, in one of two columns. The split is the point: shared goes in git, local goes to
+/// the credential store, and the two are never the same slot. Persistence itself lives in
+/// <see cref="EnvironmentsViewModel.SaveAsync"/> — this row only tracks enough state
+/// (<see cref="OriginalLocalName"/>, <see cref="PendingLocalValue"/>) for that save to do the right
+/// thing without every keystroke touching the credential store.
+/// </summary>
+public sealed partial class EnvironmentVariableViewModel : ObservableObject
+{
+    /// <summary>Set only when this row was already local on disk, so a rename can be re-keyed on save.</summary>
+    internal string? OriginalLocalName { get; set; }
+
+    /// <summary>
+    /// Set only by <see cref="MoveToLocal"/>: the plaintext value, held in memory until
+    /// <see cref="EnvironmentsViewModel.SaveAsync"/> writes it to the credential store and clears it.
+    /// Never written to any file.
+    /// </summary>
+    internal string? PendingLocalValue { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSharedSecretWarning))]
+    [NotifyPropertyChangedFor(nameof(SecretReason))]
+    private string _name = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSharedSecretWarning))]
+    [NotifyPropertyChangedFor(nameof(SecretReason))]
+    [NotifyPropertyChangedFor(nameof(SharedDisplay))]
     private string? _sharedValue;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSharedSecretWarning))]
+    [NotifyPropertyChangedFor(nameof(LocalDisplay))]
+    [NotifyPropertyChangedFor(nameof(LocalSource))]
     private bool _isLocal;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSharedSecretWarning))]
     private bool _warningDismissed;
 
     public string SharedDisplay => SharedValue ?? "—";
@@ -46,9 +218,13 @@ public sealed partial class EnvironmentVariableViewModel : ObservableObject
 
     public string LocalSource => IsLocal ? "Credential Manager" : string.Empty;
 
+    /// <summary>Why <see cref="HasSharedSecretWarning"/> fired, e.g. "field name 'apiKey' names a credential".</summary>
+    public string SecretReason => SecretPatterns.Classify(SharedValue, Name).Reason ?? "This looks like a secret";
+
     /// <summary>
     /// A secret-shaped value sitting in the shared column. SEC-03 requires a warning, and the
-    /// warning has to be actionable rather than advisory, hence the two buttons beside it.
+    /// warning has to be actionable rather than advisory, hence the two buttons beside it. Live as
+    /// you type, via the <c>NotifyPropertyChangedFor</c> attributes above.
     /// </summary>
     public bool HasSharedSecretWarning =>
         !WarningDismissed
@@ -58,9 +234,9 @@ public sealed partial class EnvironmentVariableViewModel : ObservableObject
     [RelayCommand]
     private void MoveToLocal()
     {
+        PendingLocalValue = SharedValue;
         IsLocal = true;
         SharedValue = null;
-        Refresh();
     }
 
     /// <summary>
@@ -68,19 +244,9 @@ public sealed partial class EnvironmentVariableViewModel : ObservableObject
     /// only tolerable if dismissing one is a single click and it stays dismissed.
     /// </summary>
     [RelayCommand]
-    private void DismissWarning()
-    {
-        WarningDismissed = true;
-        Refresh();
-    }
+    private void DismissWarning() => WarningDismissed = true;
 
-    private void Refresh()
-    {
-        OnPropertyChanged(nameof(SharedDisplay));
-        OnPropertyChanged(nameof(LocalDisplay));
-        OnPropertyChanged(nameof(LocalSource));
-        OnPropertyChanged(nameof(HasSharedSecretWarning));
-    }
+    internal void ClearPendingLocalValue() => PendingLocalValue = null;
 }
 
 /// <summary>The auth profile editor and the decoded token panel. ENT-02, ENT-04.</summary>

@@ -49,6 +49,9 @@ public static class VerbBrushes
     /// <summary>Trust pair, identical everywhere: secret/local warn, shareable/committed ok.</summary>
     public static IBrush ForTrust(bool isSecret) => Resolve(isSecret ? "Secret" : "Share");
 
+    /// <summary>The response tab strip's selected/unselected text colour.</summary>
+    public static IBrush ForActiveTab(bool active) => Resolve(active ? "Ink" : "Muted");
+
     /// <summary>
     /// The status glyph. Paired with the colour so the distinction survives a colour-blind reader
     /// and a greyscale screenshot in a bug report.

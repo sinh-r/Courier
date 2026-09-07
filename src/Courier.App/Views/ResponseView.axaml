@@ -19,7 +19,7 @@
               BorderThickness="0,0,0,1"
               Padding="8,0"
               IsVisible="{Binding Tabs.Active.Response, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False, TargetNullValue=False}">
-        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto">
 
           <TextBlock Grid.Column="0" Classes="mono" VerticalAlignment="Center" Margin="0,0,5,0"
                      Text="{Binding Tabs.Active.Response.Status, Converter={StaticResource StatusGlyphConverter}}"
@@ -35,8 +35,18 @@
           <TextBlock Grid.Column="3" Classes="mono meta" VerticalAlignment="Center" Margin="14,0,0,0"
                      Text="{Binding Tabs.Active.Response.SizeText}" />
 
+          <!-- CORE-10. Variables stay as {{name}} — no exporter ever resolves a secret. -->
+          <Button Grid.Column="5" Classes="bare" Height="18" Margin="0,0,10,0"
+                  Command="{Binding CopyAsCurlCommand}"
+                  AutomationProperties.Name="Copy this request as a curl command">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <TextBlock Classes="meta" Text="⎘" />
+              <TextBlock Classes="meta" Text="Copy as curl" />
+            </StackPanel>
+          </Button>
+
           <!-- The capsule affordance sits with the response, where the failing call is. CAP-01. -->
-          <Button Grid.Column="5" Classes="bare" Height="18"
+          <Button Grid.Column="6" Classes="bare" Height="18"
                   Command="{Binding OpenCapsuleExportCommand}"
                   AutomationProperties.Name="Export this request and response as a capsule">
             <StackPanel Orientation="Horizontal" Spacing="5">
@@ -48,7 +58,7 @@
         </Grid>
       </Border>
 
-      <!-- Section tabs. The tests count carries pass/fail colour, and a glyph with it. -->
+      <!-- Section tabs. Tests and Server stay disabled: neither has a data source in the app yet. -->
       <Border DockPanel.Dock="Top"
               Height="{DynamicResource RowHeight}"
               BorderBrush="{DynamicResource Rule}"
@@ -58,17 +68,29 @@
         <Grid ColumnDefinitions="Auto,*,Auto">
 
           <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
-            <TextBlock Text="Body" FontWeight="Medium" />
-            <TextBlock Text="Headers" />
-            <TextBlock Text="Tests" />
-            <TextBlock Text="Server" />
+            <Button Classes="bare" Content="Body"
+                    Command="{Binding Tabs.Active.SetActiveResponseTabCommand}" CommandParameter="Body"
+                    Foreground="{Binding Tabs.Active.IsBodyTabActive, Converter={StaticResource ActiveTabBrushConverter}}" />
+            <Button Classes="bare" Content="Headers"
+                    Command="{Binding Tabs.Active.SetActiveResponseTabCommand}" CommandParameter="Headers"
+                    Foreground="{Binding Tabs.Active.IsHeadersTabActive, Converter={StaticResource ActiveTabBrushConverter}}" />
+            <TextBlock Text="Tests" IsEnabled="False" Foreground="{DynamicResource Muted}"
+                       ToolTip.Tip="Scanner-generated assertions are not evaluated on Send yet." />
+            <TextBlock Text="Server" IsEnabled="False" Foreground="{DynamicResource Muted}"
+                       ToolTip.Tip="No telemetry backend is configured for this collection." />
           </StackPanel>
 
-          <!-- Pretty / Raw / Preview. CORE-03. -->
-          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-            <TextBlock Classes="meta" Text="Pretty" Foreground="{DynamicResource Ink}" />
-            <TextBlock Classes="meta" Text="Raw" />
-            <TextBlock Classes="meta" Text="Preview" />
+          <!-- Pretty / Raw / Preview. CORE-03. Only meaningful while Body is showing. -->
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center"
+                      IsVisible="{Binding Tabs.Active.IsBodyTabActive}">
+            <Button Classes="bare meta" Content="Pretty"
+                    Command="{Binding Tabs.Active.Response.SetModeCommand}" CommandParameter="Pretty"
+                    Foreground="{Binding Tabs.Active.Response.IsPrettyMode, Converter={StaticResource ActiveTabBrushConverter}}" />
+            <Button Classes="bare meta" Content="Raw"
+                    Command="{Binding Tabs.Active.Response.SetModeCommand}" CommandParameter="Raw"
+                    Foreground="{Binding Tabs.Active.Response.IsRawMode, Converter={StaticResource ActiveTabBrushConverter}}" />
+            <TextBlock Classes="meta" Text="Preview" IsEnabled="False" Foreground="{DynamicResource Muted}"
+                       ToolTip.Tip="No HTML or image renderer exists yet." />
           </StackPanel>
 
         </Grid>
@@ -81,7 +103,7 @@
               BorderThickness="0,0,0,1"
               Padding="8,0"
               IsVisible="{Binding Tabs.Active.Response, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False, TargetNullValue=False}">
-        <Grid ColumnDefinitions="Auto,220,Auto,Auto,*,Auto">
+        <Grid ColumnDefinitions="Auto,220,Auto,Auto,Auto,Auto,*,Auto">
           <TextBlock Grid.Column="0" Classes="meta" Text="⌕" VerticalAlignment="Center" Margin="0,0,6,0" />
           <TextBox Grid.Column="1" Name="SearchBox" BorderThickness="0" Background="Transparent"
                    Padding="0" VerticalAlignment="Center"
@@ -90,7 +112,11 @@
                      Text="{Binding Tabs.Active.Response.MatchesText}" />
           <TextBlock Grid.Column="3" Classes="mono meta" VerticalAlignment="Center" Margin="10,0,0,0"
                      Text="{Binding Tabs.Active.Response.MatchPositionText}" />
-          <TextBlock Grid.Column="5" Classes="mono meta" VerticalAlignment="Center"
+          <Button Grid.Column="4" Name="PrevMatchButton" Classes="bare" Content="‹" Margin="6,0,0,0"
+                  AutomationProperties.Name="Previous match" />
+          <Button Grid.Column="5" Name="NextMatchButton" Classes="bare" Content="›" Margin="4,0,0,0"
+                  AutomationProperties.Name="Next match" />
+          <TextBlock Grid.Column="7" Classes="mono meta" VerticalAlignment="Center"
                      Text="{Binding Tabs.Active.Response.StructureText}" />
         </Grid>
       </Border>
@@ -109,19 +135,65 @@
       </Border>
 
       <Panel>
-        <!--
-          The tree binds to the response, so its IsVisible must be evaluated against the shell
-          rather than against its own DataContext. $parent[UserControl] is that shell.
-        -->
-        <controls:JsonTreeView
-            DataContext="{Binding Tabs.Active.Response}"
-            IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).Tabs.Active.Response, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False, TargetNullValue=False}" />
 
-        <!-- UI_SPEC 3.7: empty states are invitations, and they never apologise. -->
-        <TextBlock Classes="muted" Margin="12"
-                   VerticalAlignment="Top" HorizontalAlignment="Left"
-                   Text="No response yet. Press Send."
-                   IsVisible="{Binding Tabs.Active.Response, Converter={x:Static ObjectConverters.IsNull}, FallbackValue=True, TargetNullValue=True}" />
+        <!-- Body tab: Pretty tree or Raw text, switched by Response.Mode. -->
+        <Panel IsVisible="{Binding Tabs.Active.IsBodyTabActive, FallbackValue=True}">
+          <!--
+            The tree binds to the response, so its IsVisible must be evaluated against the shell
+            rather than against its own DataContext. $parent[UserControl] is that shell.
+          -->
+          <controls:JsonTreeView
+              Name="Tree"
+              DataContext="{Binding Tabs.Active.Response}"
+              IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).Tabs.Active.Response.IsPrettyMode, FallbackValue=False, TargetNullValue=False}" />
+
+          <ScrollViewer
+              IsVisible="{Binding Tabs.Active.Response.IsRawMode, FallbackValue=False, TargetNullValue=False}">
+            <TextBox Classes="mono" Text="{Binding Tabs.Active.Response.RawBodyText, Mode=OneWay}"
+                     IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                     BorderThickness="0" Background="Transparent" Padding="12" />
+          </ScrollViewer>
+
+          <!-- UI_SPEC 3.7: empty states are invitations, and they never apologise. -->
+          <TextBlock Classes="muted" Margin="12"
+                     VerticalAlignment="Top" HorizontalAlignment="Left"
+                     Text="No response yet. Press Send."
+                     IsVisible="{Binding Tabs.Active.Response, Converter={x:Static ObjectConverters.IsNull}, FallbackValue=True, TargetNullValue=True}" />
+        </Panel>
+
+        <!-- Headers tab: request headers, then response headers. One row per value. -->
+        <ScrollViewer IsVisible="{Binding Tabs.Active.IsHeadersTabActive, FallbackValue=False}">
+          <StackPanel Spacing="16" Margin="12">
+            <StackPanel Spacing="2">
+              <TextBlock Classes="meta" Text="Request" Margin="0,0,0,4" />
+              <ItemsControl ItemsSource="{Binding Tabs.Active.Response.RequestHeaders}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:HeaderRow">
+                    <Grid ColumnDefinitions="220,*" Margin="0,2">
+                      <TextBlock Grid.Column="0" Classes="mono" Text="{Binding Name}" />
+                      <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Value}" TextWrapping="Wrap" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+
+            <StackPanel Spacing="2">
+              <TextBlock Classes="meta" Text="Response" Margin="0,0,0,4" />
+              <ItemsControl ItemsSource="{Binding Tabs.Active.Response.ResponseHeaders}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:HeaderRow">
+                    <Grid ColumnDefinitions="220,*" Margin="0,2">
+                      <TextBlock Grid.Column="0" Classes="mono" Text="{Binding Name}" />
+                      <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Value}" TextWrapping="Wrap" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+
       </Panel>
 
     </DockPanel>

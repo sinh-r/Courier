@@ -102,6 +102,20 @@ public static class CollectionLoader
         ];
     }
 
+    /// <summary>
+    /// Writes an environment file, creating <c>environments/</c> if needed and overwriting any
+    /// existing file for the same name. Unlike <see cref="Courier.Scanner.CollectionWriter"/>'s
+    /// scan-derived write, this is the general-purpose save behind the GUI editor: CORE-12.
+    /// </summary>
+    public static void SaveEnvironment(string folder, EnvironmentDefinition environment)
+    {
+        var directory = Path.Combine(folder, CollectionFormat.EnvironmentsFolder);
+        Directory.CreateDirectory(directory);
+
+        var path = EnvironmentPath(folder, environment.Name);
+        File.WriteAllText(path, new CollectionSerializer().SerializeEnvironment(environment));
+    }
+
     private static string EnvironmentPath(string folder, string name) => Path.Combine(
         folder,
         CollectionFormat.EnvironmentsFolder,

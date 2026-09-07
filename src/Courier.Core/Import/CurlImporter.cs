@@ -109,10 +109,36 @@ public static class CurlImporter
             }
         }
 
+        SplitQuery(request);
         ApplyBody(request, bodyParts, formParts, explicitMethod);
         NameFromUrl(request);
 
         return request;
+    }
+
+    /// <summary>
+    /// curl leaves the query string embedded in the URL. Splitting it into <see cref="RequestDefinition.Query"/>
+    /// is what makes a pasted command show up in the Params grid instead of an opaque URL.
+    /// </summary>
+    private static void SplitQuery(RequestDefinition request)
+    {
+        var mark = request.Url.IndexOf('?');
+        if (mark < 0)
+        {
+            return;
+        }
+
+        var query = request.Url[(mark + 1)..];
+        request.Url = request.Url[..mark];
+
+        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var equals = pair.IndexOf('=');
+            var name = equals < 0 ? pair : pair[..equals];
+            var value = equals < 0 ? string.Empty : pair[(equals + 1)..];
+
+            request.Query.Add(new QueryParameter(Uri.UnescapeDataString(name), Uri.UnescapeDataString(value)));
+        }
     }
 
     private static void ApplyBody(

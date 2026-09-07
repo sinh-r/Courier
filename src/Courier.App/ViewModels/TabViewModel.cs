@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Courier.App.Services;
 using Courier.Core.Collections;
 
@@ -60,6 +61,18 @@ public sealed partial class TabViewModel : ObservableObject
     [ObservableProperty]
     private string? _sendError;
 
+    /// <summary>
+    /// Mirrors <see cref="TabState.ActiveResponseTabIndex"/> so the strip has something bindable and
+    /// change-notifying to watch — the POCO has no <c>INotifyPropertyChanged</c> of its own. Synced
+    /// back in <see cref="OnActiveResponseTabIndexChanged"/>, same pattern as <see cref="Method"/>.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBodyTabActive))]
+    [NotifyPropertyChangedFor(nameof(IsHeadersTabActive))]
+    [NotifyPropertyChangedFor(nameof(IsTestsTabActive))]
+    [NotifyPropertyChangedFor(nameof(IsServerTabActive))]
+    private int _activeResponseTabIndex;
+
     private Stopwatch? _sendStopwatch;
     private CancellationTokenSource? _sendCts;
 
@@ -70,6 +83,7 @@ public sealed partial class TabViewModel : ObservableObject
         _method = state.Method;
         _url = state.Url;
         _isDirty = state.IsDirty;
+        _activeResponseTabIndex = state.ActiveResponseTabIndex;
 
         HeaderEditor = new KeyValueEditorViewModel(rows =>
         {
@@ -156,6 +170,28 @@ public sealed partial class TabViewModel : ObservableObject
 
     public Provenance Provenance => State?.Provenance ?? Provenance.Authored;
 
+    public bool IsBodyTabActive => ActiveResponseTabIndex == 0;
+
+    public bool IsHeadersTabActive => ActiveResponseTabIndex == 1;
+
+    public bool IsTestsTabActive => ActiveResponseTabIndex == 2;
+
+    public bool IsServerTabActive => ActiveResponseTabIndex == 3;
+
+    /// <summary>
+    /// Body, Headers, Tests, Server — by index, matching <see cref="ActiveResponseTabIndex"/>. Tests
+    /// and Server stay <c>IsEnabled="False"</c> in the view, so only 0 and 1 are ever actually asked
+    /// for; Raw/Pretty is a separate axis handled by <see cref="ResponseViewModel.Mode"/>.
+    /// </summary>
+    [RelayCommand]
+    private void SetActiveResponseTab(string tab) => ActiveResponseTabIndex = tab switch
+    {
+        "Headers" => 1,
+        "Tests" => 2,
+        "Server" => 3,
+        _ => 0,
+    };
+
     /// <summary>
     /// Serializes and releases the heavy state. Called for tabs that have been idle past the
     /// threshold, so 100 open tabs cost roughly 100 short strings rather than 100 editors.
@@ -196,6 +232,7 @@ public sealed partial class TabViewModel : ObservableObject
 
         State.LastActive = DateTimeOffset.UtcNow;
         _suspendedPayload = null;
+        ActiveResponseTabIndex = State.ActiveResponseTabIndex;
         LoadRowsFromState();
     }
 
@@ -265,6 +302,18 @@ public sealed partial class TabViewModel : ObservableObject
     }
 
     partial void OnTitleChanged(string value) => OnPropertyChanged(nameof(DisplayTitle));
+
+    /// <summary>
+    /// Not a content edit, so this deliberately never calls <see cref="MarkDirty"/> — switching to
+    /// the Headers tab to look something up should not put a dot on the tab.
+    /// </summary>
+    partial void OnActiveResponseTabIndexChanged(int value)
+    {
+        if (State is not null)
+        {
+            State.ActiveResponseTabIndex = value;
+        }
+    }
 
     /// <summary>
     /// The URL box binds here (rather than to <c>State.Url</c> directly) precisely so this exists:

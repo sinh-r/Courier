@@ -65,21 +65,22 @@
                       IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=Environments}">
           <StackPanel Spacing="12">
 
-            <Grid ColumnDefinitions="*,Auto">
+            <Grid ColumnDefinitions="*,Auto,Auto" IsVisible="{Binding Environments.HasEnvironment}">
               <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
-                <TextBlock Classes="heading" Text="{Binding EnvironmentName}" VerticalAlignment="Center" />
-                <TextBlock Classes="mono meta" VerticalAlignment="Center"
-                           Text="collections/env.qa-internal.yaml" />
+                <TextBlock Classes="heading" Text="{Binding Environments.Name}" VerticalAlignment="Center" />
+                <TextBlock Classes="mono meta" VerticalAlignment="Center" Text="{Binding Environments.FilePath}" />
               </StackPanel>
-              <Button Grid.Column="1" Content="+ add variable" Name="AddVariableButton" />
+              <Button Grid.Column="1" Content="Save" Command="{Binding Environments.SaveCommand}" />
+              <Button Grid.Column="2" Content="+ add variable" Command="{Binding Environments.AddVariableCommand}" />
             </Grid>
 
-            <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1">
+            <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1"
+                    IsVisible="{Binding Environments.HasEnvironment}">
               <StackPanel>
 
                 <Border Height="{DynamicResource RowHeight}" Padding="8,0"
                         BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
-                  <Grid ColumnDefinitions="200,*,*">
+                  <Grid ColumnDefinitions="200,*,*,32">
                     <TextBlock Grid.Column="0" Classes="meta" Text="Variable" VerticalAlignment="Center" />
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                       <TextBlock Text="●" Foreground="{DynamicResource Share}" FontSize="9" />
@@ -100,11 +101,13 @@
                       <StackPanel>
                         <Border Height="{DynamicResource RowHeight}" Padding="8,0"
                                 BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
-                          <Grid ColumnDefinitions="200,*,*">
-                            <TextBlock Grid.Column="0" Classes="mono" VerticalAlignment="Center"
-                                       Text="{Binding Name}" />
-                            <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center"
-                                       Text="{Binding SharedDisplay}" />
+                          <Grid ColumnDefinitions="200,*,*,32">
+                            <TextBox Grid.Column="0" Classes="mono" BorderThickness="0" Background="Transparent"
+                                     Padding="0" VerticalAlignment="Center" PlaceholderText="name"
+                                     Text="{Binding Name}" />
+                            <TextBox Grid.Column="1" Classes="mono" BorderThickness="0" Background="Transparent"
+                                     Padding="0" VerticalAlignment="Center" PlaceholderText="value"
+                                     Text="{Binding SharedValue}" IsVisible="{Binding !IsLocal}" />
                             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
                                         VerticalAlignment="Center">
                               <TextBlock Text="▲" FontSize="10" Foreground="{DynamicResource Secret}"
@@ -112,6 +115,10 @@
                               <TextBlock Classes="mono" Text="{Binding LocalDisplay}" />
                               <TextBlock Classes="meta" Text="{Binding LocalSource}" />
                             </StackPanel>
+                            <Button Grid.Column="3" Classes="bare" Content="×" VerticalAlignment="Center"
+                                    AutomationProperties.Name="Delete variable"
+                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).Environments.DeleteVariableCommand}"
+                                    CommandParameter="{Binding}" />
                           </Grid>
                         </Border>
 
@@ -124,8 +131,7 @@
                                 Padding="10,6" IsVisible="{Binding HasSharedSecretWarning}">
                           <Grid ColumnDefinitions="*,Auto">
                             <TextBlock Grid.Column="0" Classes="meta" TextWrapping="Wrap"
-                                       VerticalAlignment="Center"
-                                       Text="This looks like a secret and it is in the shared column, so it will be committed." />
+                                       VerticalAlignment="Center" Text="{Binding SecretReason}" />
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
                               <Button Content="Move to local" Height="20"
                                       Command="{Binding MoveToLocalCommand}" />
@@ -142,8 +148,25 @@
               </StackPanel>
             </Border>
 
-            <TextBlock Classes="meta" TextWrapping="Wrap"
-                       Text="Shared values live in the collection folder. Local values live in the operating system credential store and are never written to any file Courier creates." />
+            <TextBlock Classes="meta" TextWrapping="Wrap" IsVisible="{Binding Environments.HasEnvironment}"
+                       Text="Shared values live in the collection folder. Local values live in the operating system credential store and are never written to any file Courier creates. Move to local, then Save, to actually store a value there." />
+
+            <!--
+              No environment loaded: either this collection has none derived yet (environments today
+              usually come from a scan) or no folder is open at all.
+            -->
+            <StackPanel Spacing="10" IsVisible="{Binding !Environments.HasEnvironment}">
+              <TextBlock Classes="meta" TextWrapping="Wrap" IsVisible="{Binding Environments.HasFolder}"
+                         Text="No environment is selected for this collection. Environments are usually derived from a scan, but you can start one from scratch." />
+              <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding Environments.HasFolder}">
+                <TextBox Grid.Column="0" PlaceholderText="Environment name, e.g. QA-Internal"
+                         Text="{Binding Environments.NewEnvironmentName}" />
+                <Button Grid.Column="1" Content="Create environment"
+                        Command="{Binding Environments.NewEnvironmentCommand}" />
+              </Grid>
+              <TextBlock Classes="meta" TextWrapping="Wrap" IsVisible="{Binding !Environments.HasFolder}"
+                         Text="Open a collection folder first." />
+            </StackPanel>
 
           </StackPanel>
         </ScrollViewer>

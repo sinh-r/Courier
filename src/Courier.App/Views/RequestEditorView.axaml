@@ -67,7 +67,7 @@
             Variable references stay visible as {{name}} and resolve on hover, so the user can see
             what will actually be sent without the URL becoming unreadable. CORE-04.
           -->
-          <TextBox Grid.Column="2"
+          <TextBox Grid.Column="2" Name="UrlBox"
                    Text="{Binding Tabs.Active.Url, Mode=TwoWay}"
                    PlaceholderText="{}{{baseUrl}}/api/v2/orders/{id}"
                    AutomationProperties.Name="Request URL" />

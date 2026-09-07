@@ -170,19 +170,39 @@ has any. Verified end to end against a live, running clone of
 real 200s with real bodies, an unfilled path parameter refused by name before any network call, and
 a filled one reaching the server with the value substituted into the URL.
 
+**The environment editor, response tabs, and curl now work from the GUI.** `EnvironmentsViewModel`
+used to be a mock — a hardcoded `"QA-Internal"` name, an empty row list with no command behind
+`+ add variable` — and `MoveToLocal` threw the value away instead of moving it to the credential
+store. Both are fixed: an environment can be created from scratch, edited and saved
+(`CollectionLoader.SaveEnvironment`), a value moved to local actually round-trips through the OS
+credential store, and the SEC-03 warning now appears while typing rather than only after a save,
+showing `SecretClassification.Reason` rather than a fixed sentence. The response pane's Body,
+Headers and Raw tabs are real — bound to `ResponseViewModel.Mode` and `ExchangeResult`'s request and
+response headers, with the search bar's prev/next buttons wired to `MoveToMatch` and `ScrollToRow`,
+which previously had no callers. curl now works in both directions: pasting a curl command into the
+URL box imports it (splitting the query string into the Params grid, and surfacing a stripped `-u`
+password or a rejected `--insecure` through the existing capsule banner), and the active tab can be
+copied back out as a runnable curl command from the response toolbar or the app menu — variables stay
+as `{{name}}` references, never resolved. Verified with new tests for the environment save/load round
+trip and the curl import/export round trip.
+
 Still open, tracked as backlog rather than fixed in this pass:
 
 - Auth is not applied on the GUI send path — `TabState.AuthProfile` is read by nothing, and no
   `IAuthProvider` is called anywhere in the app. An anonymous endpoint sends fine; an authenticated
   one will not.
-- The environment **editor** (add/edit variables, the shared-vs-local split, secret-shaped-value
-  warnings) does not exist — environments can be loaded and selected, not created or edited, in the
-  GUI.
-- Scanner-generated assertions are not evaluated on Send; the response "Tests" tab stays empty.
+- Renaming or deleting an environment from the editor is not supported — `SecretKeyFor` embeds the
+  environment name, so a rename would orphan every secret stored under it, and that migration is not
+  built yet.
+- Scanner-generated assertions are still not evaluated on Send. The response "Tests" tab and the
+  "Server" tab (no telemetry backend is configured for any collection yet) are both rendered but
+  deliberately kept `IsEnabled="False"` with a tooltip naming why, rather than shown empty.
+- The response "Preview" mode (for HTML or image bodies) is disabled the same way — there is no
+  renderer for either anywhere in the app yet.
 
 - A further ~24 buttons across the capsule, telemetry and first-run dialogs remain unwired (each
   maps to a real, already-implemented library call — see the plan's Stage 5).
-- Five substantial subsystems still have no UI or CLI entry point: the Postman and curl importers,
+- Four substantial subsystems still have no UI or CLI entry point: the Postman importer,
   `DtoSampleGenerator`, the App Insights/Datadog telemetry sources, and the Azure DevOps work-item
   client.
 - OpenAPI import and the semantic (Roslyn workspace) scan tier do not exist yet — the semantic tier

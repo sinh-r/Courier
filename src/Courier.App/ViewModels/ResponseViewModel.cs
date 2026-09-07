@@ -1,5 +1,6 @@
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Courier.Core.Http;
 using Courier.Core.Rendering;
 
@@ -35,10 +36,14 @@ public sealed partial class ResponseViewModel : ObservableObject, IDisposable
     private int _currentMatch;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPrettyMode))]
+    [NotifyPropertyChangedFor(nameof(IsRawMode))]
     private ResponseMode _mode = ResponseMode.Pretty;
 
     [ObservableProperty]
     private bool _showEntireBody;
+
+    private string? _rawTextCache;
 
     public ResponseViewModel(ExchangeResult result)
     {
@@ -49,6 +54,27 @@ public sealed partial class ResponseViewModel : ObservableObject, IDisposable
     public ExchangeResult Result { get; }
 
     public JsonIndex? Index { get; private set; }
+
+    public bool IsPrettyMode => Mode == ResponseMode.Pretty;
+
+    public bool IsRawMode => Mode == ResponseMode.Raw;
+
+    /// <summary>Request headers, one row per value — a repeated header name appears as repeated rows.</summary>
+    public IReadOnlyList<HeaderRow> RequestHeaders { get; private set; } = [];
+
+    public IReadOnlyList<HeaderRow> ResponseHeaders { get; private set; } = [];
+
+    /// <summary>The raw text view, cached — a 4MB decode on every tab flip would defeat PERF-03.</summary>
+    public string RawBodyText => _rawTextCache ??= RawText();
+
+    [RelayCommand]
+    private void SetMode(string mode)
+    {
+        if (Enum.TryParse<ResponseMode>(mode, out var parsed))
+        {
+            Mode = parsed;
+        }
+    }
 
     /// <summary>True when the body is larger than the display limit. Drives the banner.</summary>
     public bool IsTruncatedForDisplay { get; private set; }
@@ -117,11 +143,15 @@ public sealed partial class ResponseViewModel : ObservableObject, IDisposable
 
     private void Load()
     {
+        RequestHeaders = [.. Result.Request.Headers.Select(h => new HeaderRow(h.Key, h.Value))];
+
         var response = Result.Response;
         if (response is null)
         {
             return;
         }
+
+        ResponseHeaders = [.. response.Headers.Select(h => new HeaderRow(h.Key, h.Value))];
 
         _buffer = response.BodyPath is not null
             ? ResponseBuffer.FromFile(response.BodyPath, deleteOnDispose: false)
@@ -147,7 +177,9 @@ public sealed partial class ResponseViewModel : ObservableObject, IDisposable
         ShowEntireBody = true;
         Index = JsonIndex.TryBuild(Span);
         Tree = Index is null ? null : new JsonTreeProjection(Index);
+        _rawTextCache = null;
         OnPropertyChanged(nameof(StructureText));
+        OnPropertyChanged(nameof(RawBodyText));
         Search(SearchTerm);
     }
 
@@ -219,3 +251,7 @@ public enum ResponseMode
     Raw,
     Preview,
 }
+
+/// <summary>One header row for the Headers tab. A plain record rather than a raw KeyValuePair so
+/// compiled bindings have a named type to resolve <c>Name</c>/<c>Value</c> against.</summary>
+public sealed record HeaderRow(string Name, string Value);
