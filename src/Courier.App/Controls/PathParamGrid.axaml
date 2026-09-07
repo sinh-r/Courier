@@ -1,0 +1,39 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             x:Class="Courier.App.Controls.PathParamGrid">
+
+  <!--
+    Route parameters, derived from the URL's {tokens}. Unlike Params/Headers this set is not
+    user-editable: the names come from the URL, only the values are, there is no delete and no
+    trailing blank row, because there is nothing here for the user to add or remove.
+  -->
+  <DockPanel LastChildFill="True">
+
+    <Border DockPanel.Dock="Top" Height="{DynamicResource RowHeight}"
+            BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
+      <Grid ColumnDefinitions="220,*">
+        <TextBlock Grid.Column="0" Classes="meta" Text="Name" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="1" Classes="meta" Text="Value" VerticalAlignment="Center" />
+      </Grid>
+    </Border>
+
+    <ItemsControl Name="Rows">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:PathParamRowViewModel">
+          <Border BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
+            <Grid ColumnDefinitions="220,*" Height="{DynamicResource RowHeight}">
+              <TextBlock Grid.Column="0" Classes="mono" Text="{Binding Name}" VerticalAlignment="Center" />
+              <TextBox Grid.Column="1" Classes="chrome" BorderThickness="0" Background="Transparent"
+                       Padding="0" VerticalAlignment="Center"
+                       Text="{Binding Value, Mode=TwoWay}"
+                       AutomationProperties.Name="Value" />
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+  </DockPanel>
+
+</UserControl>

@@ -1,5 +1,5 @@
 using System.CommandLine;
-using Courier.Cli.Services;
+using Courier.Core.Collections;
 using Courier.Core.Export;
 
 namespace Courier.Cli.Commands;

@@ -120,53 +120,27 @@ public sealed class CollectionRunner
         var scopes = new VariableScopes
         {
             Request = context.Variables.AsReadOnly(),
+            Environment = plan.Environment,
             Collection = context.CollectionVariables.AsReadOnly(),
             Global = context.Environment.AsReadOnly(),
         };
 
-        var url = await _variables.SubstituteAsync(request.Url, scopes, ct).ConfigureAwait(false);
+        var preparation = await RequestPreparer.PrepareAsync(
+            request,
+            scopes,
+            _variables,
+            plan.CollectionHeaders,
+            plan.DefaultSettings,
+            plan.InjectTraceParent,
+            plan.EnvironmentName,
+            ct).ConfigureAwait(false);
 
-        foreach (var (name, value) in request.PathParams)
+        if (!preparation.Succeeded)
         {
-            url = url with { Text = url.Text.Replace($"{{{name}}}", value, StringComparison.Ordinal) };
+            return new RequestRunResult(request.Name, request.Method, request.Url, null, [], scriptRuns, preparation.Error);
         }
 
-        if (!Uri.TryCreate(url.Text, UriKind.Absolute, out var uri))
-        {
-            return new RequestRunResult(
-                request.Name, request.Method, url.Text, null, [], scriptRuns,
-                url.Unbound.Count > 0
-                    ? $"The URL still has unresolved variables: {string.Join(", ", url.Unbound)}"
-                    : $"'{url.Text}' is not an absolute URL.");
-        }
-
-        var headers = new List<KeyValuePair<string, string>>();
-        foreach (var header in request.Headers.Where(h => h.Enabled))
-        {
-            var value = await _variables.SubstituteAsync(header.Value, scopes, ct).ConfigureAwait(false);
-            headers.Add(new KeyValuePair<string, string>(header.Name, value.Text));
-        }
-
-        byte[]? body = null;
-        if (request.Body?.Text is { Length: > 0 } text)
-        {
-            var substituted = await _variables.SubstituteAsync(text, scopes, ct).ConfigureAwait(false);
-            body = Encoding.UTF8.GetBytes(substituted.Text);
-        }
-
-        var prepared = new PreparedRequest
-        {
-            Method = request.Method,
-            Url = uri,
-            Headers = headers,
-            BodyBytes = body,
-            ContentType = request.Body?.ResolveContentType(),
-            Settings = request.Settings.InheritFrom(plan.DefaultSettings),
-            EnvironmentName = plan.EnvironmentName,
-            InjectTraceParent = plan.InjectTraceParent,
-        };
-
-        var result = await _executor.SendAsync(prepared, ct).ConfigureAwait(false);
+        var result = await _executor.SendAsync(preparation.Request!, ct).ConfigureAwait(false);
 
         var postResponse = _scripts.RunPostResponse(request.Scripts?.PostResponse, context, result);
         scriptRuns.Add(postResponse);
@@ -176,7 +150,7 @@ public sealed class CollectionRunner
         return new RequestRunResult(
             request.Name,
             request.Method,
-            uri.ToString(),
+            preparation.Request!.Url.ToString(),
             result,
             assertions,
             scriptRuns,
@@ -193,11 +167,21 @@ public sealed record RunPlan
 
     public string? EnvironmentName { get; init; }
 
+    /// <summary>
+    /// The environment itself, so CORE-04's resolution can reach <c>LocalNames</c> and the
+    /// credential store behind them — not just the shared values already flattened into
+    /// <see cref="EnvironmentVariables"/> for script access.
+    /// </summary>
+    public EnvironmentDefinition? Environment { get; init; }
+
     public IReadOnlyDictionary<string, string> EnvironmentVariables { get; init; } =
         new Dictionary<string, string>(StringComparer.Ordinal);
 
     public IReadOnlyDictionary<string, string> CollectionVariables { get; init; } =
         new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>Applied to every request unless overridden. From <c>collection.yaml</c>.</summary>
+    public IReadOnlyList<HeaderValue> CollectionHeaders { get; init; } = [];
 
     public IReadOnlyList<IReadOnlyDictionary<string, string>> Data { get; init; } = [];
 

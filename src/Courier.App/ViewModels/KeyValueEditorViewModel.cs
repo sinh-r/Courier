@@ -131,9 +131,17 @@ public sealed partial class KeyValueRowViewModel : ObservableObject
 
     partial void OnEnabledChanged(bool value) => _onChanged(this);
 
-    partial void OnNameChanged(string value) => _onChanged(this);
+    partial void OnNameChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsBlank));
+        _onChanged(this);
+    }
 
-    partial void OnValueChanged(string value) => _onChanged(this);
+    partial void OnValueChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsBlank));
+        _onChanged(this);
+    }
 
     partial void OnDescriptionChanged(string? value) => _onChanged(this);
 

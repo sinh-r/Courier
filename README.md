@@ -153,7 +153,32 @@ a minimal-API project scanned as zero endpoints, silently. Verified end to end a
 (19 controller-based endpoints, 0 unresolved) and against `dotnet/eShop`'s minimal-API catalog
 service, plus a new `samples/Minimal.Api` fixture with its own golden tests.
 
+**A scanned request can now actually be sent.** Send used to build an empty `VariableScopes` — so
+`{{baseUrl}}` could never resolve — then abandon the request silently the moment the URL failed to
+parse; `courier run` had the only correct implementation, in `CollectionRunner`. That preparation
+logic is now `RequestPreparer`, shared by both callers: it substitutes variables and path
+parameters, layers default headers under the collection's under the request's own, and reports a
+plain-English reason (which variable, which unfilled `{param}`, which malformed URL) instead of
+doing nothing. Environments are no longer a dead end either — `EnvironmentReader`'s derived
+`baseUrl` is now written to `environments/*.env.yaml` on import, `collection.yaml` is read for the
+first time by the app (`Variables`, `Headers`, `Settings`, `InjectTraceParent`, all previously
+inert), and the title-bar picker actually switches between them. Courier also sends an `Accept` and
+a `User-Agent` for the first time, shown as overridable inherited rows in the Headers grid rather
+than applied invisibly. A new Path tab holds route-parameter values, appearing only when the URL
+has any. Verified end to end against a live, running clone of
+[gothinkster/aspnetcore-realworld-example-app](https://github.com/gothinkster/aspnetcore-realworld-example-app):
+real 200s with real bodies, an unfilled path parameter refused by name before any network call, and
+a filled one reaching the server with the value substituted into the URL.
+
 Still open, tracked as backlog rather than fixed in this pass:
+
+- Auth is not applied on the GUI send path — `TabState.AuthProfile` is read by nothing, and no
+  `IAuthProvider` is called anywhere in the app. An anonymous endpoint sends fine; an authenticated
+  one will not.
+- The environment **editor** (add/edit variables, the shared-vs-local split, secret-shaped-value
+  warnings) does not exist — environments can be loaded and selected, not created or edited, in the
+  GUI.
+- Scanner-generated assertions are not evaluated on Send; the response "Tests" tab stays empty.
 
 - A further ~24 buttons across the capsule, telemetry and first-run dialogs remain unwired (each
   maps to a real, already-implemented library call — see the plan's Stage 5).

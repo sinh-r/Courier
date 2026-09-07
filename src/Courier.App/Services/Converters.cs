@@ -157,7 +157,8 @@ public sealed class DialogIsSettingsConverter : IValueConverter
             or DialogKind.TrustAndNetwork
             or DialogKind.Storage
             or DialogKind.Keyboard
-            or DialogKind.Appearance;
+            or DialogKind.Appearance
+            or DialogKind.DefaultHeaders;
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();

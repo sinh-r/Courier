@@ -13,7 +13,6 @@ namespace Courier.App.ViewModels;
 public sealed partial class CollectionTreeViewModel : ObservableObject
 {
     private readonly AppServices _services;
-    private readonly CollectionSerializer _serializer = new();
 
     [ObservableProperty]
     private string _filter = string.Empty;
@@ -23,6 +22,12 @@ public sealed partial class CollectionTreeViewModel : ObservableObject
 
     [ObservableProperty]
     private string? _collectionName;
+
+    /// <summary>
+    /// <c>collection.yaml</c> for the open folder. Carries the shared variables, default headers
+    /// and settings CORE-04/CORE-11 promise a collection applies to every request in it.
+    /// </summary>
+    public CollectionDefinition? Definition { get; private set; }
 
     [ObservableProperty]
     private TreeNode? _selected;
@@ -89,7 +94,12 @@ public sealed partial class CollectionTreeViewModel : ObservableObject
         CollectionName = Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar));
         Roots.Clear();
 
-        var requests = await LoadRequestsAsync(folder, ct).ConfigureAwait(true);
+        // Loaded the same way the CLI loads it, so collection.yaml's variables, headers and
+        // settings are finally something the GUI can see too, not just courier run.
+        var loaded = await Task.Run(() => CollectionLoader.Load(folder), ct).ConfigureAwait(true);
+        Definition = loaded.Definition;
+        var requests = loaded.Requests;
+
         var root = new TreeNode(CollectionName ?? "Collection", TreeNodeKind.Collection);
 
         foreach (var group in requests.GroupBy(r => r.Folder ?? string.Empty).OrderBy(g => g.Key, StringComparer.Ordinal))
@@ -113,65 +123,6 @@ public sealed partial class CollectionTreeViewModel : ObservableObject
         ApplyFilter();
 
         await RefreshGitStatusAsync(ct).ConfigureAwait(true);
-    }
-
-    /// <summary>
-    /// Loads the generated set, the overlay, and any hand-authored request files, then joins them.
-    /// The join happens in memory on every load, which is what makes SCAN-09 and P3 true:
-    /// regenerating cannot lose an edit because the two files are never merged on disk.
-    /// </summary>
-    private async Task<IReadOnlyList<RequestDefinition>> LoadRequestsAsync(string folder, CancellationToken ct)
-    {
-        var requests = new List<RequestDefinition>();
-
-        var generatedPath = Path.Combine(folder, CollectionFormat.GeneratedFileName);
-        var overlayPath = Path.Combine(folder, CollectionFormat.OverlayFileName);
-
-        if (File.Exists(generatedPath))
-        {
-            var generated = _serializer.DeserializeGenerated(
-                await File.ReadAllTextAsync(generatedPath, ct).ConfigureAwait(false));
-
-            var overlay = File.Exists(overlayPath)
-                ? _serializer.DeserializeOverlay(await File.ReadAllTextAsync(overlayPath, ct).ConfigureAwait(false))
-                : new OverlaySet();
-
-            requests.AddRange(GeneratedOverlayJoiner.Join(generated, overlay));
-        }
-
-        var requestsFolder = Path.Combine(folder, CollectionFormat.RequestsFolder);
-        if (Directory.Exists(requestsFolder))
-        {
-            foreach (var file in Directory.EnumerateFiles(
-                requestsFolder,
-                $"*{CollectionFormat.RequestFileExtension}",
-                SearchOption.AllDirectories))
-            {
-                try
-                {
-                    var request = _serializer.DeserializeRequest(
-                        await File.ReadAllTextAsync(file, ct).ConfigureAwait(false));
-
-                    request.Folder ??= Path.GetRelativePath(requestsFolder, Path.GetDirectoryName(file)!)
-                        .Replace(Path.DirectorySeparatorChar, '/')
-                        .TrimStart('.');
-
-                    requests.Add(request);
-                }
-                catch (CollectionFormatException)
-                {
-                    // A file Courier cannot read is listed as unreadable rather than dropped, for
-                    // the same reason an unresolvable endpoint is: silence is the hostile outcome.
-                    requests.Add(new RequestDefinition
-                    {
-                        Name = Path.GetFileNameWithoutExtension(file),
-                        UnresolvedNotes = ["This file could not be read as a Courier request."],
-                    });
-                }
-            }
-        }
-
-        return requests;
     }
 
     /// <summary>

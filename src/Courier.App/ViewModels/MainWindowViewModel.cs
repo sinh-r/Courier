@@ -26,12 +26,24 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private readonly AppServices _services;
     private readonly DispatcherTimer _elapsedTimer;
     private ScanResult? _lastScanResult;
+    private IReadOnlyList<HeaderValue> _defaultHeaders = [];
 
     /// <summary>The window this shell is drawn in, set once the window opens. Needed for file pickers.</summary>
     public TopLevel? TopLevel { get; set; }
 
+    /// <summary>
+    /// "None", or a name in <see cref="AvailableEnvironments"/>. Two-way bound from the picker;
+    /// <see cref="OnEnvironmentNameChanged"/> is what actually loads the environment.
+    /// </summary>
     [ObservableProperty]
-    private string _environmentName = "Local";
+    private string _environmentName = "None";
+
+    /// <summary>
+    /// The loaded environment behind <see cref="EnvironmentName"/>, so CORE-04's resolution can
+    /// reach <c>Shared</c> and, via <c>LocalNames</c>, the credential store. Null for "None".
+    /// </summary>
+    [ObservableProperty]
+    private EnvironmentDefinition? _activeEnvironment;
 
     [ObservableProperty]
     private string _themeName = "System";
@@ -79,6 +91,29 @@ public sealed partial class MainWindowViewModel : ObservableObject
         SyncReview = new SyncReviewViewModel();
         Telemetry = new TelemetryReconstructViewModel();
 
+        _defaultHeaders = AppSettingsStore.Load().DefaultHeaders;
+        DefaultHeadersEditor = new KeyValueEditorViewModel(rows =>
+        {
+            _defaultHeaders = [.. rows.Select(r => new HeaderValue(r.Name, r.Value, r.Enabled))];
+
+            var settings = AppSettingsStore.Load();
+            settings.DefaultHeaders = [.. _defaultHeaders];
+            AppSettingsStore.Save(settings);
+
+            OnPropertyChanged(nameof(InheritedHeadersForActiveTab));
+        });
+        DefaultHeadersEditor.Load(_defaultHeaders.Select(h => (h.Name, h.Value, h.Enabled, (string?)null)));
+
+        // The Headers tab's "inherited" rows depend on which tab is active; this is what makes
+        // switching tabs refresh them.
+        Tabs.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is null or nameof(TabCollection.Active))
+            {
+                OnPropertyChanged(nameof(InheritedHeadersForActiveTab));
+            }
+        };
+
         CrashLog.Secrets = services.SecretRegistry;
 
         // One empty tab so the request pane has something to bind to on a first launch. Session
@@ -119,6 +154,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public SyncReviewViewModel SyncReview { get; }
 
     public TelemetryReconstructViewModel Telemetry { get; }
+
+    /// <summary>Environment names the open collection has, plus "None". Feeds the title-bar picker.</summary>
+    public ObservableCollection<string> AvailableEnvironments { get; } = ["None"];
+
+    /// <summary>Settings' "Default headers" grid. Accept/User-Agent by default; user-editable.</summary>
+    public KeyValueEditorViewModel DefaultHeadersEditor { get; }
 
     public ObservableCollection<HistoryEntry> History { get; } = [];
 
@@ -222,8 +263,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Tabs.Open(TabState.FromDefinition(request, Tree.CollectionName, EnvironmentName));
 
     /// <summary>
-    /// Sends the active tab's request. CORE-01. Variable substitution runs first so the URL, headers
-    /// and body that go on the wire match what CORE-04's hover already promised the user.
+    /// Sends the active tab's request. CORE-01. Delegates the actual preparation to
+    /// <see cref="RequestPreparer"/> — the same code <c>courier run</c> uses — rather than the
+    /// empty-scopes, no-path-params, silently-abandoned version this used to be.
     /// </summary>
     [RelayCommand]
     public async Task SendAsync()
@@ -233,72 +275,54 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
+        tab.SendError = null;
         var ct = tab.BeginSend();
 
         try
         {
-            var scopes = new VariableScopes();
+            var request = state.ToDefinition();
 
-            var urlResult = await _services.Variables.SubstituteAsync(state.Url, scopes, ct).ConfigureAwait(true);
-            if (!Uri.TryCreate(urlResult.Text, UriKind.Absolute, out var uri))
+            var scopes = new VariableScopes
             {
+                Environment = ActiveEnvironment,
+                Collection = Tree.Definition?.Variables ?? new Dictionary<string, string>(StringComparer.Ordinal),
+            };
+
+            var inheritedHeaders = new Dictionary<string, HeaderValue>(StringComparer.OrdinalIgnoreCase);
+            foreach (var header in _defaultHeaders)
+            {
+                inheritedHeaders[header.Name] = header;
+            }
+
+            foreach (var header in Tree.Definition?.Headers ?? [])
+            {
+                inheritedHeaders[header.Name] = header;
+            }
+
+            var preparation = await RequestPreparer.PrepareAsync(
+                request,
+                scopes,
+                _services.Variables,
+                [.. inheritedHeaders.Values],
+                Tree.Definition?.Settings,
+                Tree.Definition?.InjectTraceParent ?? false,
+                EnvironmentName == "None" ? null : EnvironmentName,
+                ct).ConfigureAwait(true);
+
+            if (!preparation.Succeeded)
+            {
+                tab.SendError = preparation.Error;
                 return;
             }
 
-            var enabledQuery = state.Query.Where(q => q.Enabled && q.Name.Length > 0).ToList();
-            if (enabledQuery.Count > 0)
-            {
-                var pairs = new List<string>();
-                if (!string.IsNullOrEmpty(uri.Query))
-                {
-                    pairs.Add(uri.Query.TrimStart('?'));
-                }
-
-                foreach (var q in enabledQuery)
-                {
-                    var value = await _services.Variables.SubstituteAsync(q.Value, scopes, ct).ConfigureAwait(true);
-                    pairs.Add($"{Uri.EscapeDataString(q.Name)}={Uri.EscapeDataString(value.Text)}");
-                }
-
-                uri = new UriBuilder(uri) { Query = string.Join("&", pairs) }.Uri;
-            }
-
-            var headers = new List<KeyValuePair<string, string>>();
-            foreach (var h in state.Headers.Where(h => h.Enabled && h.Name.Length > 0))
-            {
-                var value = await _services.Variables.SubstituteAsync(h.Value, scopes, ct).ConfigureAwait(true);
-                headers.Add(new KeyValuePair<string, string>(h.Name, value.Text));
-            }
-
-            byte[]? bodyBytes = null;
-            string? contentType = null;
-
-            if (state.BodyKind != BodyKind.None && !string.IsNullOrEmpty(state.BodyText))
-            {
-                var body = await _services.Variables.SubstituteAsync(state.BodyText, scopes, ct).ConfigureAwait(true);
-                bodyBytes = System.Text.Encoding.UTF8.GetBytes(body.Text);
-                contentType = new RequestBody { Kind = state.BodyKind }.ResolveContentType();
-            }
-
-            var prepared = new PreparedRequest
-            {
-                Method = string.IsNullOrWhiteSpace(state.Method) ? "GET" : state.Method,
-                Url = uri,
-                Headers = headers,
-                BodyBytes = bodyBytes,
-                ContentType = contentType,
-                Settings = state.Settings,
-                EnvironmentName = state.EnvironmentName,
-            };
-
-            var result = await _services.Executor.SendAsync(prepared, ct).ConfigureAwait(true);
+            var result = await _services.Executor.SendAsync(preparation.Request!, ct).ConfigureAwait(true);
 
             tab.Response?.Dispose();
             tab.Response = new ResponseViewModel(result);
 
             var database = await _services.DatabaseAsync().ConfigureAwait(true);
             await new HistoryStore(database)
-                .RecordAsync(result, state.EnvironmentName, Tree.CollectionName, state.EndpointId ?? state.RequestPath, ct)
+                .RecordAsync(result, EnvironmentName, Tree.CollectionName, state.EndpointId ?? state.RequestPath, ct)
                 .ConfigureAwait(true);
 
             HistoryCount++;
@@ -369,6 +393,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         await Tree.OpenFolderAsync(path).ConfigureAwait(true);
         CollectionSyncStatus = $"{Tree.CollectionName} open";
+        RefreshAvailableEnvironments();
         Dialog = DialogKind.None;
     }
 
@@ -534,9 +559,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         CollectionWriter.Write(SyncReview.OutputPath, result, "baseUrl");
+        CollectionWriter.WriteEnvironments(SyncReview.OutputPath, result);
+        CollectionWriter.WriteCollectionDefinition(
+            SyncReview.OutputPath,
+            Path.GetFileName(SyncReview.OutputPath.TrimEnd(Path.DirectorySeparatorChar)));
 
         await Tree.OpenFolderAsync(SyncReview.OutputPath).ConfigureAwait(true);
         CollectionSyncStatus = $"{Tree.CollectionName} open";
+        RefreshAvailableEnvironments();
         Dialog = DialogKind.None;
     }
 
@@ -568,7 +598,93 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public void SetTheme(string preference)
     {
         ThemeName = preference;
-        AppSettingsStore.Save(new AppSettings { Theme = preference });
+
+        // Load-modify-save: AppSettingsStore.Save replaces the whole file, so writing a fresh
+        // AppSettings here would have silently reset the default headers back to the type's
+        // defaults every time the user changed theme.
+        var settings = AppSettingsStore.Load();
+        settings.Theme = preference;
+        AppSettingsStore.Save(settings);
+    }
+
+    /// <summary>
+    /// Loads the picked environment. This is what the title-bar picker being a plain ComboBox two
+    /// wired to a string still gets right: no separate "select" command needed, and switching tabs
+    /// or reopening a collection can just set the property.
+    /// </summary>
+    partial void OnEnvironmentNameChanged(string value)
+    {
+        if (value == "None" || Tree.Folder is null)
+        {
+            ActiveEnvironment = null;
+            EnvironmentHasSecrets = false;
+            return;
+        }
+
+        ActiveEnvironment = CollectionLoader.LoadEnvironment(Tree.Folder, value);
+        EnvironmentHasSecrets = ActiveEnvironment?.LocalNames.Count > 0;
+    }
+
+    /// <summary>
+    /// Rebuilds the environment list from disk. Called after opening a folder and after applying a
+    /// scan, since either can add environment files that were not there before.
+    /// </summary>
+    private void RefreshAvailableEnvironments()
+    {
+        AvailableEnvironments.Clear();
+        AvailableEnvironments.Add("None");
+
+        if (Tree.Folder is null)
+        {
+            return;
+        }
+
+        foreach (var name in CollectionLoader.ListEnvironments(Tree.Folder))
+        {
+            AvailableEnvironments.Add(name);
+        }
+
+        // A single environment is the common case for a freshly imported collection, and picking
+        // it automatically is what lets Send work without an extra click nobody would expect to need.
+        if (AvailableEnvironments.Count > 1 && EnvironmentName == "None")
+        {
+            EnvironmentName = AvailableEnvironments[1];
+        }
+    }
+
+    /// <summary>
+    /// App defaults and the collection's own headers that are not already overridden by the active
+    /// tab's own headers — shown as muted rows above the editable Headers grid. P4: nothing reaches
+    /// the wire that is not on screen, which this is the visible half of.
+    /// </summary>
+    public IReadOnlyList<InheritedHeaderRow> InheritedHeadersForActiveTab
+    {
+        get
+        {
+            if (Tabs.Active?.State is not { } state)
+            {
+                return [];
+            }
+
+            var requestNames = state.Headers
+                .Where(h => h.Enabled)
+                .Select(h => h.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var merged = new Dictionary<string, InheritedHeaderRow>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var header in _defaultHeaders.Where(h => h.Enabled))
+            {
+                merged[header.Name] = new InheritedHeaderRow(header.Name, header.Value, "default");
+            }
+
+            foreach (var header in Tree.Definition?.Headers.Where(h => h.Enabled) ?? [])
+            {
+                merged[header.Name] = new InheritedHeaderRow(header.Name, header.Value, "collection");
+            }
+
+            return [.. merged.Values.Where(r => !requestNames.Contains(r.Name))];
+        }
     }
 
     partial void OnThemeNameChanged(string value)
@@ -629,6 +745,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 }
 
+/// <param name="Origin">"default" or "collection" — where this header comes from, shown muted next to it.</param>
+public sealed record InheritedHeaderRow(string Name, string Value, string Origin);
+
 /// <summary>The modal surfaces, one per mock state.</summary>
 public enum DialogKind
 {
@@ -646,6 +765,7 @@ public enum DialogKind
     Storage,
     Keyboard,
     Appearance,
+    DefaultHeaders,
 }
 
 public enum InspectorLayout

@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             xmlns:controls="clr-namespace:Courier.App.Controls"
              xmlns:storage="clr-namespace:Courier.Core.Storage;assembly=Courier.Core"
              xmlns:abs="clr-namespace:Courier.Core.Abstractions;assembly=Courier.Core"
              x:Class="Courier.App.Views.Dialogs.SettingsView"
@@ -47,6 +48,9 @@
           <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                   Height="{DynamicResource RowHeight}" Padding="16,0" Content="Appearance"
                   Command="{Binding OpenDialogCommand}" CommandParameter="{x:Static vm:DialogKind.Appearance}" />
+          <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                  Height="{DynamicResource RowHeight}" Padding="16,0" Content="Default headers"
+                  Command="{Binding OpenDialogCommand}" CommandParameter="{x:Static vm:DialogKind.DefaultHeaders}" />
         </StackPanel>
       </Border>
 
@@ -394,6 +398,23 @@
               <Button Content="Match system" Command="{Binding SetThemeCommand}" CommandParameter="System" />
             </StackPanel>
             <TextBlock Classes="meta" Text="{Binding ThemeName, StringFormat='Current: {0}'}" />
+          </StackPanel>
+        </ScrollViewer>
+
+        <!--
+          Default headers. Accept and User-Agent by default — Courier sent neither before this
+          existed, and some WAF-fronted corporate APIs challenge a request with no User-Agent at
+          all. Applied under the collection's own headers and the request's own, which each win.
+        -->
+        <ScrollViewer Padding="16"
+                      IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=DefaultHeaders}">
+          <StackPanel Spacing="12">
+            <TextBlock Classes="heading" Text="Default headers" />
+            <TextBlock Classes="meta" TextWrapping="Wrap"
+                       Text="Applied to every request, under the collection's own headers and the request's own — each of those wins over this by name." />
+            <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1" Height="200">
+              <controls:KeyValueGrid ItemsSource="{Binding DefaultHeadersEditor.Rows}" />
+            </Border>
           </StackPanel>
         </ScrollViewer>
 

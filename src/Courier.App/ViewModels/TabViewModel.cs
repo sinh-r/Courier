@@ -50,6 +50,16 @@ public sealed partial class TabViewModel : ObservableObject
     [ObservableProperty]
     private TimeSpan _elapsed;
 
+    [ObservableProperty]
+    private string _url;
+
+    /// <summary>
+    /// Why the last Send could not build a request — an unresolved variable, an unfilled path
+    /// parameter, or a URL that is not absolute. Null when there is nothing to report. UI_SPEC 3.7.
+    /// </summary>
+    [ObservableProperty]
+    private string? _sendError;
+
     private Stopwatch? _sendStopwatch;
     private CancellationTokenSource? _sendCts;
 
@@ -58,6 +68,7 @@ public sealed partial class TabViewModel : ObservableObject
         State = state;
         _title = state.Title;
         _method = state.Method;
+        _url = state.Url;
         _isDirty = state.IsDirty;
 
         HeaderEditor = new KeyValueEditorViewModel(rows =>
@@ -82,6 +93,17 @@ public sealed partial class TabViewModel : ObservableObject
             MarkDirty();
         });
 
+        PathParamEditor = new PathParamEditorViewModel(values =>
+        {
+            if (State is null)
+            {
+                return;
+            }
+
+            State.PathParams = new Dictionary<string, string>(values, StringComparer.Ordinal);
+            MarkDirty();
+        });
+
         LoadRowsFromState();
     }
 
@@ -90,6 +112,9 @@ public sealed partial class TabViewModel : ObservableObject
 
     /// <summary>The Headers grid.</summary>
     public KeyValueEditorViewModel HeaderEditor { get; }
+
+    /// <summary>The Path tab. Row names come from the URL; only shown when there are any.</summary>
+    public PathParamEditorViewModel PathParamEditor { get; }
 
     private void LoadRowsFromState()
     {
@@ -100,7 +125,16 @@ public sealed partial class TabViewModel : ObservableObject
 
         HeaderEditor.Load(State.Headers.Select(h => (h.Name, h.Value, h.Enabled, h.Description)));
         QueryEditor.Load(State.Query.Select(q => (q.Name, q.Value, q.Enabled, q.Description)));
+
+        // _url is set directly (constructor) or already matches State.Url by invariant — nothing
+        // can touch State while a tab is suspended, so Activate() can never rehydrate a URL that
+        // has drifted from the field. Only the row set needs rebuilding here.
+        RefreshPathParams();
     }
+
+    private void RefreshPathParams() => PathParamEditor.SetTokens(
+        PathParameterNames.From(State?.Url ?? Url),
+        State?.PathParams ?? new Dictionary<string, string>());
 
     /// <summary>Null while suspended. Every access must go through <see cref="Activate"/> first.</summary>
     public TabState? State { get; private set; }
@@ -231,6 +265,22 @@ public sealed partial class TabViewModel : ObservableObject
     }
 
     partial void OnTitleChanged(string value) => OnPropertyChanged(nameof(DisplayTitle));
+
+    /// <summary>
+    /// The URL box binds here (rather than to <c>State.Url</c> directly) precisely so this exists:
+    /// <c>TabState</c> is a plain POCO with no change notification, so without this hook nothing
+    /// could tell the Path tab a token had appeared or disappeared as the user typed.
+    /// </summary>
+    partial void OnUrlChanged(string value)
+    {
+        if (State is not null && State.Url != value)
+        {
+            State.Url = value;
+            MarkDirty();
+        }
+
+        RefreshPathParams();
+    }
 
     /// <summary>
     /// Truncates from the middle, keeping the last segment whole because that is the part that

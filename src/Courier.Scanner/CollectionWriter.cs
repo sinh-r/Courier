@@ -45,6 +45,61 @@ public static class CollectionWriter
         WriteCache(folder, result);
     }
 
+    /// <summary>
+    /// Writes each environment the scan derived from <c>launchSettings.json</c>/
+    /// <c>appsettings.*.json</c>, so <c>{{baseUrl}}</c> has something to resolve against. SCAN-07.
+    /// </summary>
+    /// <remarks>
+    /// Never overwrites a file that already exists — same P3 reasoning as the overlay. A user who
+    /// has started editing <c>environments/Local.env.yaml</c> must not have it silently replaced by
+    /// the next rescan.
+    /// </remarks>
+    public static void WriteEnvironments(string folder, ScanResult result)
+    {
+        if (result.Environments.Count == 0)
+        {
+            return;
+        }
+
+        var environmentsFolder = Path.Combine(folder, CollectionFormat.EnvironmentsFolder);
+        Directory.CreateDirectory(environmentsFolder);
+
+        var serializer = new CollectionSerializer();
+
+        foreach (var environment in result.Environments)
+        {
+            var path = Path.Combine(
+                environmentsFolder,
+                $"{environment.Name}{CollectionFormat.EnvironmentFileExtension}");
+
+            if (File.Exists(path))
+            {
+                continue;
+            }
+
+            var definition = new EnvironmentDefinition { Name = environment.Name };
+            definition.Shared["baseUrl"] = environment.BaseUrl;
+
+            File.WriteAllText(path, serializer.SerializeEnvironment(definition));
+        }
+    }
+
+    /// <summary>
+    /// Writes <c>collection.yaml</c> if it does not exist yet. Never overwritten afterward: it is
+    /// where the user's own variables, headers and settings live once they start editing it.
+    /// </summary>
+    public static void WriteCollectionDefinition(string folder, string name)
+    {
+        var path = Path.Combine(folder, CollectionFormat.CollectionFileName);
+        if (File.Exists(path))
+        {
+            return;
+        }
+
+        var serializer = new CollectionSerializer();
+        File.WriteAllText(path, serializer.SerializeCollection(new CollectionDefinition { Name = name }));
+    }
+
     private static void WriteCache(string folder, ScanResult result) =>
         File.WriteAllText(
             Path.Combine(folder, CollectionFormat.ScanCacheFileName),

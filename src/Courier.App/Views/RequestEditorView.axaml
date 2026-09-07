@@ -36,6 +36,23 @@
         </StackPanel>
       </Border>
 
+      <!--
+        Send-preparation failures: an unresolved {{variable}}, an unfilled path parameter, or a URL
+        that is not absolute. UI_SPEC 3.7 — plain, active, specific, never "an error occurred".
+      -->
+      <Border DockPanel.Dock="Top"
+              Background="{DynamicResource Panel}"
+              BorderBrush="{DynamicResource Rule}"
+              BorderThickness="0,0,0,1"
+              Padding="8,4"
+              IsVisible="{Binding Tabs.Active.SendError, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False, TargetNullValue=False}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBlock Classes="meta" Text="▲" Foreground="{DynamicResource Secret}" />
+          <TextBlock Classes="meta" Foreground="{DynamicResource Secret}" TextWrapping="Wrap"
+                     Text="{Binding Tabs.Active.SendError}" />
+        </StackPanel>
+      </Border>
+
       <!-- URL bar. -->
       <Border DockPanel.Dock="Top" Height="32" Padding="8,0"
               BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
@@ -51,7 +68,7 @@
             what will actually be sent without the URL becoming unreadable. CORE-04.
           -->
           <TextBox Grid.Column="2"
-                   Text="{Binding Tabs.Active.State.Url}"
+                   Text="{Binding Tabs.Active.Url, Mode=TwoWay}"
                    PlaceholderText="{}{{baseUrl}}/api/v2/orders/{id}"
                    AutomationProperties.Name="Request URL" />
 
@@ -78,12 +95,43 @@
       <!-- Request sections. -->
       <TabControl DockPanel.Dock="Top" Padding="0" Background="Transparent">
 
+        <!--
+          Route parameters. Only present when the URL actually has {tokens} — most requests have
+          none, and a permanently-empty tab is worse than one that appears when it is relevant.
+        -->
+        <TabItem Header="Path"
+                 IsVisible="{Binding Tabs.Active.PathParamEditor.Rows.Count, Converter={StaticResource IsNotZeroConverter}}">
+          <controls:PathParamGrid ItemsSource="{Binding Tabs.Active.PathParamEditor.Rows}" />
+        </TabItem>
+
         <TabItem Header="Params">
           <controls:KeyValueGrid ItemsSource="{Binding Tabs.Active.QueryEditor.Rows}" />
         </TabItem>
 
         <TabItem Header="Headers">
-          <controls:KeyValueGrid ItemsSource="{Binding Tabs.Active.HeaderEditor.Rows}" />
+          <DockPanel LastChildFill="True">
+            <!--
+              Inherited headers: app defaults, then the collection's own — muted, with where each
+              came from, and only shown when the request has not already overridden that name. P4:
+              nothing reaches the wire that is not on screen.
+            -->
+            <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding InheritedHeadersForActiveTab}"
+                          IsVisible="{Binding InheritedHeadersForActiveTab.Count, Converter={StaticResource IsNotZeroConverter}}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:InheritedHeaderRow">
+                  <Border BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
+                    <Grid ColumnDefinitions="24,220,*,180" Height="{DynamicResource RowHeight}">
+                      <TextBlock Grid.Column="1" Classes="mono meta" Text="{Binding Name}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="2" Classes="mono meta" Text="{Binding Value}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="3" Classes="meta" Text="{Binding Origin}" VerticalAlignment="Center" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <controls:KeyValueGrid ItemsSource="{Binding Tabs.Active.HeaderEditor.Rows}" />
+          </DockPanel>
         </TabItem>
 
         <TabItem Header="Body" IsSelected="True">

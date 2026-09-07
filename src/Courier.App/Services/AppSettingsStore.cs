@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Courier.Core.Collections;
 using Courier.Core.Storage;
 
 namespace Courier.App.Services;
@@ -46,4 +47,19 @@ public sealed class AppSettings
 {
     /// <summary>"Light", "Dark" or "System".</summary>
     public string Theme { get; set; } = "System";
+
+    /// <summary>
+    /// Applied to every outbound request, under the collection's own headers and the request's own,
+    /// which each win by name. Courier sent neither an <c>Accept</c> nor a <c>User-Agent</c> before
+    /// this existed — some WAF-fronted corporate APIs challenge or block a request with no
+    /// <c>User-Agent</c> at all, which looked like a Courier bug rather than a missing header.
+    /// </summary>
+    public List<HeaderValue> DefaultHeaders { get; set; } =
+    [
+        new HeaderValue("Accept", "*/*"),
+        new HeaderValue("User-Agent", $"Courier/{Version}"),
+    ];
+
+    private static string Version { get; } =
+        typeof(AppSettings).Assembly.GetName().Version?.ToString(3) ?? "0.1.0";
 }

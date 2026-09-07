@@ -80,10 +80,10 @@
           <!--
             Environment picker. The ▲ glyph marks an environment holding local-only values, in the
             secret colour — the same pair used on the environments table and the capsule review.
+            A ListBox in the flyout rather than a ComboBox: it binds ItemsSource/SelectedItem
+            directly against plain strings with no DataTemplate needed, and needs no dialog.
           -->
           <Button Grid.Column="4" Classes="bare" Height="24" Padding="0"
-                  Command="{Binding OpenDialogCommand}"
-                  CommandParameter="{x:Static vm:DialogKind.Environments}"
                   AutomationProperties.Name="Switch environment">
             <Border Classes="paper" BorderBrush="{DynamicResource Rule}" BorderThickness="1"
                     CornerRadius="{DynamicResource ControlRadius}" Padding="8,0" Height="24">
@@ -96,6 +96,14 @@
                 <TextBlock Classes="meta" Text="▾" VerticalAlignment="Center" />
               </StackPanel>
             </Border>
+            <Button.Flyout>
+              <Flyout Placement="BottomEdgeAlignedLeft">
+                <ListBox Width="200" MaxHeight="240"
+                         ItemsSource="{Binding AvailableEnvironments}"
+                         SelectedItem="{Binding EnvironmentName, Mode=TwoWay}"
+                         AutomationProperties.Name="Environments" />
+              </Flyout>
+            </Button.Flyout>
           </Button>
 
           <!-- Command palette entry. -->
