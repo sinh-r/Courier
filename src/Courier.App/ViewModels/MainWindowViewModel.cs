@@ -95,6 +95,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
             EnvironmentName = name;
             Environments.Load(Tree.Folder, ActiveEnvironment);
         };
+        Environments.EnvironmentSaved += definition =>
+        {
+            // Keeps ActiveEnvironment from going stale the instant a variable is saved — without
+            // this, the next Load() (reopening the pane, or clicking to another settings section
+            // and back) rebuilds the grid from the pre-save copy and a just-added row disappears.
+            if (string.Equals(definition.Name, EnvironmentName, StringComparison.Ordinal))
+            {
+                ActiveEnvironment = definition;
+                EnvironmentHasSecrets = definition.LocalNames.Count > 0;
+            }
+        };
         AuthProfileEditor = new AuthProfileEditorViewModel();
         Trust = new TrustSettingsViewModel();
         SyncReview = new SyncReviewViewModel();
@@ -469,6 +480,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         await Tree.OpenFolderAsync(path).ConfigureAwait(true);
         CollectionSyncStatus = $"{Tree.CollectionName} open";
         RefreshAvailableEnvironments();
+
+        // Primes Environments with the open folder immediately, rather than waiting for Settings to
+        // be opened once — the title-bar picker's inline "new environment" needs a folder to save
+        // into the moment a collection opens, not only after a trip through the settings dialog.
+        Environments.Load(Tree.Folder, ActiveEnvironment);
         Dialog = DialogKind.None;
     }
 
@@ -638,11 +654,31 @@ public sealed partial class MainWindowViewModel : ObservableObject
         CollectionWriter.WriteCollectionDefinition(
             SyncReview.OutputPath,
             Path.GetFileName(SyncReview.OutputPath.TrimEnd(Path.DirectorySeparatorChar)));
+        EnsureDefaultEnvironment(SyncReview.OutputPath);
 
         await Tree.OpenFolderAsync(SyncReview.OutputPath).ConfigureAwait(true);
         CollectionSyncStatus = $"{Tree.CollectionName} open";
         RefreshAvailableEnvironments();
+        Environments.Load(Tree.Folder, ActiveEnvironment);
         Dialog = DialogKind.None;
+    }
+
+    /// <summary>
+    /// Scanned source with no <c>launchSettings.json</c>/<c>appsettings.*.json</c> the reader
+    /// recognizes — the Conduit sample is exactly this — derives zero environments, and
+    /// <see cref="CollectionWriter.WriteEnvironments"/> writes nothing for zero. Without this, that
+    /// collection has no environment to select or edit until someone manually walks through
+    /// Settings → Environments → "Create environment". A collection just imported from code should
+    /// have at least one to put a <c>baseUrl</c> in.
+    /// </summary>
+    private static void EnsureDefaultEnvironment(string folder)
+    {
+        if (CollectionLoader.ListEnvironments(folder).Count > 0)
+        {
+            return;
+        }
+
+        CollectionLoader.SaveEnvironment(folder, new EnvironmentDefinition { Name = "Local" });
     }
 
     /// <summary>
@@ -698,6 +734,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         ActiveEnvironment = CollectionLoader.LoadEnvironment(Tree.Folder, value);
         EnvironmentHasSecrets = ActiveEnvironment?.LocalNames.Count > 0;
+
+        // Keeps the settings pane showing whichever environment is actually selected, if it
+        // happens to be open while the title-bar picker switches — otherwise it would keep
+        // rendering whatever was active when the pane was last opened.
+        if (Dialog == DialogKind.Environments)
+        {
+            Environments.Load(Tree.Folder, ActiveEnvironment);
+        }
     }
 
     /// <summary>

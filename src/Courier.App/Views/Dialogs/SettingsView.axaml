@@ -108,13 +108,28 @@
                             <TextBox Grid.Column="1" Classes="mono" BorderThickness="0" Background="Transparent"
                                      Padding="0" VerticalAlignment="Center" PlaceholderText="value"
                                      Text="{Binding SharedValue}" IsVisible="{Binding !IsLocal}" />
-                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
-                                        VerticalAlignment="Center">
-                              <TextBlock Text="▲" FontSize="10" Foreground="{DynamicResource Secret}"
-                                         IsVisible="{Binding IsLocal}" />
-                              <TextBlock Classes="mono" Text="{Binding LocalDisplay}" />
-                              <TextBlock Classes="meta" Text="{Binding LocalSource}" />
-                            </StackPanel>
+                            <Grid Grid.Column="2" ColumnDefinitions="*,Auto,Auto" VerticalAlignment="Center">
+                              <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6"
+                                          VerticalAlignment="Center" IsVisible="{Binding !IsEditingLocal}">
+                                <TextBlock Text="▲" FontSize="10" Foreground="{DynamicResource Secret}"
+                                           IsVisible="{Binding IsLocal}" />
+                                <TextBlock Classes="mono" Text="{Binding LocalDisplay}" />
+                                <TextBlock Classes="meta" Text="{Binding LocalSource}" />
+                              </StackPanel>
+                              <TextBox Grid.Column="0" Classes="mono" PasswordChar="•" Padding="4,0"
+                                        VerticalAlignment="Center" PlaceholderText="new value"
+                                        Text="{Binding LocalValueDraft}"
+                                        IsVisible="{Binding IsEditingLocal}" />
+                              <Button Grid.Column="1" Content="Edit" Height="20" Margin="4,0,0,0"
+                                      IsVisible="{Binding CanEditLocal}"
+                                      Command="{Binding BeginEditLocalCommand}" />
+                              <Button Grid.Column="1" Content="Set" Height="20" Margin="4,0,0,0"
+                                      IsVisible="{Binding IsEditingLocal}"
+                                      Command="{Binding ConfirmLocalEditCommand}" />
+                              <Button Grid.Column="2" Content="Cancel" Height="20" Margin="4,0,0,0"
+                                      IsVisible="{Binding IsEditingLocal}"
+                                      Command="{Binding CancelLocalEditCommand}" />
+                            </Grid>
                             <Button Grid.Column="3" Classes="bare" Content="×" VerticalAlignment="Center"
                                     AutomationProperties.Name="Delete variable"
                                     Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).Environments.DeleteVariableCommand}"

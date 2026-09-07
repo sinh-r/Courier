@@ -105,10 +105,23 @@
             </Border>
             <Button.Flyout>
               <Flyout Placement="BottomEdgeAlignedLeft">
-                <ListBox Width="200" MaxHeight="240"
-                         ItemsSource="{Binding AvailableEnvironments}"
-                         SelectedItem="{Binding EnvironmentName, Mode=TwoWay}"
-                         AutomationProperties.Name="Environments" />
+                <StackPanel Width="200" Spacing="6">
+                  <ListBox MaxHeight="240"
+                           ItemsSource="{Binding AvailableEnvironments}"
+                           SelectedItem="{Binding EnvironmentName, Mode=TwoWay}"
+                           AutomationProperties.Name="Environments" />
+
+                  <!-- Inline creation, so a new environment never needs a trip through Settings. -->
+                  <Border Height="1" Background="{DynamicResource Rule}" IsVisible="{Binding Environments.HasFolder}" />
+                  <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding Environments.HasFolder}">
+                    <TextBox Grid.Column="0" PlaceholderText="New environment…"
+                             Text="{Binding Environments.NewEnvironmentName}"
+                             AutomationProperties.Name="New environment name" />
+                    <Button Grid.Column="1" Content="+" Margin="4,0,0,0"
+                            Command="{Binding Environments.NewEnvironmentCommand}"
+                            AutomationProperties.Name="Create environment" />
+                  </Grid>
+                </StackPanel>
               </Flyout>
             </Button.Flyout>
           </Button>

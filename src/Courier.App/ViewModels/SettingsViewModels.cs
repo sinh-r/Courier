@@ -43,6 +43,15 @@ public sealed partial class EnvironmentsViewModel : ObservableObject
     public event Action<string>? EnvironmentCreated;
 
     /// <summary>
+    /// Raised after every successful <see cref="SaveAsync"/> (add, edit, delete). Without this the
+    /// shell's <c>ActiveEnvironment</c> — loaded once, when the picker's selection last changed —
+    /// goes stale the moment a variable is saved, and the next <see cref="Load"/> (reopening the
+    /// pane, or clicking away and back in the settings nav) rebuilds the grid from that stale copy:
+    /// a just-added variable looks like it "vanished" even though it is correctly on disk.
+    /// </summary>
+    public event Action<EnvironmentDefinition>? EnvironmentSaved;
+
+    /// <summary>
     /// Projects the currently active environment into editable rows. Called when the Environments
     /// settings pane opens and whenever the active environment changes. A null <paramref name="environment"/>
     /// is not an error — a freshly scanned collection with no derived <c>baseUrl</c>, or one nobody
@@ -149,6 +158,7 @@ public sealed partial class EnvironmentsViewModel : ObservableObject
         }
 
         CollectionLoader.SaveEnvironment(_folder, definition);
+        EnvironmentSaved?.Invoke(definition);
     }
 
     /// <summary>
@@ -205,18 +215,31 @@ public sealed partial class EnvironmentVariableViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasSharedSecretWarning))]
     [NotifyPropertyChangedFor(nameof(LocalDisplay))]
     [NotifyPropertyChangedFor(nameof(LocalSource))]
+    [NotifyPropertyChangedFor(nameof(CanEditLocal))]
     private bool _isLocal;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSharedSecretWarning))]
     private bool _warningDismissed;
 
+    /// <summary>True while the masked local field has been swapped for an editable one.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanEditLocal))]
+    private bool _isEditingLocal;
+
+    /// <summary>The typed replacement, held only until <see cref="ConfirmLocalEdit"/> commits it.</summary>
+    [ObservableProperty]
+    private string _localValueDraft = string.Empty;
+
     public string SharedDisplay => SharedValue ?? "—";
 
     /// <summary>A local value is located, never displayed. P2.</summary>
-    public string LocalDisplay => IsLocal ? "••••••••" : "—";
+    public string LocalDisplay => IsLocal ? (PendingLocalValue is null ? "••••••••" : "•••••••• (unsaved)") : "—";
 
     public string LocalSource => IsLocal ? "Credential Manager" : string.Empty;
+
+    /// <summary>The "Edit" affordance shows only for an already-local row that isn't mid-edit.</summary>
+    public bool CanEditLocal => IsLocal && !IsEditingLocal;
 
     /// <summary>Why <see cref="HasSharedSecretWarning"/> fired, e.g. "field name 'apiKey' names a credential".</summary>
     public string SecretReason => SecretPatterns.Classify(SharedValue, Name).Reason ?? "This looks like a secret";
@@ -246,7 +269,40 @@ public sealed partial class EnvironmentVariableViewModel : ObservableObject
     [RelayCommand]
     private void DismissWarning() => WarningDismissed = true;
 
-    internal void ClearPendingLocalValue() => PendingLocalValue = null;
+    /// <summary>Swaps the masked placeholder for an editable field — the only way to replace an
+    /// already-local value, since it is never read back out of the credential store to display.</summary>
+    [RelayCommand]
+    private void BeginEditLocal()
+    {
+        LocalValueDraft = string.Empty;
+        IsEditingLocal = true;
+    }
+
+    [RelayCommand]
+    private void ConfirmLocalEdit()
+    {
+        if (LocalValueDraft.Length > 0)
+        {
+            PendingLocalValue = LocalValueDraft;
+            OnPropertyChanged(nameof(LocalDisplay));
+        }
+
+        LocalValueDraft = string.Empty;
+        IsEditingLocal = false;
+    }
+
+    [RelayCommand]
+    private void CancelLocalEdit()
+    {
+        LocalValueDraft = string.Empty;
+        IsEditingLocal = false;
+    }
+
+    internal void ClearPendingLocalValue()
+    {
+        PendingLocalValue = null;
+        OnPropertyChanged(nameof(LocalDisplay));
+    }
 }
 
 /// <summary>The auth profile editor and the decoded token panel. ENT-02, ENT-04.</summary>
