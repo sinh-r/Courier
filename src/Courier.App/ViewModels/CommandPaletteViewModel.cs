@@ -120,6 +120,7 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
         Add("New request", "Ctrl+N", _shell.NewTab);
         Add("Close tab", "Ctrl+W", _shell.CloseActiveTab);
         Add("Import from code", string.Empty, () => _ = _shell.ImportFromCodeAsync());
+        Add("New collection", string.Empty, () => _ = _shell.NewCollectionAsync());
         Add("Paste curl from clipboard", string.Empty, () => _ = _shell.ImportCurlFromClipboardAsync());
         Add("Copy as curl", string.Empty, () => _ = _shell.CopyAsCurlAsync());
         Add("Export capsule", string.Empty, () => _shell.OpenDialog(DialogKind.ExportCapsule));

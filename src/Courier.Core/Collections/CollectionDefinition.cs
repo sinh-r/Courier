@@ -97,6 +97,16 @@ public sealed class CollectionDefinition
 
     /// <summary>The solution or folder this collection was generated from, if any. SCAN-01.</summary>
     public ScanSource? ScannedFrom { get; set; }
+
+    /// <summary>
+    /// Folders declared even though nothing is in them yet — slash-separated paths, e.g.
+    /// <c>"Articles/Nested"</c>, the same convention <see cref="RequestDefinition.Folder"/> uses.
+    /// A folder that already holds a request needs no entry here; the tree derives those from the
+    /// requests themselves. This is what lets a hand-built collection have the organizational
+    /// structure in place before anything is filed into it — the way creating an empty folder in
+    /// Postman works.
+    /// </summary>
+    public List<string> Folders { get; set; } = [];
 }
 
 /// <param name="Path">Absolute or collection-relative path to a .sln or a source folder.</param>

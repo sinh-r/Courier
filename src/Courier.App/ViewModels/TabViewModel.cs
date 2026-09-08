@@ -42,6 +42,12 @@ public sealed partial class TabViewModel : ObservableObject
     [ObservableProperty]
     private string _method;
 
+    /// <summary>Slash-separated, e.g. <c>"Articles/Nested"</c> — same convention
+    /// <see cref="TreeNode.FolderPath"/> uses. Null or empty means the collection root. Editable
+    /// here since nothing else lets a hand-authored request be filed into (or out of) a folder.</summary>
+    [ObservableProperty]
+    private string? _folder;
+
     [ObservableProperty]
     private ResponseViewModel? _response;
 
@@ -93,6 +99,7 @@ public sealed partial class TabViewModel : ObservableObject
         State = state;
         _title = state.Title;
         _method = state.Method;
+        _folder = state.Folder;
         _url = state.Url;
         _isDirty = state.IsDirty;
         _activeResponseTabIndex = state.ActiveResponseTabIndex;
@@ -393,7 +400,30 @@ public sealed partial class TabViewModel : ObservableObject
         }
     }
 
-    partial void OnTitleChanged(string value) => OnPropertyChanged(nameof(DisplayTitle));
+    /// <summary>
+    /// The one editable Name field in the app — the tab header is display-only. Pushed into
+    /// <see cref="State"/> the same way <see cref="OnMethodChanged"/> pushes Method, since this is
+    /// what <c>FileNameFor</c> slugifies into a filename on save.
+    /// </summary>
+    partial void OnTitleChanged(string value)
+    {
+        OnPropertyChanged(nameof(DisplayTitle));
+
+        if (State is not null && State.Title != value)
+        {
+            State.Title = value;
+            MarkDirty();
+        }
+    }
+
+    partial void OnFolderChanged(string? value)
+    {
+        if (State is not null && State.Folder != value)
+        {
+            State.Folder = value;
+            MarkDirty();
+        }
+    }
 
     /// <summary>
     /// Not a content edit, so this deliberately never calls <see cref="MarkDirty"/> — switching to

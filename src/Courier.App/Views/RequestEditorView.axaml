@@ -53,6 +53,25 @@
         </StackPanel>
       </Border>
 
+      <!--
+        Name and folder. The tab header only ever displays these — this is the one place either
+        can be set, which is what lets a hand-authored request be named and filed into a folder
+        before Ctrl+S saves it.
+      -->
+      <Border DockPanel.Dock="Top" Height="{DynamicResource RowHeight}" Padding="8,0"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="*,8,200">
+          <TextBox Grid.Column="0" BorderThickness="0" Background="Transparent" Padding="0"
+                   VerticalAlignment="Center" PlaceholderText="Untitled request"
+                   Text="{Binding Tabs.Active.Title, Mode=TwoWay}"
+                   AutomationProperties.Name="Request name" />
+          <TextBox Grid.Column="2" Classes="mono" BorderThickness="0" Background="Transparent" Padding="0"
+                   VerticalAlignment="Center" PlaceholderText="folder (optional)"
+                   Text="{Binding Tabs.Active.Folder, Mode=TwoWay}"
+                   AutomationProperties.Name="Request folder" />
+        </Grid>
+      </Border>
+
       <!-- URL bar. -->
       <Border DockPanel.Dock="Top" Height="32" Padding="8,0"
               BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">

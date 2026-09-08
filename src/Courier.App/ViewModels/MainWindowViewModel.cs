@@ -292,11 +292,26 @@ public sealed partial class MainWindowViewModel : ObservableObject
             : HistoryPlacement.Inspector;
 
     [RelayCommand]
-    public void NewTab() => Tabs.Open(new TabState
+    public void NewTab() => OpenNewRequestTab(folder: null);
+
+    /// <summary>The tree's "New request" context-menu item, on a Collection or Folder node — a
+    /// Request node has no <see cref="TreeNodeKind.Folder"/> children to scope one to.</summary>
+    [RelayCommand]
+    public void NewRequestInFolder(TreeNode? node) =>
+        OpenNewRequestTab(node?.Kind == TreeNodeKind.Folder ? node.FolderPath : null);
+
+    /// <summary>
+    /// Shared by the generic "+"/"New request" (unscoped) and the tree's folder-scoped one. No
+    /// naming prompt: the user types a Name (and, if they want, a Folder) right in the tab the same
+    /// way they'd edit anything else, then Ctrl+S actually saves it.
+    /// </summary>
+    private void OpenNewRequestTab(string? folder) => Tabs.Open(new TabState
     {
         Title = "Untitled request",
         Method = "GET",
         EnvironmentName = EnvironmentName,
+        CollectionName = Tree.CollectionName,
+        Folder = folder,
     });
 
     [RelayCommand]
@@ -466,9 +481,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var serializer = new CollectionSerializer();
         var yaml = serializer.SerializeRequest(definition);
 
+        // Nested under the request's own Folder (root when unset — Path.Combine ignores an empty
+        // segment cleanly), so the file layout a human browsing the git repo sees matches what the
+        // tree already shows, not just what the YAML's own folder: field says.
         var path = state.RequestPath ?? Path.Combine(
             Tree.Folder,
             CollectionFormat.RequestsFolder,
+            state.Folder ?? string.Empty,
             CollectionFormat.FileNameFor(definition));
 
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -477,28 +496,67 @@ public sealed partial class MainWindowViewModel : ObservableObject
         state.RequestPath = path;
         state.IsDirty = false;
         tab.IsDirty = false;
+
+        // Without this, a first-time save is invisible until the folder is reopened — the tree has
+        // no other way to learn a file appeared under it.
+        await Tree.OpenFolderAsync(Tree.Folder).ConfigureAwait(true);
     }
 
     /// <summary>Opens a folder of collections. The menu, the rail's "…" button and Ctrl+O all reach this.</summary>
     [RelayCommand]
     public async Task OpenFolderAsync()
     {
-        if (TopLevel?.StorageProvider is not { } storage)
+        if (await PickFolderAsync("Open a collection folder").ConfigureAwait(true) is not { } path)
         {
             return;
+        }
+
+        await OpenAndPrimeFolderAsync(path).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Hand-builds a collection from nothing: pick or create an empty folder, write a
+    /// <c>collection.yaml</c> naming it (harmless no-op if one already exists — e.g. the folder was
+    /// already scanned into), and open it. The native picker already has its own "New folder"
+    /// button, so this needs no dialog of its own. The menu and the palette reach this.
+    /// </summary>
+    [RelayCommand]
+    public async Task NewCollectionAsync()
+    {
+        if (await PickFolderAsync("Choose or create a folder for the new collection").ConfigureAwait(true)
+            is not { } path)
+        {
+            return;
+        }
+
+        var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar));
+        CollectionWriter.WriteCollectionDefinition(path, name);
+
+        await OpenAndPrimeFolderAsync(path).ConfigureAwait(true);
+    }
+
+    /// <summary>The folder picker both <see cref="OpenFolderAsync"/> and <see cref="NewCollectionAsync"/> use.</summary>
+    private async Task<string?> PickFolderAsync(string title)
+    {
+        if (TopLevel?.StorageProvider is not { } storage)
+        {
+            return null;
         }
 
         var folders = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "Open a collection folder",
+            Title = title,
             AllowMultiple = false,
         }).ConfigureAwait(true);
 
-        if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } path)
-        {
-            return;
-        }
+        return folders.Count > 0 ? folders[0].TryGetLocalPath() : null;
+    }
 
+    /// <summary>Opens a folder into the tree and primes every other pane that depends on which
+    /// folder is active — the shared tail of <see cref="OpenFolderAsync"/> and
+    /// <see cref="NewCollectionAsync"/>.</summary>
+    private async Task OpenAndPrimeFolderAsync(string path)
+    {
         await Tree.OpenFolderAsync(path).ConfigureAwait(true);
         CollectionSyncStatus = $"{Tree.CollectionName} open";
         RefreshAvailableEnvironments();

@@ -10,7 +10,7 @@
       <!-- Header. 24px, matching every other row in the application. -->
       <Border DockPanel.Dock="Top" Height="{DynamicResource RowHeight}"
               BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1" Padding="8,0">
-        <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
           <TextBlock Grid.Column="0" Classes="heading" Text="Collections" VerticalAlignment="Center" />
 
           <Button Grid.Column="1" Classes="bare" Width="20" Height="20" Padding="0"
@@ -19,13 +19,36 @@
             <TextBlock Classes="mono meta" Text="+" HorizontalAlignment="Center" />
           </Button>
 
+          <!--
+            New folder. IsVisible ties this to a folder actually being open — creating a folder
+            with nowhere to write collection.yaml makes no sense, same reasoning the environment
+            flyout's own inline-create row already applies.
+          -->
           <Button Grid.Column="2" Classes="bare" Width="20" Height="20" Padding="0"
+                  IsVisible="{Binding Folder, Converter={x:Static ObjectConverters.IsNotNull}}"
+                  AutomationProperties.Name="New folder">
+            <TextBlock Classes="mono meta" Text="▤" HorizontalAlignment="Center" />
+            <Button.Flyout>
+              <Flyout Placement="BottomEdgeAlignedLeft">
+                <Grid ColumnDefinitions="*,Auto" Width="220">
+                  <TextBox Grid.Column="0" PlaceholderText="New folder…"
+                           Text="{Binding NewFolderName}"
+                           AutomationProperties.Name="New folder name" />
+                  <Button Grid.Column="1" Content="+" Margin="4,0,0,0"
+                          Command="{Binding AddFolderCommand}"
+                          AutomationProperties.Name="Create folder" />
+                </Grid>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
+
+          <Button Grid.Column="3" Classes="bare" Width="20" Height="20" Padding="0"
                   Name="FocusFilterButton"
                   AutomationProperties.Name="Filter collections">
             <TextBlock Classes="mono meta" Text="⌕" HorizontalAlignment="Center" />
           </Button>
 
-          <Button Grid.Column="3" Classes="bare" Width="20" Height="20" Padding="0"
+          <Button Grid.Column="4" Classes="bare" Width="20" Height="20" Padding="0"
                   Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenFolderCommand}"
                   AutomationProperties.Name="Open a collection folder">
             <TextBlock Classes="mono meta" Text="⋯" HorizontalAlignment="Center" />
@@ -85,6 +108,15 @@
           <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="vm:TreeNode">
             <Grid ColumnDefinitions="14,40,*,Auto,Auto" Height="{DynamicResource RowHeight}"
                   IsVisible="{Binding IsVisible}">
+
+              <!-- A Request node has nothing to hold a new request in, so its one MenuItem hides. -->
+              <Grid.ContextMenu>
+                <ContextMenu>
+                  <MenuItem Header="New request" IsVisible="{Binding CanContainChildren}"
+                            Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).NewRequestInFolderCommand}"
+                            CommandParameter="{Binding}" />
+                </ContextMenu>
+              </Grid.ContextMenu>
 
               <!-- Provenance. Glyph and colour together; never colour alone. -->
               <TextBlock Grid.Column="0" Classes="meta" VerticalAlignment="Center"
