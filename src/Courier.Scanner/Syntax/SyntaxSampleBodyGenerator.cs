@@ -17,13 +17,19 @@ internal static class SyntaxSampleBodyGenerator
 
     /// <summary>Returns indented JSON, or null when the type could not be resolved or has nothing
     /// bindable on it.</summary>
-    public static string? Generate(TypeShapeIndex index, string typeName)
+    /// <param name="context">
+    /// The namespace of whatever declared <paramref name="typeName"/> — the controller or minimal
+    /// API handler's own namespace. Passed straight to <see cref="TypeShapeIndex.Resolve"/>, which
+    /// is what tells apart e.g. <c>Articles/Create.cs</c>'s <c>Create.Command</c> from an unrelated
+    /// feature's own nested type of the same name.
+    /// </param>
+    public static string? Generate(TypeShapeIndex index, string typeName, string? context = null)
     {
-        var value = Build(index, typeName, 0, []);
+        var value = Build(index, typeName, 0, [], context);
         return value is null ? null : JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true });
     }
 
-    private static object? Build(TypeShapeIndex index, string typeName, int depth, HashSet<string> inProgress)
+    private static object? Build(TypeShapeIndex index, string typeName, int depth, HashSet<string> inProgress, string? context)
     {
         if (depth > MaxDepth)
         {
@@ -34,13 +40,13 @@ internal static class SyntaxSampleBodyGenerator
 
         if (TryCollectionElement(bare, out var element))
         {
-            var item = Build(index, element!, depth + 1, inProgress);
+            var item = Build(index, element!, depth + 1, inProgress, context);
             return item is null ? Array.Empty<object>() : new[] { item };
         }
 
         if (TryDictionaryValue(bare, out var valueType))
         {
-            var item = Build(index, valueType!, depth + 1, inProgress);
+            var item = Build(index, valueType!, depth + 1, inProgress, context);
             return item is null ? new Dictionary<string, object?>() : new Dictionary<string, object?> { ["key"] = item };
         }
 
@@ -49,7 +55,9 @@ internal static class SyntaxSampleBodyGenerator
             return ScalarValue(bare, null);
         }
 
-        var shape = index.Resolve(bare);
+        // The original typeName, not the pre-bared form: Resolve needs the dots intact to try an
+        // exact namespace/nesting match before it falls back to the ambiguous bare simple name.
+        var shape = index.Resolve(typeName, context);
         if (shape is null)
         {
             // Not a scalar and not a type this index has a shape for: an external NuGet DTO, most
@@ -76,7 +84,7 @@ internal static class SyntaxSampleBodyGenerator
 
             foreach (var member in shape.Members)
             {
-                properties[member.WireName] = BuildMember(index, member, depth, inProgress);
+                properties[member.WireName] = BuildMember(index, member, depth, inProgress, context);
             }
 
             return properties.Count == 0 ? null : properties;
@@ -87,21 +95,30 @@ internal static class SyntaxSampleBodyGenerator
         }
     }
 
-    private static object? BuildMember(TypeShapeIndex index, TypeShapeMember member, int depth, HashSet<string> inProgress)
+    private static object? BuildMember(TypeShapeIndex index, TypeShapeMember member, int depth, HashSet<string> inProgress, string? context)
     {
         var bare = SampleValues.Bare(member.TypeName);
-        var isNullable = member.TypeName.TrimEnd().EndsWith('?');
 
-        // A nullable, non-required property is emitted as null rather than invented. It keeps the
-        // top-level sample minimal, which is what a user actually wants to send first.
-        if (!member.Constraints.IsRequired && isNullable && depth > 0)
+        // Every property gets a real value, nested or not, required or not: a body *example* has
+        // to show what to send. Nulling out anything merely nullable-with-no-[Required] used to
+        // gut nested DTOs wholesale for the (extremely common) case of a team validating elsewhere
+        // — FluentValidation, a pipeline behavior — rather than with data-annotation attributes,
+        // since plain nullable-reference-type properties then carry no IsRequired signal at all.
+        // A genuine cycle (a self-referencing DTO) still comes out null on its own, via the
+        // inProgress guard in Build below — this was never what actually prevented infinite
+        // recursion for that case.
+        //
+        // IsSimple also answers true for an array/list of a simple type (string[], List<int>, ...)
+        // — correct for its original purpose (ASP.NET Core binds that from the query string, not
+        // the body), but ScalarValue/SampleValues.For has no case for "string[]" and would return
+        // null for it. Only take the constraint-aware scalar path for an actual scalar; anything
+        // collection- or dictionary-shaped goes through Build, which already knows how to sample one.
+        if (SampleValues.IsSimple(bare) && !TryCollectionElement(bare, out _) && !TryDictionaryValue(bare, out _))
         {
-            return null;
+            return ScalarValue(bare, member.Constraints);
         }
 
-        return SampleValues.IsSimple(bare)
-            ? ScalarValue(bare, member.Constraints)
-            : Build(index, member.TypeName, depth + 1, inProgress);
+        return Build(index, member.TypeName, depth + 1, inProgress, context);
     }
 
     /// <summary>A scalar sample shaped by the property's own constraints. Keeps JSON types honest —

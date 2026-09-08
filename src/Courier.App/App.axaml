@@ -10,6 +10,14 @@
       out of bounds, and Simple is the base that fights that the least.
     -->
     <SimpleTheme />
+
+    <!--
+      Without this, edit:TextEditor (BodyEditor, ScriptEditor) has no ControlTheme to apply at
+      all — no template, no visible chrome, no internal TextArea, nothing to type into. Simple to
+      match the app's own base theme above.
+    -->
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Simple/AvaloniaEdit.xaml" />
+
     <StyleInclude Source="avares://Courier/Themes/Controls.axaml" />
   </Application.Styles>
 

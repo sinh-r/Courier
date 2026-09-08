@@ -17,18 +17,32 @@ namespace Courier.Scanner.Syntax;
 internal sealed class TypeShapeIndex
 {
     private readonly Dictionary<string, TypeShape> _byName;
+    private readonly Dictionary<string, TypeShape> _byNestedPath;
+    private readonly Dictionary<string, TypeShape> _byNamespacedPath;
 
-    private TypeShapeIndex(Dictionary<string, TypeShape> byName) => _byName = byName;
+    private TypeShapeIndex(
+        Dictionary<string, TypeShape> byName,
+        Dictionary<string, TypeShape> byNestedPath,
+        Dictionary<string, TypeShape> byNamespacedPath)
+    {
+        _byName = byName;
+        _byNestedPath = byNestedPath;
+        _byNamespacedPath = byNamespacedPath;
+    }
 
     /// <summary>
-    /// Two types sharing a simple name across different namespaces is the one case this index
-    /// cannot tell apart, since it has no semantic model to resolve a fully-qualified name against
-    /// a <c>using</c>. Last writer wins, which is a coin flip in that rare case and correct in the
-    /// overwhelming majority where a name is unique.
+    /// Two types sharing a simple name across different namespaces (or, as commonly, several
+    /// feature slices each nesting their own same-named <c>Command</c>/<c>Model</c>/<c>Query</c> —
+    /// the MediatR vertical-slice convention <see cref="Resolve"/>'s namespaced tier exists for) is
+    /// the one case this index cannot always tell apart, since it has no semantic model to resolve
+    /// a fully-qualified name against a <c>using</c>. Last writer wins for a bare, unqualified name
+    /// — and, if the caller has no namespace context to disambiguate with, for a nested one too.
     /// </summary>
     public static TypeShapeIndex Build(IEnumerable<(string Path, string Text)> files)
     {
         var byName = new Dictionary<string, TypeShape>(StringComparer.Ordinal);
+        var byNestedPath = new Dictionary<string, TypeShape>(StringComparer.Ordinal);
+        var byNamespacedPath = new Dictionary<string, TypeShape>(StringComparer.Ordinal);
 
         foreach (var (path, text) in files)
         {
@@ -48,22 +62,104 @@ internal sealed class TypeShapeIndex
                 if (ReadType(declaration) is { } shape)
                 {
                     byName[shape.Name] = shape;
+                    byNestedPath[NestedPathFor(declaration)] = shape;
+                    byNamespacedPath[NamespacedPathFor(declaration)] = shape;
                 }
             }
 
             foreach (var declaration in root.DescendantNodes().OfType<EnumDeclarationSyntax>())
             {
-                byName[declaration.Identifier.Text] = new TypeShape(
+                var enumShape = new TypeShape(
                     declaration.Identifier.Text,
                     [],
                     [.. declaration.Members.Select(m => m.Identifier.Text)]);
+
+                byName[declaration.Identifier.Text] = enumShape;
+                byNestedPath[NestedPathFor(declaration)] = enumShape;
+                byNamespacedPath[NamespacedPathFor(declaration)] = enumShape;
             }
         }
 
-        return new TypeShapeIndex(byName);
+        return new TypeShapeIndex(byName, byNestedPath, byNamespacedPath);
     }
 
-    public TypeShape? Resolve(string typeName) => _byName.GetValueOrDefault(SampleValues.Bare(typeName));
+    /// <summary>
+    /// <c>Create.Command</c> written elsewhere in the same namespace names a type nested inside
+    /// <c>Create</c>, not a namespace path — and every feature slice in a CQRS/vertical-slice
+    /// codebase typically nests its own same-named <c>Command</c>, often inside a same-named
+    /// wrapper class too (<c>Articles/Create.cs</c> and <c>Users/Create.cs</c> both declaring
+    /// <c>Create.Command</c> is the ordinary case, not a rare one). Three tiers, most specific
+    /// first: the exact type this <paramref name="context"/> namespace actually declares, then any
+    /// type nested the same way regardless of namespace, then the bare simple name — the same
+    /// "last writer wins" fallback as before for whichever tier still has more than one candidate.
+    /// </summary>
+    /// <param name="context">
+    /// The namespace of whatever is referencing <paramref name="typeName"/> — a same-namespace
+    /// dotted reference like <c>Create.Command</c> almost always names a type in that namespace.
+    /// Null when unavailable (also fine — the next tier down is exactly today's behaviour).
+    /// </param>
+    public TypeShape? Resolve(string typeName, string? context = null)
+    {
+        var withoutNullable = typeName.Trim().TrimEnd('?');
+        var isDotted = withoutNullable.Contains('.', StringComparison.Ordinal)
+            && !withoutNullable.Contains('<', StringComparison.Ordinal);
+
+        if (isDotted && !string.IsNullOrEmpty(context)
+            && _byNamespacedPath.TryGetValue($"{context}.{withoutNullable}", out var namespaced))
+        {
+            return namespaced;
+        }
+
+        if (isDotted && _byNestedPath.TryGetValue(withoutNullable, out var nested))
+        {
+            return nested;
+        }
+
+        return _byName.GetValueOrDefault(SampleValues.Bare(typeName));
+    }
+
+    /// <summary>The dotted chain of declaring types plus this one's own name — <c>Create.Command</c>
+    /// for <c>Command</c> nested in <c>Create</c>, just <c>Command</c> for a top-level type.</summary>
+    private static string NestedPathFor(SyntaxNode declaration) =>
+        string.Join('.', NestedNames(declaration));
+
+    /// <summary>
+    /// <see cref="NestedPathFor"/> with the containing namespace prepended — the full path a
+    /// same-namespace short reference resolves against.
+    /// </summary>
+    private static string NamespacedPathFor(SyntaxNode declaration)
+    {
+        var names = NestedNames(declaration);
+
+        foreach (var ancestor in declaration.Ancestors())
+        {
+            if (ancestor is BaseNamespaceDeclarationSyntax ns)
+            {
+                names.Insert(0, ns.Name.ToString());
+            }
+        }
+
+        return string.Join('.', names);
+    }
+
+    private static List<string> NestedNames(SyntaxNode declaration)
+    {
+        var name = declaration switch
+        {
+            TypeDeclarationSyntax t => t.Identifier.Text,
+            EnumDeclarationSyntax e => e.Identifier.Text,
+            _ => string.Empty,
+        };
+
+        var names = new List<string> { name };
+
+        foreach (var ancestor in declaration.Ancestors().OfType<TypeDeclarationSyntax>())
+        {
+            names.Insert(0, ancestor.Identifier.Text);
+        }
+
+        return names;
+    }
 
     private static TypeShape? ReadType(TypeDeclarationSyntax declaration)
     {

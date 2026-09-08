@@ -37,10 +37,22 @@ public sealed class SampleBodyTests
         Assert.False(root.TryGetProperty("purchaseOrderNumber", out _));
 
         // A nested DTO (Address) is walked too, and its own self-reference (Address? Previous)
-        // does not recurse forever.
+        // does not recurse forever — the cycle guard accounts for that null on its own, not
+        // nullability, which the next assertion is what actually proves.
         var shipTo = root.GetProperty("shipTo");
         Assert.True(shipTo.TryGetProperty("line1", out _));
         Assert.Equal(JsonValueKind.Null, shipTo.GetProperty("previous").ValueKind);
+
+        // Address.Line2 (string?, no [Required]) is nested one level deep and not a cycle: a real
+        // sample value, not null just because nothing forces the field.
+        Assert.Equal(JsonValueKind.String, shipTo.GetProperty("line2").ValueKind);
+
+        // Tags (List<string>?, no [Required]) is an array of a simple type — the case that used to
+        // come back null unconditionally, at any depth, because it satisfies SampleValues.IsSimple.
+        var tags = root.GetProperty("tags");
+        Assert.Equal(JsonValueKind.Array, tags.ValueKind);
+        Assert.True(tags.GetArrayLength() > 0);
+        Assert.Equal(JsonValueKind.String, tags[0].ValueKind);
     }
 
     [Fact]

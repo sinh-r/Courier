@@ -132,7 +132,18 @@ public sealed class SolutionScanner
             return endpoint;
         }
 
-        if (SyntaxSampleBodyGenerator.Generate(typeShapes, bodyType) is { } sample)
+        // A same-namespace dotted reference like `Create.Command` — the ordinary shape of a
+        // MediatR/CQRS vertical slice — needs the referencing controller's own namespace to resolve
+        // to the right feature's Command rather than an unrelated one with the same name. Only
+        // ControllerSyntaxScanner's DeclaringType carries a namespace today (a minimal API's is just
+        // the handler's class/group name, deliberately left alone — it also feeds EndpointIdentity,
+        // and changing its shape would silently orphan every saved overlay for that collection); a
+        // dotted DeclaringType there would just mean no namespace context, which SyntaxSampleBodyGenerator
+        // already treats as "fall back to today's behaviour".
+        var lastDot = endpoint.DeclaringType.LastIndexOf('.');
+        var context = lastDot < 0 ? null : endpoint.DeclaringType[..lastDot];
+
+        if (SyntaxSampleBodyGenerator.Generate(typeShapes, bodyType, context) is { } sample)
         {
             return endpoint with { SampleBody = sample, BodyContentType = "application/json" };
         }
