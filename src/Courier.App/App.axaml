@@ -35,6 +35,7 @@
       <services:DialogIsConverter x:Key="DialogIsConverter" />
       <services:DialogIsSettingsConverter x:Key="DialogIsSettingsConverter" />
       <services:ActiveTabBrushConverter x:Key="ActiveTabBrushConverter" />
+      <services:SucceededBrushConverter x:Key="SucceededBrushConverter" />
     </ResourceDictionary>
   </Application.Resources>
 

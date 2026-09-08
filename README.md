@@ -186,6 +186,33 @@ copied back out as a runnable curl command from the response toolbar or the app 
 as `{{name}}` references, never resolved. Verified with new tests for the environment save/load round
 trip and the curl import/export round trip.
 
+**Environments derive from real launch profiles, scanned bodies exist, and query params are
+visible.** `EnvironmentReader` previously named an environment after the launch profile key
+unconditionally, which turned the `http`/`https` pair every ASP.NET Core template ships with into
+two near-duplicate environments and silently dropped IIS Express entirely, since its port lives
+under the file-level `iisSettings.iisExpress` block rather than a per-profile `applicationUrl`.
+Profiles sharing one `ASPNETCORE_ENVIRONMENT` now collapse into a single environment named after it;
+a profile with no shared value keeps its own name, so `samples/Orders.Api`'s deliberately-distinct
+`Local`/`QA-Internal` profiles are unaffected. Creating an environment — from the title-bar dropdown
+or from Settings — now offers the detected profiles as a picker that fills in both the name and
+`baseUrl`, and the scanner's own empty-collection fallback seeds a `baseUrl` row instead of an empty
+one. On the request-builder side, `SyntaxHelpers.ReadParameters` used to discard a `[FromBody]`
+parameter with a note saying a sample needed the semantic tier; a new `TypeShapeIndex` walks the
+same syntax trees the scanner already parses to resolve the DTO across files, and
+`SyntaxSampleBodyGenerator` renders a sample honouring `[Required]`, `[Range]`, `[StringLength]`,
+enums and `[JsonPropertyName]` — the note is now reserved for a type genuinely outside the scanned
+source (an external NuGet DTO, mainly). Query parameters, already scanned and already sent, are now
+visible: the URL bar composes and decomposes its query string against the Params grid in both
+directions (`Core/Collections/QueryString.cs`), a request opens on whichever of Params or Body
+actually has something on it, and both tabs show a count. The Settings Environments pane gained an
+independent picker (switching away from unsaved edits offers Save or Discard rather than losing
+them silently) and a status line that names what a save did or why it didn't, mirrored into the
+status bar. The response body gained a third mode, Raw formatted, between the collapsible Pretty
+tree and the byte-exact Raw view. Verified with new scanner tests against a `launchSettings.json`
+fixture carrying the `http`/`https`/`IIS Express`/`Docker` profile shape real templates ship, new
+sample-body tests against `Orders.Api`'s and `Minimal.Api`'s DTOs including a self-referencing type,
+and new `QueryString` round-trip tests.
+
 Still open, tracked as backlog rather than fixed in this pass:
 
 - Auth is not applied on the GUI send path — `TabState.AuthProfile` is read by nothing, and no
@@ -202,11 +229,13 @@ Still open, tracked as backlog rather than fixed in this pass:
 
 - A further ~24 buttons across the capsule, telemetry and first-run dialogs remain unwired (each
   maps to a real, already-implemented library call — see the plan's Stage 5).
-- Four substantial subsystems still have no UI or CLI entry point: the Postman importer,
-  `DtoSampleGenerator`, the App Insights/Datadog telemetry sources, and the Azure DevOps work-item
-  client.
-- OpenAPI import and the semantic (Roslyn workspace) scan tier do not exist yet — the semantic tier
-  is what would give a scanned request an actual body instead of a placeholder note.
+- Three substantial subsystems still have no UI or CLI entry point: the Postman importer, the App
+  Insights/Datadog telemetry sources, and the Azure DevOps work-item client.
+- OpenAPI import and the semantic (Roslyn workspace) scan tier do not exist yet. A scanned body now
+  comes from the syntax tier's own `TypeShapeIndex`/`SyntaxSampleBodyGenerator`, which resolves any
+  DTO declared somewhere in the scanned source; the semantic tier remains what would additionally
+  resolve a type from a referenced project or a NuGet package, which is what `DtoSampleGenerator`
+  (still unwired — it needs `MSBuildWorkspace`) exists for.
 - Scanned minimal-API endpoints derive their `DeclaringType` from the containing class name, or the
   file name for genuinely top-level statements; a handler with the same name in two different
   extension classes in the same file could collide.

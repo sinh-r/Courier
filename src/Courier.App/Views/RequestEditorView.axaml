@@ -92,8 +92,14 @@
         </Grid>
       </Border>
 
-      <!-- Request sections. -->
-      <TabControl DockPanel.Dock="Top" Padding="0" Background="Transparent">
+      <!--
+        Request sections. SelectedIndex is bound (rather than a single TabItem's IsSelected) so a
+        scanned request can default to whichever tab actually has something on it — see
+        TabViewModel.ResolveInitialRequestTabIndex — and so the choice survives suspend/restore via
+        TabState.ActiveRequestTabIndex.
+      -->
+      <TabControl DockPanel.Dock="Top" Padding="0" Background="Transparent"
+                  SelectedIndex="{Binding Tabs.Active.ActiveRequestTabIndex, Mode=TwoWay}">
 
         <!--
           Route parameters. Only present when the URL actually has {tokens} — most requests have
@@ -104,11 +110,14 @@
           <controls:PathParamGrid ItemsSource="{Binding Tabs.Active.PathParamEditor.Rows}" />
         </TabItem>
 
-        <TabItem Header="Params">
+        <!-- Header reads "Params · 3" once there is a row to look at, so a populated tab is
+             visible without clicking into it — the params a scan derived used to be invisible
+             here, hidden behind the Body tab that opened by default. -->
+        <TabItem Header="{Binding Tabs.Active.ParamsTabHeader}">
           <controls:KeyValueGrid ItemsSource="{Binding Tabs.Active.QueryEditor.Rows}" />
         </TabItem>
 
-        <TabItem Header="Headers">
+        <TabItem Header="{Binding Tabs.Active.HeadersTabHeader}">
           <DockPanel LastChildFill="True">
             <!--
               Inherited headers: app defaults, then the collection's own — muted, with where each
@@ -134,7 +143,7 @@
           </DockPanel>
         </TabItem>
 
-        <TabItem Header="Body" IsSelected="True">
+        <TabItem Header="Body">
           <controls:BodyEditor />
         </TabItem>
 

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Courier.Core.Http;
@@ -38,12 +39,14 @@ public sealed partial class ResponseViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPrettyMode))]
     [NotifyPropertyChangedFor(nameof(IsRawMode))]
+    [NotifyPropertyChangedFor(nameof(IsRawFormattedMode))]
     private ResponseMode _mode = ResponseMode.Pretty;
 
     [ObservableProperty]
     private bool _showEntireBody;
 
     private string? _rawTextCache;
+    private string? _formattedTextCache;
 
     public ResponseViewModel(ExchangeResult result)
     {
@@ -59,6 +62,13 @@ public sealed partial class ResponseViewModel : ObservableObject, IDisposable
 
     public bool IsRawMode => Mode == ResponseMode.Raw;
 
+    public bool IsRawFormattedMode => Mode == ResponseMode.RawFormatted;
+
+    /// <summary>True only when the display-limited body is valid JSON — Raw formatted has nothing
+    /// useful to reformat otherwise, so the button stays disabled rather than showing raw text under
+    /// a label that promises formatting.</summary>
+    public bool CanFormat => Index is not null;
+
     /// <summary>Request headers, one row per value — a repeated header name appears as repeated rows.</summary>
     public IReadOnlyList<HeaderRow> RequestHeaders { get; private set; } = [];
 
@@ -66,6 +76,35 @@ public sealed partial class ResponseViewModel : ObservableObject, IDisposable
 
     /// <summary>The raw text view, cached — a 4MB decode on every tab flip would defeat PERF-03.</summary>
     public string RawBodyText => _rawTextCache ??= RawText();
+
+    /// <summary>
+    /// The body, re-indented as plain selectable text — CORE-03's third mode, between the
+    /// collapsible tree (Pretty) and the exact bytes (Raw). Cached for the same reason
+    /// <see cref="RawBodyText"/> is: PERF-03 gives a tab switch 50ms, and reformatting on every flip
+    /// would spend most of that on a re-parse nobody asked for twice.
+    /// </summary>
+    public string FormattedBodyText => _formattedTextCache ??= FormatBody();
+
+    private string FormatBody()
+    {
+        if (!CanFormat)
+        {
+            return RawBodyText;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(RawText());
+            return JsonSerializer.Serialize(document, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (JsonException)
+        {
+            // The display-limited span cut a valid document off mid-token — RawText() truncates at
+            // DisplayLimitBytes without regard for where a token ends. The unformatted text is a
+            // better fallback than an error message in place of the body.
+            return RawBodyText;
+        }
+    }
 
     [RelayCommand]
     private void SetMode(string mode)
@@ -178,8 +217,11 @@ public sealed partial class ResponseViewModel : ObservableObject, IDisposable
         Index = JsonIndex.TryBuild(Span);
         Tree = Index is null ? null : new JsonTreeProjection(Index);
         _rawTextCache = null;
+        _formattedTextCache = null;
         OnPropertyChanged(nameof(StructureText));
         OnPropertyChanged(nameof(RawBodyText));
+        OnPropertyChanged(nameof(FormattedBodyText));
+        OnPropertyChanged(nameof(CanFormat));
         Search(SearchTerm);
     }
 
@@ -248,6 +290,7 @@ public sealed partial class ResponseViewModel : ObservableObject, IDisposable
 public enum ResponseMode
 {
     Pretty,
+    RawFormatted,
     Raw,
     Preview,
 }

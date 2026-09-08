@@ -121,6 +121,16 @@
                             Command="{Binding Environments.NewEnvironmentCommand}"
                             AutomationProperties.Name="Create environment" />
                   </Grid>
+
+                  <!-- Edit from right here, rather than a separate trip through the hamburger menu
+                       to find the same Environments pane in Settings. -->
+                  <Border Height="1" Background="{DynamicResource Rule}" IsVisible="{Binding Environments.HasFolder}" />
+                  <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                          Content="Edit environment variables…"
+                          IsVisible="{Binding Environments.HasFolder}"
+                          Command="{Binding OpenDialogCommand}"
+                          CommandParameter="{x:Static vm:DialogKind.Environments}"
+                          AutomationProperties.Name="Edit environment variables" />
                 </StackPanel>
               </Flyout>
             </Button.Flyout>
