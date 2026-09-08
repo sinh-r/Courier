@@ -105,15 +105,82 @@ public sealed class SolutionScanner
             }
         }
 
+        var typeShapes = TypeShapeIndex.Build(ReadAllText(files));
+
         return new ScanResult
         {
-            Endpoints = Deduplicate(endpoints),
+            Endpoints = [.. Deduplicate(endpoints).Select(e => ResolveBody(e, typeShapes))],
             Unresolved = unresolved,
             Environments = EnvironmentReader.Read(root),
             Tier = ScanTier.Syntax,
             FileHashes = hashes,
             Elapsed = Stopwatch.GetElapsedTime(started),
         };
+    }
+
+    /// <summary>
+    /// SCAN-04's last step: an endpoint whose body parameter was bound (<see cref="ScannedEndpoint.BodyTypeName"/>
+    /// set) gets a sample generated against the type-shape index built from every scanned file, not
+    /// just the ones re-parsed this pass — the DTO usually lives in a different file from the
+    /// endpoint that references it. Always re-run, even for an endpoint carried forward unchanged
+    /// from a previous incremental scan: the DTO itself may have changed in a file that did.
+    /// </summary>
+    private static ScannedEndpoint ResolveBody(ScannedEndpoint endpoint, TypeShapeIndex typeShapes)
+    {
+        if (endpoint.BodyTypeName is not { } bodyType)
+        {
+            return endpoint;
+        }
+
+        // A same-namespace dotted reference like `Create.Command` — the ordinary shape of a
+        // MediatR/CQRS vertical slice — needs the referencing controller's own namespace to resolve
+        // to the right feature's Command rather than an unrelated one with the same name. Only
+        // ControllerSyntaxScanner's DeclaringType carries a namespace today (a minimal API's is just
+        // the handler's class/group name, deliberately left alone — it also feeds EndpointIdentity,
+        // and changing its shape would silently orphan every saved overlay for that collection); a
+        // dotted DeclaringType there would just mean no namespace context, which SyntaxSampleBodyGenerator
+        // already treats as "fall back to today's behaviour".
+        var lastDot = endpoint.DeclaringType.LastIndexOf('.');
+        var context = lastDot < 0 ? null : endpoint.DeclaringType[..lastDot];
+
+        if (SyntaxSampleBodyGenerator.Generate(typeShapes, bodyType, context) is { } sample)
+        {
+            return endpoint with { SampleBody = sample, BodyContentType = "application/json" };
+        }
+
+        // The syntax tier could not resolve the type — an external NuGet DTO, most often. Reported
+        // rather than guessed at, REQUIREMENTS 9.
+        return endpoint with
+        {
+            PartialResolutionNotes =
+            [
+                .. endpoint.PartialResolutionNotes,
+                $"The request body is a {bodyType}. Load the solution to generate a sample body from its properties.",
+            ],
+        };
+    }
+
+    /// <summary>Every scanned file's text, for <see cref="TypeShapeIndex"/>. A DTO's file need not
+    /// be among the ones re-parsed this pass, so this reads all of them regardless of incremental
+    /// status — a second read for files also in <c>toParse</c>, but a plain text read is cheap next
+    /// to the attribute and route resolution work incremental rescanning actually exists to skip.</summary>
+    private static IEnumerable<(string Path, string Text)> ReadAllText(IEnumerable<string> files)
+    {
+        foreach (var file in files)
+        {
+            string text;
+
+            try
+            {
+                text = File.ReadAllText(file);
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+
+            yield return (file, text);
+        }
     }
 
     /// <summary>

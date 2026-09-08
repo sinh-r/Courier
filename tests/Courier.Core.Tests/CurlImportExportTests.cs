@@ -89,6 +89,36 @@ public sealed class CurlImportExportTests
     }
 
     [Fact]
+    public void A_multiline_command_with_backslash_continuations_parses_like_one_line()
+    {
+        // The shape "copy as cURL" (browser dev tools, a terminal history entry) actually pastes
+        // as — a trailing backslash before the line break, repeated per flag.
+        var request = CurlImporter.Parse(
+            "curl 'https://api.example.com/users' \\\n"
+            + "  -H 'Content-Type: application/json' \\\n"
+            + "  -H 'Authorization: Bearer xyz' \\\n"
+            + "  --data-raw '{\"name\":\"Ada\"}'");
+
+        Assert.Equal("https://api.example.com/users", request.Url);
+        Assert.Equal(2, request.Headers.Count);
+        Assert.Equal("POST", request.Method);
+        Assert.Equal("{\"name\":\"Ada\"}", request.Body!.Text);
+    }
+
+    [Theory]
+    [InlineData("curl https://api.example.com", true)]
+    [InlineData("  curl -X POST https://api.example.com", true)]
+    [InlineData("CURL https://api.example.com", true)]
+    [InlineData("curl", true)] // just the bare word — still a word match, nothing to hijack
+    [InlineData("https://api.example.com", false)]
+    // A word match, not a bare prefix — pasting a URL or sentence that merely starts with the same
+    // four letters must not hijack the paste into a (nonsensical) curl import.
+    [InlineData("curling-championship.example.com", false)]
+    [InlineData("curl.example.com", false)]
+    public void LooksLikeCurl_gates_the_url_boxs_paste_intercept(string text, bool expected) =>
+        Assert.Equal(expected, CurlImporter.LooksLikeCurl(text));
+
+    [Fact]
     public void ToCurl_never_resolves_a_variable_reference()
     {
         var request = CurlImporter.Parse("curl '{{baseUrl}}/orders' --header 'Authorization: {{token}}'");

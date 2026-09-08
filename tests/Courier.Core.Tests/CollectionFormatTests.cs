@@ -180,6 +180,23 @@ public sealed class CollectionFormatTests
     }
 
     [Fact]
+    public void Declared_folders_survive_and_an_unused_list_is_omitted()
+    {
+        var restored = _serializer.DeserializeCollection(_serializer.SerializeCollection(new CollectionDefinition
+        {
+            Name = "Orders.Api",
+            Folders = ["Articles", "Articles/Nested"],
+        }));
+
+        Assert.Equal(["Articles", "Articles/Nested"], restored.Folders);
+
+        // OmitEmptyCollections keeps a collection nobody has organized into folders yet free of a
+        // stray "folders: []" line.
+        var yaml = _serializer.SerializeCollection(new CollectionDefinition { Name = "Orders.Api" });
+        Assert.DoesNotContain("folders:", yaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_timestamp_is_one_iso_scalar_and_reads_back()
     {
         var when = new DateTimeOffset(2026, 9, 6, 14, 2, 11, TimeSpan.Zero);

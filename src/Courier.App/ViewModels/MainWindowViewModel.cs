@@ -28,6 +28,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 {
     private readonly AppServices _services;
     private readonly DispatcherTimer _elapsedTimer;
+    private bool _revertingEnvironmentSelection;
     private ScanResult? _lastScanResult;
     private IReadOnlyList<HeaderValue> _defaultHeaders = [];
 
@@ -91,8 +92,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Environments = new EnvironmentsViewModel(services.SecretStore);
         Environments.EnvironmentCreated += name =>
         {
-            RefreshAvailableEnvironments();
+            // Setting EnvironmentName first runs OnEnvironmentNameChanged, which resolves
+            // ActiveEnvironment and — if the dialog happens to be open — already reloads the pane
+            // from it. The explicit Load below still has to run either way: it is what keeps the
+            // pane's own idea of "what am I editing" in sync with the newly created environment
+            // even while Settings is closed, so a later Reopen (see OpenDialog) finds the right
+            // name to reload instead of whatever the pane last had open.
             EnvironmentName = name;
+            RefreshAvailableEnvironments();
             Environments.Load(Tree.Folder, ActiveEnvironment);
         };
         Environments.EnvironmentSaved += definition =>
@@ -104,6 +111,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
             {
                 ActiveEnvironment = definition;
                 EnvironmentHasSecrets = definition.LocalNames.Count > 0;
+            }
+        };
+        Environments.PropertyChanged += (_, e) =>
+        {
+            // Mirrored into the status bar so the confirmation (or the reason a save did not
+            // happen) is still visible after the dialog closes, not only while it is open.
+            if (e.PropertyName == nameof(EnvironmentsViewModel.SaveStatus) && Environments.SaveStatus is { } status)
+            {
+                CollectionSyncStatus = status.Message;
             }
         };
         AuthProfileEditor = new AuthProfileEditorViewModel();
@@ -244,7 +260,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         if (kind == DialogKind.Environments)
         {
-            Environments.Load(Tree.Folder, ActiveEnvironment);
+            // Reopen, not Load: this fires on every settings-nav click back to Environments, not
+            // only the first time the dialog opens, and Load unconditionally rebuilds the grid from
+            // ActiveEnvironment — which is whichever environment the title bar is sending requests
+            // with, not necessarily the one this pane had open. Reopen keeps the pane (and any
+            // unsaved edits) put unless it genuinely has nothing open yet.
+            Environments.Reopen(Tree.Folder, ActiveEnvironment);
+            Environments.RefreshDetectedProfiles(Tree.Definition?.ScannedFrom?.Path);
         }
     }
 
@@ -270,11 +292,26 @@ public sealed partial class MainWindowViewModel : ObservableObject
             : HistoryPlacement.Inspector;
 
     [RelayCommand]
-    public void NewTab() => Tabs.Open(new TabState
+    public void NewTab() => OpenNewRequestTab(folder: null);
+
+    /// <summary>The tree's "New request" context-menu item, on a Collection or Folder node — a
+    /// Request node has no <see cref="TreeNodeKind.Folder"/> children to scope one to.</summary>
+    [RelayCommand]
+    public void NewRequestInFolder(TreeNode? node) =>
+        OpenNewRequestTab(node?.Kind == TreeNodeKind.Folder ? node.FolderPath : null);
+
+    /// <summary>
+    /// Shared by the generic "+"/"New request" (unscoped) and the tree's folder-scoped one. No
+    /// naming prompt: the user types a Name (and, if they want, a Folder) right in the tab the same
+    /// way they'd edit anything else, then Ctrl+S actually saves it.
+    /// </summary>
+    private void OpenNewRequestTab(string? folder) => Tabs.Open(new TabState
     {
         Title = "Untitled request",
         Method = "GET",
         EnvironmentName = EnvironmentName,
+        CollectionName = Tree.CollectionName,
+        Folder = folder,
     });
 
     [RelayCommand]
@@ -444,9 +481,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var serializer = new CollectionSerializer();
         var yaml = serializer.SerializeRequest(definition);
 
+        // Nested under the request's own Folder (root when unset — Path.Combine ignores an empty
+        // segment cleanly), so the file layout a human browsing the git repo sees matches what the
+        // tree already shows, not just what the YAML's own folder: field says.
         var path = state.RequestPath ?? Path.Combine(
             Tree.Folder,
             CollectionFormat.RequestsFolder,
+            state.Folder ?? string.Empty,
             CollectionFormat.FileNameFor(definition));
 
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -455,28 +496,67 @@ public sealed partial class MainWindowViewModel : ObservableObject
         state.RequestPath = path;
         state.IsDirty = false;
         tab.IsDirty = false;
+
+        // Without this, a first-time save is invisible until the folder is reopened — the tree has
+        // no other way to learn a file appeared under it.
+        await Tree.OpenFolderAsync(Tree.Folder).ConfigureAwait(true);
     }
 
     /// <summary>Opens a folder of collections. The menu, the rail's "…" button and Ctrl+O all reach this.</summary>
     [RelayCommand]
     public async Task OpenFolderAsync()
     {
-        if (TopLevel?.StorageProvider is not { } storage)
+        if (await PickFolderAsync("Open a collection folder").ConfigureAwait(true) is not { } path)
         {
             return;
+        }
+
+        await OpenAndPrimeFolderAsync(path).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Hand-builds a collection from nothing: pick or create an empty folder, write a
+    /// <c>collection.yaml</c> naming it (harmless no-op if one already exists — e.g. the folder was
+    /// already scanned into), and open it. The native picker already has its own "New folder"
+    /// button, so this needs no dialog of its own. The menu and the palette reach this.
+    /// </summary>
+    [RelayCommand]
+    public async Task NewCollectionAsync()
+    {
+        if (await PickFolderAsync("Choose or create a folder for the new collection").ConfigureAwait(true)
+            is not { } path)
+        {
+            return;
+        }
+
+        var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar));
+        CollectionWriter.WriteCollectionDefinition(path, name);
+
+        await OpenAndPrimeFolderAsync(path).ConfigureAwait(true);
+    }
+
+    /// <summary>The folder picker both <see cref="OpenFolderAsync"/> and <see cref="NewCollectionAsync"/> use.</summary>
+    private async Task<string?> PickFolderAsync(string title)
+    {
+        if (TopLevel?.StorageProvider is not { } storage)
+        {
+            return null;
         }
 
         var folders = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "Open a collection folder",
+            Title = title,
             AllowMultiple = false,
         }).ConfigureAwait(true);
 
-        if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } path)
-        {
-            return;
-        }
+        return folders.Count > 0 ? folders[0].TryGetLocalPath() : null;
+    }
 
+    /// <summary>Opens a folder into the tree and primes every other pane that depends on which
+    /// folder is active — the shared tail of <see cref="OpenFolderAsync"/> and
+    /// <see cref="NewCollectionAsync"/>.</summary>
+    private async Task OpenAndPrimeFolderAsync(string path)
+    {
         await Tree.OpenFolderAsync(path).ConfigureAwait(true);
         CollectionSyncStatus = $"{Tree.CollectionName} open";
         RefreshAvailableEnvironments();
@@ -485,6 +565,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // be opened once — the title-bar picker's inline "new environment" needs a folder to save
         // into the moment a collection opens, not only after a trip through the settings dialog.
         Environments.Load(Tree.Folder, ActiveEnvironment);
+        Environments.RefreshDetectedProfiles(Tree.Definition?.ScannedFrom?.Path);
         Dialog = DialogKind.None;
     }
 
@@ -653,13 +734,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
         CollectionWriter.WriteEnvironments(SyncReview.OutputPath, result);
         CollectionWriter.WriteCollectionDefinition(
             SyncReview.OutputPath,
-            Path.GetFileName(SyncReview.OutputPath.TrimEnd(Path.DirectorySeparatorChar)));
+            Path.GetFileName(SyncReview.OutputPath.TrimEnd(Path.DirectorySeparatorChar)),
+            SyncReview.SourcePath);
         EnsureDefaultEnvironment(SyncReview.OutputPath);
 
         await Tree.OpenFolderAsync(SyncReview.OutputPath).ConfigureAwait(true);
         CollectionSyncStatus = $"{Tree.CollectionName} open";
         RefreshAvailableEnvironments();
         Environments.Load(Tree.Folder, ActiveEnvironment);
+        Environments.RefreshDetectedProfiles(Tree.Definition?.ScannedFrom?.Path);
         Dialog = DialogKind.None;
     }
 
@@ -669,7 +752,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// <see cref="CollectionWriter.WriteEnvironments"/> writes nothing for zero. Without this, that
     /// collection has no environment to select or edit until someone manually walks through
     /// Settings → Environments → "Create environment". A collection just imported from code should
-    /// have at least one to put a <c>baseUrl</c> in.
+    /// have at least one, with a <c>baseUrl</c> row already there to fill in — every generated
+    /// request URL is <c>{{baseUrl}}/...</c>, so a row with nothing in it beats no row at all.
     /// </summary>
     private static void EnsureDefaultEnvironment(string folder)
     {
@@ -678,7 +762,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        CollectionLoader.SaveEnvironment(folder, new EnvironmentDefinition { Name = "Local" });
+        var definition = new EnvironmentDefinition { Name = "Local" };
+        definition.Shared["baseUrl"] = string.Empty;
+        CollectionLoader.SaveEnvironment(folder, definition);
     }
 
     /// <summary>
@@ -723,16 +809,35 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// wired to a string still gets right: no separate "select" command needed, and switching tabs
     /// or reopening a collection can just set the property.
     /// </summary>
-    partial void OnEnvironmentNameChanged(string value)
+    partial void OnEnvironmentNameChanged(string? oldValue, string newValue)
     {
-        if (value == "None" || Tree.Folder is null)
+        // A Reset on the bound AvailableEnvironments collection can briefly write null back through
+        // the two-way SelectedItem binding, despite this property's own non-null annotation —
+        // string.IsNullOrEmpty is what stays safe against that at runtime. Unlike a genuine "None"
+        // pick, a spurious null is not the user clearing the environment: snap the picker straight
+        // back to whatever it actually held rather than leaving it blank or, worse, blanking
+        // ActiveEnvironment underneath it — same idea as EnvironmentsViewModel's own revert for its
+        // "Editing" picker.
+        if (string.IsNullOrEmpty(newValue))
+        {
+            if (!_revertingEnvironmentSelection && !string.IsNullOrEmpty(oldValue))
+            {
+                _revertingEnvironmentSelection = true;
+                EnvironmentName = oldValue;
+                _revertingEnvironmentSelection = false;
+            }
+
+            return;
+        }
+
+        if (newValue == "None" || Tree.Folder is null)
         {
             ActiveEnvironment = null;
             EnvironmentHasSecrets = false;
             return;
         }
 
-        ActiveEnvironment = CollectionLoader.LoadEnvironment(Tree.Folder, value);
+        ActiveEnvironment = CollectionLoader.LoadEnvironment(Tree.Folder, newValue);
         EnvironmentHasSecrets = ActiveEnvironment?.LocalNames.Count > 0;
 
         // Keeps the settings pane showing whichever environment is actually selected, if it
@@ -750,18 +855,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// </summary>
     private void RefreshAvailableEnvironments()
     {
-        AvailableEnvironments.Clear();
-        AvailableEnvironments.Add("None");
+        List<string> names = ["None"];
 
-        if (Tree.Folder is null)
+        if (Tree.Folder is not null)
         {
-            return;
+            names.AddRange(CollectionLoader.ListEnvironments(Tree.Folder));
         }
 
-        foreach (var name in CollectionLoader.ListEnvironments(Tree.Folder))
-        {
-            AvailableEnvironments.Add(name);
-        }
+        // Reconciled in place, not Clear()-then-refill: a Clear() raises a Reset, which drops the
+        // bound flyout ListBox's selection and writes null straight back through EnvironmentName's
+        // two-way binding — see OnEnvironmentNameChanged's guard against exactly that.
+        ObservableListSync.SyncTo(AvailableEnvironments, names);
 
         // A single environment is the common case for a freshly imported collection, and picking
         // it automatically is what lets Send work without an extra click nobody would expect to need.

@@ -222,14 +222,7 @@ public static class RequestExporters
             }
         }
 
-        var query = request.Query.Where(q => q.Enabled).ToList();
-        if (query.Count == 0)
-        {
-            return url;
-        }
-
-        var separator = url.Contains('?') ? '&' : '?';
-        return url + separator + string.Join('&', query.Select(q => $"{q.Name}={q.Value}"));
+        return QueryString.Compose(url, request.Query);
     }
 
     private static string MethodName(string method) => method.ToUpperInvariant() switch

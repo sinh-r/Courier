@@ -64,6 +64,15 @@ public sealed class TrustBrushConverter : OneWayConverter<bool, IBrush>
     protected override IBrush Convert(bool value) => VerbBrushes.ForTrust(value);
 }
 
+/// <summary>Whether an operation (a save, most often) succeeded or failed. Ok/Error, the same pair
+/// a 2xx/5xx status uses — success and failure are one meaning wherever they appear.</summary>
+public sealed class SucceededBrushConverter : OneWayConverter<bool, IBrush>
+{
+    protected override IBrush Convert(bool value) => VerbBrushes.ForStatus(value ? 200 : 500);
+
+    protected override object Fallback => VerbBrushes.ForStatus(0);
+}
+
 /// <summary>Selected/unselected text colour for the response tab strip.</summary>
 public sealed class ActiveTabBrushConverter : OneWayConverter<bool, IBrush>
 {

@@ -27,6 +27,10 @@ public sealed class CreateOrderRequest
     public string? PurchaseOrderNumber { get; init; }
 
     public Address? ShipTo { get; init; }
+
+    /// <summary>An array of a simple type, nullable and unrequired — exercises the sample
+    /// generator's collection-of-scalar path rather than its (unrelated) nested-object path.</summary>
+    public List<string>? Tags { get; init; }
 }
 
 public sealed class OrderLine

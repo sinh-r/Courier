@@ -53,6 +53,25 @@
         </StackPanel>
       </Border>
 
+      <!--
+        Name and folder. The tab header only ever displays these — this is the one place either
+        can be set, which is what lets a hand-authored request be named and filed into a folder
+        before Ctrl+S saves it.
+      -->
+      <Border DockPanel.Dock="Top" Height="{DynamicResource RowHeight}" Padding="8,0"
+              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="*,8,200">
+          <TextBox Grid.Column="0" BorderThickness="0" Background="Transparent" Padding="0"
+                   VerticalAlignment="Center" PlaceholderText="Untitled request"
+                   Text="{Binding Tabs.Active.Title, Mode=TwoWay}"
+                   AutomationProperties.Name="Request name" />
+          <TextBox Grid.Column="2" Classes="mono" BorderThickness="0" Background="Transparent" Padding="0"
+                   VerticalAlignment="Center" PlaceholderText="folder (optional)"
+                   Text="{Binding Tabs.Active.Folder, Mode=TwoWay}"
+                   AutomationProperties.Name="Request folder" />
+        </Grid>
+      </Border>
+
       <!-- URL bar. -->
       <Border DockPanel.Dock="Top" Height="32" Padding="8,0"
               BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
@@ -92,8 +111,14 @@
         </Grid>
       </Border>
 
-      <!-- Request sections. -->
-      <TabControl DockPanel.Dock="Top" Padding="0" Background="Transparent">
+      <!--
+        Request sections. SelectedIndex is bound (rather than a single TabItem's IsSelected) so a
+        scanned request can default to whichever tab actually has something on it — see
+        TabViewModel.ResolveInitialRequestTabIndex — and so the choice survives suspend/restore via
+        TabState.ActiveRequestTabIndex.
+      -->
+      <TabControl DockPanel.Dock="Top" Padding="0" Background="Transparent"
+                  SelectedIndex="{Binding Tabs.Active.ActiveRequestTabIndex, Mode=TwoWay}">
 
         <!--
           Route parameters. Only present when the URL actually has {tokens} — most requests have
@@ -104,11 +129,14 @@
           <controls:PathParamGrid ItemsSource="{Binding Tabs.Active.PathParamEditor.Rows}" />
         </TabItem>
 
-        <TabItem Header="Params">
+        <!-- Header reads "Params · 3" once there is a row to look at, so a populated tab is
+             visible without clicking into it — the params a scan derived used to be invisible
+             here, hidden behind the Body tab that opened by default. -->
+        <TabItem Header="{Binding Tabs.Active.ParamsTabHeader}">
           <controls:KeyValueGrid ItemsSource="{Binding Tabs.Active.QueryEditor.Rows}" />
         </TabItem>
 
-        <TabItem Header="Headers">
+        <TabItem Header="{Binding Tabs.Active.HeadersTabHeader}">
           <DockPanel LastChildFill="True">
             <!--
               Inherited headers: app defaults, then the collection's own — muted, with where each
@@ -134,7 +162,7 @@
           </DockPanel>
         </TabItem>
 
-        <TabItem Header="Body" IsSelected="True">
+        <TabItem Header="Body">
           <controls:BodyEditor />
         </TabItem>
 

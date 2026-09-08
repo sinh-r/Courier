@@ -65,6 +65,35 @@
                       IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=Environments}">
           <StackPanel Spacing="12">
 
+            <!--
+              Which environment this pane edits — independent of the title-bar picker, which is
+              which environment requests are sent with. CORE-12.
+            -->
+            <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding Environments.HasFolder}">
+              <TextBlock Grid.Column="0" Classes="meta" VerticalAlignment="Center" Margin="0,0,8,0" Text="Editing" />
+              <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                        ItemsSource="{Binding Environments.AvailableEnvironments}"
+                        SelectedItem="{Binding Environments.SelectedEnvironmentName, Mode=TwoWay}"
+                        AutomationProperties.Name="Environment being edited" />
+            </Grid>
+
+            <!--
+              Switching environments mid-edit does not discard silently. Same inline-warning idiom
+              as the SEC-03 secret banner below, so nothing here introduces a new pattern.
+            -->
+            <Border Background="{DynamicResource Panel}"
+                    BorderBrush="{DynamicResource Secret}" BorderThickness="2,0,0,0"
+                    Padding="10,6" IsVisible="{Binding Environments.HasPendingSwitch}">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Classes="meta" VerticalAlignment="Center"
+                           Text="{Binding Environments.Name, StringFormat='Unsaved changes in {0}.'}" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                  <Button Content="Save" Height="20" Command="{Binding Environments.SaveCommand}" />
+                  <Button Content="Discard" Height="20" Command="{Binding Environments.DiscardChangesCommand}" />
+                </StackPanel>
+              </Grid>
+            </Border>
+
             <Grid ColumnDefinitions="*,Auto,Auto" IsVisible="{Binding Environments.HasEnvironment}">
               <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
                 <TextBlock Classes="heading" Text="{Binding Environments.Name}" VerticalAlignment="Center" />
@@ -73,6 +102,15 @@
               <Button Grid.Column="1" Content="Save" Command="{Binding Environments.SaveCommand}" />
               <Button Grid.Column="2" Content="+ add variable" Command="{Binding Environments.AddVariableCommand}" />
             </Grid>
+
+            <!--
+              What Save actually did. SEC-04's house style: specific and active, never a bare
+              "Saved"/"Failed" — names the file, or names the reason it did not write.
+            -->
+            <TextBlock Classes="meta" TextWrapping="Wrap"
+                       IsVisible="{Binding Environments.SaveStatus, Converter={x:Static ObjectConverters.IsNotNull}}"
+                       Text="{Binding Environments.SaveStatus.Message}"
+                       Foreground="{Binding Environments.SaveStatus.Succeeded, Converter={StaticResource SucceededBrushConverter}, FallbackValue={DynamicResource Muted}}" />
 
             <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1"
                     IsVisible="{Binding Environments.HasEnvironment}">
@@ -166,22 +204,48 @@
             <TextBlock Classes="meta" TextWrapping="Wrap" IsVisible="{Binding Environments.HasEnvironment}"
                        Text="Shared values live in the collection folder. Local values live in the operating system credential store and are never written to any file Courier creates. Move to local, then Save, to actually store a value there." />
 
+            <TextBlock Classes="meta" TextWrapping="Wrap" IsVisible="{Binding !Environments.HasFolder}"
+                       Text="Open a collection folder first." />
+
             <!--
-              No environment loaded: either this collection has none derived yet (environments today
-              usually come from a scan) or no folder is open at all.
+              New environment. Always available, not only when the collection has none yet — the
+              usual case is a QA or Staging environment added alongside one already there. SCAN-07:
+              a profile detected from the scanned source's launchSettings.json/appsettings.*.json
+              fills both the name and baseUrl, so the common case needs no typing.
             -->
-            <StackPanel Spacing="10" IsVisible="{Binding !Environments.HasEnvironment}">
-              <TextBlock Classes="meta" TextWrapping="Wrap" IsVisible="{Binding Environments.HasFolder}"
-                         Text="No environment is selected for this collection. Environments are usually derived from a scan, but you can start one from scratch." />
-              <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding Environments.HasFolder}">
-                <TextBox Grid.Column="0" PlaceholderText="Environment name, e.g. QA-Internal"
-                         Text="{Binding Environments.NewEnvironmentName}" />
-                <Button Grid.Column="1" Content="Create environment"
-                        Command="{Binding Environments.NewEnvironmentCommand}" />
-              </Grid>
-              <TextBlock Classes="meta" TextWrapping="Wrap" IsVisible="{Binding !Environments.HasFolder}"
-                         Text="Open a collection folder first." />
-            </StackPanel>
+            <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1" Padding="10"
+                    IsVisible="{Binding Environments.HasFolder}">
+              <StackPanel Spacing="8">
+                <TextBlock Classes="meta" Text="New environment" />
+
+                <ComboBox HorizontalAlignment="Stretch"
+                          IsVisible="{Binding Environments.DetectedProfiles.Count, Converter={StaticResource IsNotZeroConverter}}"
+                          ItemsSource="{Binding Environments.DetectedProfiles}"
+                          SelectedItem="{Binding Environments.SelectedDetectedProfile, Mode=TwoWay}"
+                          PlaceholderText="Detected from launchSettings.json…"
+                          AutomationProperties.Name="Detected launch profile">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:DetectedProfile">
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Classes="mono" Text="{Binding Name}" />
+                        <TextBlock Classes="meta mono" Text="{Binding BaseUrl}" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <Grid ColumnDefinitions="*,*,Auto">
+                  <TextBox Grid.Column="0" Margin="0,0,6,0" PlaceholderText="Name, e.g. QA-Internal"
+                           Text="{Binding Environments.NewEnvironmentName}"
+                           AutomationProperties.Name="New environment name" />
+                  <TextBox Grid.Column="1" Classes="mono" Margin="0,0,6,0" PlaceholderText="baseUrl"
+                           Text="{Binding Environments.NewEnvironmentBaseUrl}"
+                           AutomationProperties.Name="New environment base URL" />
+                  <Button Grid.Column="2" Content="Create"
+                          Command="{Binding Environments.NewEnvironmentCommand}" />
+                </Grid>
+              </StackPanel>
+            </Border>
 
           </StackPanel>
         </ScrollViewer>

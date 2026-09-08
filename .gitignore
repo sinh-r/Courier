@@ -17,3 +17,7 @@ node_modules/
 # than <dir>/.config/dotnet-tools.json, and then refuses to run again because that stray file
 # exists. The real manifest is .config/dotnet-tools.json and is committed.
 /dotnet-tools.json
+
+# Scan output written into a sample project when it's used as a manual "Sync from code" target
+# during development — not a fixture any test reads, so it does not belong in source control.
+/samples/*/collections/

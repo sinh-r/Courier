@@ -42,6 +42,12 @@ public sealed partial class TabViewModel : ObservableObject
     [ObservableProperty]
     private string _method;
 
+    /// <summary>Slash-separated, e.g. <c>"Articles/Nested"</c> — same convention
+    /// <see cref="TreeNode.FolderPath"/> uses. Null or empty means the collection root. Editable
+    /// here since nothing else lets a hand-authored request be filed into (or out of) a folder.</summary>
+    [ObservableProperty]
+    private string? _folder;
+
     [ObservableProperty]
     private ResponseViewModel? _response;
 
@@ -73,14 +79,27 @@ public sealed partial class TabViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsServerTabActive))]
     private int _activeResponseTabIndex;
 
+    /// <summary>
+    /// Mirrors <see cref="TabState.ActiveRequestTabIndex"/> the same way <see cref="ActiveResponseTabIndex"/>
+    /// mirrors its response-pane counterpart, so which of Path/Params/Headers/Body/Auth/Scripts was
+    /// open survives suspend and restore.
+    /// </summary>
+    [ObservableProperty]
+    private int _activeRequestTabIndex;
+
     private Stopwatch? _sendStopwatch;
     private CancellationTokenSource? _sendCts;
+
+    /// <summary>True while <see cref="RecomposeUrlForDisplay"/> is writing to <see cref="Url"/>, so
+    /// <see cref="OnUrlChanged"/> knows this is its own recompose rather than something typed.</summary>
+    private bool _suppressUrlSync;
 
     public TabViewModel(TabState state)
     {
         State = state;
         _title = state.Title;
         _method = state.Method;
+        _folder = state.Folder;
         _url = state.Url;
         _isDirty = state.IsDirty;
         _activeResponseTabIndex = state.ActiveResponseTabIndex;
@@ -94,6 +113,7 @@ public sealed partial class TabViewModel : ObservableObject
 
             State.Headers = [.. rows.Select(r => new HeaderValue(r.Name, r.Value, r.Enabled, r.Description))];
             MarkDirty();
+            OnPropertyChanged(nameof(HeadersTabHeader));
         });
 
         QueryEditor = new KeyValueEditorViewModel(rows =>
@@ -105,6 +125,12 @@ public sealed partial class TabViewModel : ObservableObject
 
             State.Query = [.. rows.Select(r => new QueryParameter(r.Name, r.Value, r.Enabled, r.Description))];
             MarkDirty();
+            OnPropertyChanged(nameof(ParamsTabHeader));
+
+            // A row edited in the grid — a checkbox toggled, a value typed — is a discrete action,
+            // not continuous typing, so it is safe to immediately reflect it in the URL bar. Typing
+            // directly into the URL bar is the opposite case; see OnUrlChanged.
+            RecomposeUrlForDisplay();
         });
 
         PathParamEditor = new PathParamEditorViewModel(values =>
@@ -119,6 +145,9 @@ public sealed partial class TabViewModel : ObservableObject
         });
 
         LoadRowsFromState();
+        _activeRequestTabIndex = ResolveInitialRequestTabIndex(state.ActiveRequestTabIndex);
+        RecomposeUrlForDisplay();
+        RefreshTabHeaders();
     }
 
     /// <summary>The Params grid. UI_SPEC — the grid the user actually edits.</summary>
@@ -140,15 +169,82 @@ public sealed partial class TabViewModel : ObservableObject
         HeaderEditor.Load(State.Headers.Select(h => (h.Name, h.Value, h.Enabled, h.Description)));
         QueryEditor.Load(State.Query.Select(q => (q.Name, q.Value, q.Enabled, q.Description)));
 
-        // _url is set directly (constructor) or already matches State.Url by invariant — nothing
-        // can touch State while a tab is suspended, so Activate() can never rehydrate a URL that
-        // has drifted from the field. Only the row set needs rebuilding here.
+        // Rebuilding the row sets does not by itself touch Url or the tab-header labels — Load
+        // suppresses the editors' change callbacks so the rebuild is not mistaken for an edit.
+        // Callers (the constructor, Activate) refresh both explicitly afterward.
         RefreshPathParams();
     }
 
     private void RefreshPathParams() => PathParamEditor.SetTokens(
         PathParameterNames.From(State?.Url ?? Url),
         State?.PathParams ?? new Dictionary<string, string>());
+
+    /// <summary>
+    /// Recomposes the URL bar from the bare <see cref="TabState.Url"/> plus the currently enabled
+    /// Params rows. Goes through the <see cref="Url"/> property so the box's binding updates, but
+    /// guarded by <see cref="_suppressUrlSync"/> so <see cref="OnUrlChanged"/> does not turn around
+    /// and re-split the very query string this just built.
+    /// </summary>
+    private void RecomposeUrlForDisplay()
+    {
+        if (State is null)
+        {
+            return;
+        }
+
+        var composed = QueryString.Compose(State.Url, State.Query);
+        if (composed == Url)
+        {
+            return;
+        }
+
+        _suppressUrlSync = true;
+        try
+        {
+            Url = composed;
+        }
+        finally
+        {
+            _suppressUrlSync = false;
+        }
+    }
+
+    /// <summary>"Params · 3" once there is something to look at, plain "Params" otherwise — same
+    /// idea for Headers. Refreshed from both editors' change callbacks, which fire on every row
+    /// add, edit and delete (see <see cref="KeyValueEditorViewModel.Load"/>'s suppression), and once
+    /// up front here since a freshly loaded row set fires no callback of its own.</summary>
+    private void RefreshTabHeaders()
+    {
+        OnPropertyChanged(nameof(ParamsTabHeader));
+        OnPropertyChanged(nameof(HeadersTabHeader));
+    }
+
+    public string ParamsTabHeader => TabHeader("Params", QueryEditor.Rows.Count(r => !r.IsBlank));
+
+    public string HeadersTabHeader => TabHeader("Headers", HeaderEditor.Rows.Count(r => !r.IsBlank));
+
+    private static string TabHeader(string name, int count) => count > 0 ? $"{name} · {count}" : name;
+
+    /// <summary>
+    /// Index 0 is Path, hidden whenever the URL has no <c>{tokens}</c> — a brand-new blank tab (and
+    /// <see cref="TabState"/>'s own field default) leaves the index unset at 0 with nothing there to
+    /// select, which would otherwise land the strip on an invisible tab with nothing visibly active.
+    /// Treating "still at 0" as "not yet decided" and picking Params-or-Body instead is safe: the
+    /// user can only ever have actually chosen Path when it was visible, and it is exactly as
+    /// visible now as it was then, so a real, deliberate 0 is indistinguishable from an unset one
+    /// only in the one case where both mean the same thing.
+    /// </summary>
+    private int ResolveInitialRequestTabIndex(int persisted)
+    {
+        if (persisted != 0 || PathParamEditor.Rows.Count > 0)
+        {
+            return persisted;
+        }
+
+        return State is { } state && state.Query.Any(q => q.Name.Length > 0) && state.BodyKind == BodyKind.None
+            ? 1
+            : 3;
+    }
 
     /// <summary>Null while suspended. Every access must go through <see cref="Activate"/> first.</summary>
     public TabState? State { get; private set; }
@@ -234,6 +330,9 @@ public sealed partial class TabViewModel : ObservableObject
         _suspendedPayload = null;
         ActiveResponseTabIndex = State.ActiveResponseTabIndex;
         LoadRowsFromState();
+        ActiveRequestTabIndex = ResolveInitialRequestTabIndex(State.ActiveRequestTabIndex);
+        RecomposeUrlForDisplay();
+        RefreshTabHeaders();
     }
 
     /// <summary>Starts the in-flight state: elapsed timer running, a cancellable token live.</summary>
@@ -301,7 +400,30 @@ public sealed partial class TabViewModel : ObservableObject
         }
     }
 
-    partial void OnTitleChanged(string value) => OnPropertyChanged(nameof(DisplayTitle));
+    /// <summary>
+    /// The one editable Name field in the app — the tab header is display-only. Pushed into
+    /// <see cref="State"/> the same way <see cref="OnMethodChanged"/> pushes Method, since this is
+    /// what <c>FileNameFor</c> slugifies into a filename on save.
+    /// </summary>
+    partial void OnTitleChanged(string value)
+    {
+        OnPropertyChanged(nameof(DisplayTitle));
+
+        if (State is not null && State.Title != value)
+        {
+            State.Title = value;
+            MarkDirty();
+        }
+    }
+
+    partial void OnFolderChanged(string? value)
+    {
+        if (State is not null && State.Folder != value)
+        {
+            State.Folder = value;
+            MarkDirty();
+        }
+    }
 
     /// <summary>
     /// Not a content edit, so this deliberately never calls <see cref="MarkDirty"/> — switching to
@@ -315,20 +437,88 @@ public sealed partial class TabViewModel : ObservableObject
         }
     }
 
+    /// <summary>Same as <see cref="OnActiveResponseTabIndexChanged"/>, for the request-side strip.</summary>
+    partial void OnActiveRequestTabIndexChanged(int value)
+    {
+        if (State is not null)
+        {
+            State.ActiveRequestTabIndex = value;
+        }
+    }
+
     /// <summary>
     /// The URL box binds here (rather than to <c>State.Url</c> directly) precisely so this exists:
     /// <c>TabState</c> is a plain POCO with no change notification, so without this hook nothing
     /// could tell the Path tab a token had appeared or disappeared as the user typed.
     /// </summary>
+    /// <remarks>
+    /// <see cref="Url"/> always displays the composed form — bare URL plus the enabled Params rows
+    /// (see <see cref="RecomposeUrlForDisplay"/>) — so whatever the box currently shows other than
+    /// that is exactly what the user just typed. Splitting the query back off here and folding it
+    /// into <see cref="QueryEditor"/> is what makes typing <c>?page=2</c> into the box populate the
+    /// grid, the other half of the sync <see cref="QueryEditor"/>'s own callback already does.
+    /// </remarks>
     partial void OnUrlChanged(string value)
     {
-        if (State is not null && State.Url != value)
+        if (_suppressUrlSync)
         {
-            State.Url = value;
+            return;
+        }
+
+        if (State is null)
+        {
+            RefreshPathParams();
+            return;
+        }
+
+        var (bareUrl, typedQuery) = QueryString.Split(value);
+
+        if (State.Url != bareUrl)
+        {
+            State.Url = bareUrl;
             MarkDirty();
         }
 
+        SyncQueryFromUrl(typedQuery);
         RefreshPathParams();
+    }
+
+    /// <summary>
+    /// Rebuilds the enabled Params rows from what the URL bar's query string now reads. A disabled
+    /// row is invisible to that text (<see cref="RecomposeUrlForDisplay"/> never includes one), so it
+    /// is left exactly as it is — the box only ever speaks for the enabled set, which is what stops
+    /// unchecking a parameter elsewhere from being undone by the next keystroke here. This does not
+    /// itself touch the URL bar: forcing a recompose mid-keystroke would reformat the text — and
+    /// possibly move the caret — under the user's fingers.
+    /// </summary>
+    private void SyncQueryFromUrl(IReadOnlyList<QueryParameter> typedQuery)
+    {
+        if (State is null)
+        {
+            return;
+        }
+
+        var stillDisabled = State.Query.Where(q => !q.Enabled).ToList();
+        var previouslyEnabled = State.Query
+            .Where(q => q.Enabled)
+            .ToDictionary(q => q.Name, q => q.Description, StringComparer.Ordinal);
+
+        var rebuiltEnabled = typedQuery
+            .Select(p => new QueryParameter(p.Name, p.Value, Enabled: true, previouslyEnabled.GetValueOrDefault(p.Name)))
+            .ToList();
+
+        var next = stillDisabled.Concat(rebuiltEnabled).ToList();
+
+        if (next.SequenceEqual(State.Query))
+        {
+            return;
+        }
+
+        State.Query = next;
+        MarkDirty();
+
+        QueryEditor.Load(next.Select(q => (q.Name, q.Value, q.Enabled, q.Description)));
+        OnPropertyChanged(nameof(ParamsTabHeader));
     }
 
     /// <summary>

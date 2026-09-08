@@ -80,12 +80,17 @@
                        ToolTip.Tip="No telemetry backend is configured for this collection." />
           </StackPanel>
 
-          <!-- Pretty / Raw / Preview. CORE-03. Only meaningful while Body is showing. -->
+          <!-- Pretty / Raw formatted / Raw / Preview. CORE-03. Only meaningful while Body is showing. -->
           <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center"
                       IsVisible="{Binding Tabs.Active.IsBodyTabActive}">
             <Button Classes="bare meta" Content="Pretty"
                     Command="{Binding Tabs.Active.Response.SetModeCommand}" CommandParameter="Pretty"
                     Foreground="{Binding Tabs.Active.Response.IsPrettyMode, Converter={StaticResource ActiveTabBrushConverter}}" />
+            <Button Classes="bare meta" Content="Raw formatted"
+                    Command="{Binding Tabs.Active.Response.SetModeCommand}" CommandParameter="RawFormatted"
+                    IsEnabled="{Binding Tabs.Active.Response.CanFormat, FallbackValue=False}"
+                    ToolTip.Tip="Re-indents the body. Only available for a JSON response."
+                    Foreground="{Binding Tabs.Active.Response.IsRawFormattedMode, Converter={StaticResource ActiveTabBrushConverter}}" />
             <Button Classes="bare meta" Content="Raw"
                     Command="{Binding Tabs.Active.Response.SetModeCommand}" CommandParameter="Raw"
                     Foreground="{Binding Tabs.Active.Response.IsRawMode, Converter={StaticResource ActiveTabBrushConverter}}" />
@@ -146,6 +151,13 @@
               Name="Tree"
               DataContext="{Binding Tabs.Active.Response}"
               IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).Tabs.Active.Response.IsPrettyMode, FallbackValue=False, TargetNullValue=False}" />
+
+          <ScrollViewer
+              IsVisible="{Binding Tabs.Active.Response.IsRawFormattedMode, FallbackValue=False, TargetNullValue=False}">
+            <TextBox Classes="mono" Text="{Binding Tabs.Active.Response.FormattedBodyText, Mode=OneWay}"
+                     IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                     BorderThickness="0" Background="Transparent" Padding="12" />
+          </ScrollViewer>
 
           <ScrollViewer
               IsVisible="{Binding Tabs.Active.Response.IsRawMode, FallbackValue=False, TargetNullValue=False}">

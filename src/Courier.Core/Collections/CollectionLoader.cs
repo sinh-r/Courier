@@ -120,6 +120,20 @@ public static class CollectionLoader
         folder,
         CollectionFormat.EnvironmentsFolder,
         $"{name}{CollectionFormat.EnvironmentFileExtension}");
+
+    /// <summary>
+    /// Writes <c>collection.yaml</c> unconditionally — unlike
+    /// <c>Courier.Scanner.CollectionWriter.WriteCollectionDefinition</c>'s "never overwrite", which
+    /// exists specifically to keep a rescan from clobbering the human-owned file. This one *is* the
+    /// human's own edit, made through the app (declaring a new folder, today; collection-level
+    /// settings, eventually) — the same relationship <see cref="SaveEnvironment"/> already has with
+    /// an environment file.
+    /// </summary>
+    public static void SaveCollectionDefinition(string folder, CollectionDefinition definition)
+    {
+        var path = Path.Combine(folder, CollectionFormat.CollectionFileName);
+        File.WriteAllText(path, new CollectionSerializer().SerializeCollection(definition));
+    }
 }
 
 public sealed record LoadedCollection(CollectionDefinition Definition, IReadOnlyList<RequestDefinition> Requests);
