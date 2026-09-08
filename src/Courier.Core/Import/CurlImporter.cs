@@ -14,8 +14,18 @@ namespace Courier.Core.Import;
 /// </remarks>
 public static class CurlImporter
 {
-    public static bool LooksLikeCurl(string text) =>
-        text.TrimStart().StartsWith("curl", StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// A word match, not a bare prefix: "curl" alone or followed by whitespace, never "curling..."
+    /// or "curl.example.com" — either of which a bare <c>StartsWith("curl")</c> would also catch,
+    /// hijacking an ordinary paste into the URL box for text that only happens to start the same way.
+    /// </summary>
+    public static bool LooksLikeCurl(string text)
+    {
+        var trimmed = text.TrimStart();
+        return trimmed.Length >= 4
+            && trimmed.StartsWith("curl", StringComparison.OrdinalIgnoreCase)
+            && (trimmed.Length == 4 || char.IsWhiteSpace(trimmed[4]));
+    }
 
     public static RequestDefinition Parse(string command)
     {
