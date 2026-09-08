@@ -88,7 +88,13 @@ public static class CollectionWriter
     /// Writes <c>collection.yaml</c> if it does not exist yet. Never overwritten afterward: it is
     /// where the user's own variables, headers and settings live once they start editing it.
     /// </summary>
-    public static void WriteCollectionDefinition(string folder, string name)
+    /// <param name="sourcePath">
+    /// The folder or <c>.sln</c> this collection was scanned from, recorded as <c>scannedFrom</c> so
+    /// the app can re-derive environments from the same <c>launchSettings.json</c>/<c>appsettings.*.json</c>
+    /// long after the import dialog closed — e.g. when creating another environment later. Null for
+    /// a collection that did not come from a scan.
+    /// </param>
+    public static void WriteCollectionDefinition(string folder, string name, string? sourcePath = null)
     {
         var path = Path.Combine(folder, CollectionFormat.CollectionFileName);
         if (File.Exists(path))
@@ -96,8 +102,15 @@ public static class CollectionWriter
             return;
         }
 
+        var definition = new CollectionDefinition { Name = name };
+
+        if (sourcePath is not null)
+        {
+            definition.ScannedFrom = new ScanSource(sourcePath, DateTimeOffset.UtcNow);
+        }
+
         var serializer = new CollectionSerializer();
-        File.WriteAllText(path, serializer.SerializeCollection(new CollectionDefinition { Name = name }));
+        File.WriteAllText(path, serializer.SerializeCollection(definition));
     }
 
     private static void WriteCache(string folder, ScanResult result) =>

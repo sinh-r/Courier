@@ -122,23 +122,9 @@ public static class CurlImporter
     /// </summary>
     private static void SplitQuery(RequestDefinition request)
     {
-        var mark = request.Url.IndexOf('?');
-        if (mark < 0)
-        {
-            return;
-        }
-
-        var query = request.Url[(mark + 1)..];
-        request.Url = request.Url[..mark];
-
-        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var equals = pair.IndexOf('=');
-            var name = equals < 0 ? pair : pair[..equals];
-            var value = equals < 0 ? string.Empty : pair[(equals + 1)..];
-
-            request.Query.Add(new QueryParameter(Uri.UnescapeDataString(name), Uri.UnescapeDataString(value)));
-        }
+        var (url, parameters) = QueryString.Split(request.Url);
+        request.Url = url;
+        request.Query.AddRange(parameters);
     }
 
     private static void ApplyBody(

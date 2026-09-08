@@ -13,14 +13,22 @@ namespace Courier.Scanner.Syntax;
 /// </summary>
 internal static class SyntaxHelpers
 {
-    /// <summary>Binds parameters by source: route, query, header, body, form. SCAN-03.</summary>
+    /// <summary>
+    /// Binds parameters by source: route, query, header, body, form. SCAN-03. The bound body
+    /// parameter's type name is returned via <paramref name="bodyTypeName"/> rather than dropped —
+    /// <see cref="TypeShapeIndex"/> and <see cref="SyntaxSampleBodyGenerator"/> resolve it into a
+    /// sample body, SCAN-04, without needing a restore. A minimal API or an action that declares two
+    /// body parameters is not valid ASP.NET Core, so the first one found wins.
+    /// </summary>
     public static List<ScannedParameter> ReadParameters(
         SeparatedSyntaxList<ParameterSyntax> parameterList,
         string routeTemplate,
-        List<string> notes)
+        List<string> notes,
+        out string? bodyTypeName)
     {
         var routeNames = Routing.RouteResolver.ParameterNames(routeTemplate);
         var parameters = new List<ScannedParameter>();
+        bodyTypeName = null;
 
         foreach (var parameter in parameterList)
         {
@@ -37,12 +45,7 @@ internal static class SyntaxHelpers
 
             if (source == ParameterSource.Body)
             {
-                // The syntax tier cannot follow the type to shape a sample. SCAN-04 needs the
-                // semantic tier; saying so is better than emitting an empty object.
-                notes.Add(
-                    $"The request body is a {typeName}. Load the solution to generate a sample body "
-                    + "from its properties.");
-
+                bodyTypeName ??= typeName;
                 continue;
             }
 

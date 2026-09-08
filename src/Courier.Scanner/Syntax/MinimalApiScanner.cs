@@ -111,7 +111,7 @@ public sealed class MinimalApiScanner
         var locals = BuildLocalPrefixes(invocation);
         var template = RouteResolver.JoinSegments(ResolvePrefix(member.Expression, locals), routeLiteral);
 
-        if (!TryResolveParameters(handlerExpr, template, methodsByName, localFunctionsByName, out var parameters, out var notes, out var failureReason))
+        if (!TryResolveParameters(handlerExpr, template, methodsByName, localFunctionsByName, out var parameters, out var notes, out var bodyTypeName, out var failureReason))
         {
             results.Add(new UnresolvedEndpoint(declaringType, actionName, path, line, failureReason!));
             return;
@@ -132,6 +132,7 @@ public sealed class MinimalApiScanner
             Authorization = chain.Authorization,
             RequiredScopes = SyntaxHelpers.ScopesFrom(chain.Authorization),
             Responses = chain.Responses,
+            BodyTypeName = bodyTypeName,
             PartialResolutionNotes = notes,
             Summary = chain.Summary,
         });
@@ -185,7 +186,7 @@ public sealed class MinimalApiScanner
         var locals = BuildLocalPrefixes(invocation);
         var template = RouteResolver.JoinSegments(ResolvePrefix(member.Expression, locals), routeLiteral);
 
-        if (!TryResolveParameters(handlerExpr, template, methodsByName, localFunctionsByName, out var parameters, out var notes, out var failureReason))
+        if (!TryResolveParameters(handlerExpr, template, methodsByName, localFunctionsByName, out var parameters, out var notes, out var bodyTypeName, out var failureReason))
         {
             results.Add(new UnresolvedEndpoint(declaringType, actionName, path, line, failureReason!));
             return;
@@ -208,6 +209,7 @@ public sealed class MinimalApiScanner
                 Authorization = chain.Authorization,
                 RequiredScopes = SyntaxHelpers.ScopesFrom(chain.Authorization),
                 Responses = chain.Responses,
+                BodyTypeName = bodyTypeName,
                 PartialResolutionNotes = notes,
                 Summary = chain.Summary,
             });
@@ -276,10 +278,12 @@ public sealed class MinimalApiScanner
         IReadOnlyDictionary<string, LocalFunctionStatementSyntax> localFunctionsByName,
         out List<ScannedParameter> parameters,
         out List<string> notes,
+        out string? bodyTypeName,
         out string? failureReason)
     {
         parameters = [];
         notes = [];
+        bodyTypeName = null;
         failureReason = null;
 
         var parameterList = handler switch
@@ -297,7 +301,7 @@ public sealed class MinimalApiScanner
             return false;
         }
 
-        parameters = SyntaxHelpers.ReadParameters(parameterList.Value, routeTemplate, notes);
+        parameters = SyntaxHelpers.ReadParameters(parameterList.Value, routeTemplate, notes, out bodyTypeName);
         return true;
     }
 

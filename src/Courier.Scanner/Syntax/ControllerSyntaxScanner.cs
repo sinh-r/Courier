@@ -137,7 +137,7 @@ public sealed class ControllerSyntaxScanner
                 }
 
                 var notes = new List<string>();
-                var parameters = SyntaxHelpers.ReadParameters(method.ParameterList.Parameters, template, notes);
+                var parameters = SyntaxHelpers.ReadParameters(method.ParameterList.Parameters, template, notes, out var bodyTypeName);
 
                 results.Add(new ScannedEndpoint(
                     EndpointIdentity.Compute(verb, template, declaringType),
@@ -152,7 +152,7 @@ public sealed class ControllerSyntaxScanner
                     Authorization = authorization,
                     RequiredScopes = SyntaxHelpers.ScopesFrom(authorization),
                     Responses = SyntaxHelpers.ReadDeclaredResponses(method.AttributeLists),
-                    SampleBody = null,
+                    BodyTypeName = bodyTypeName,
                     PartialResolutionNotes = notes,
                     Summary = SyntaxHelpers.ReadSummary(method),
                 });
