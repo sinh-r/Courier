@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Courier.Core.Abstractions;
 using Courier.Core.Collections;
 
 namespace Courier.Scanner;
@@ -47,24 +48,38 @@ public static class CollectionWriter
 
     /// <summary>
     /// Writes each environment the scan derived from <c>launchSettings.json</c>/
-    /// <c>appsettings.*.json</c>, so <c>{{baseUrl}}</c> has something to resolve against. SCAN-07.
+    /// <c>appsettings.*.json</c>/a Postman environment export, so <c>{{baseUrl}}</c> has something to
+    /// resolve against. SCAN-07.
     /// </summary>
     /// <remarks>
     /// Never overwrites a file that already exists — same P3 reasoning as the overlay. A user who
     /// has started editing <c>environments/Local.env.yaml</c> must not have it silently replaced by
-    /// the next rescan.
+    /// the next rescan. That guard applies whole: an environment whose file already exists is
+    /// skipped entirely, so a secret found for it is never even attempted.
     /// </remarks>
-    public static void WriteEnvironments(string folder, ScanResult result)
+    /// <param name="secrets">
+    /// Where a Postman-derived secret variable's value is stored. SEC-03: the value never reaches
+    /// <paramref name="folder"/> — only the variable's name does, as an
+    /// <see cref="EnvironmentDefinition.LocalNames"/> entry. A store that refuses writes (the CLI's,
+    /// deliberately, off a build agent) is reported in the result rather than left to throw through
+    /// a build.
+    /// </param>
+    public static async Task<EnvironmentWriteReport> WriteEnvironments(
+        string folder, ScanResult result, ISecretStore secrets, CancellationToken ct = default)
     {
         if (result.Environments.Count == 0)
         {
-            return;
+            return new EnvironmentWriteReport(0, 0, []);
         }
 
         var environmentsFolder = Path.Combine(folder, CollectionFormat.EnvironmentsFolder);
         Directory.CreateDirectory(environmentsFolder);
 
         var serializer = new CollectionSerializer();
+
+        var environmentsWritten = 0;
+        var secretsStored = 0;
+        var secretFailures = new List<SecretWriteFailure>();
 
         foreach (var environment in result.Environments)
         {
@@ -80,9 +95,38 @@ public static class CollectionWriter
             var definition = new EnvironmentDefinition { Name = environment.Name };
             definition.Shared["baseUrl"] = environment.BaseUrl;
 
+            foreach (var (key, value) in environment.Variables ?? ImmutableEmpty)
+            {
+                definition.Shared.TryAdd(key, value);
+            }
+
+            foreach (var (key, value) in environment.SecretVariables ?? ImmutableEmpty)
+            {
+                definition.LocalNames.Add(key);
+
+                try
+                {
+                    await secrets.SetAsync(definition.SecretKeyFor(key), value, ct).ConfigureAwait(false);
+                    secretsStored++;
+                }
+                catch (NotSupportedException ex)
+                {
+                    // The CLI's store refuses on principle — a build agent cannot unlock a user's
+                    // credential store. The variable's name still round-trips; only its value is
+                    // missing, same as any other unfilled local variable.
+                    secretFailures.Add(new SecretWriteFailure(environment.Name, key, ex.Message));
+                }
+            }
+
             File.WriteAllText(path, serializer.SerializeEnvironment(definition));
+            environmentsWritten++;
         }
+
+        return new EnvironmentWriteReport(environmentsWritten, secretsStored, secretFailures);
     }
+
+    private static readonly IReadOnlyDictionary<string, string> ImmutableEmpty =
+        new Dictionary<string, string>(StringComparer.Ordinal);
 
     /// <summary>
     /// Writes <c>collection.yaml</c> if it does not exist yet. Never overwritten afterward: it is
@@ -148,3 +192,14 @@ public static class CollectionWriter
 public sealed record ScanCache(
     IReadOnlyDictionary<string, string> Hashes,
     IReadOnlyList<ScannedEndpoint> Endpoints);
+
+/// <summary>What <see cref="CollectionWriter.WriteEnvironments"/> actually did — counts and failures
+/// only, never a secret value, so it's safe to print to a console or fold into a status line.</summary>
+public sealed record EnvironmentWriteReport(
+    int EnvironmentsWritten,
+    int SecretsStored,
+    IReadOnlyList<SecretWriteFailure> SecretFailures);
+
+/// <param name="Reason">The store's own message — already actionable, e.g. which environment
+/// variable to set on the pipeline instead.</param>
+public sealed record SecretWriteFailure(string Environment, string VariableName, string Reason);

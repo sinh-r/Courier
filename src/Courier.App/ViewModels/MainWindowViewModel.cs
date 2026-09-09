@@ -731,7 +731,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         CollectionWriter.Write(SyncReview.OutputPath, result, "baseUrl");
-        CollectionWriter.WriteEnvironments(SyncReview.OutputPath, result);
+        await CollectionWriter.WriteEnvironments(SyncReview.OutputPath, result, _services.SecretStore)
+            .ConfigureAwait(true);
         CollectionWriter.WriteCollectionDefinition(
             SyncReview.OutputPath,
             Path.GetFileName(SyncReview.OutputPath.TrimEnd(Path.DirectorySeparatorChar)),

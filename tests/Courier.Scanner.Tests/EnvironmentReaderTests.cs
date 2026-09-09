@@ -100,6 +100,129 @@ public sealed class EnvironmentReaderTests : IDisposable
         Assert.Equal("https://localhost:7211", local.BaseUrl);
     }
 
+    [Fact]
+    public void Postman_environment_variables_split_into_base_url_shared_and_secret()
+    {
+        Write("Local.postman_environment.json", """
+            {
+              "id": "abc-123",
+              "name": "Local",
+              "values": [
+                { "key": "baseUrl", "value": "https://api.local.example.com", "enabled": true, "type": "default" },
+                { "key": "region", "value": "us-east-1", "enabled": true, "type": "default" },
+                { "key": "apiKey", "value": "hunter2", "enabled": true, "type": "secret" },
+                { "key": "unused", "value": "nope", "enabled": false, "type": "default" }
+              ],
+              "_postman_variable_scope": "environment"
+            }
+            """);
+
+        var local = Assert.Single(EnvironmentReader.Read(_root));
+
+        Assert.Equal("Local", local.Name);
+        Assert.Equal("https://api.local.example.com", local.BaseUrl);
+
+        Assert.NotNull(local.Variables);
+        var variables = local.Variables!;
+        Assert.Equal("us-east-1", variables["region"]);
+        Assert.DoesNotContain("baseUrl", variables.Keys);
+        Assert.DoesNotContain("unused", variables.Keys);
+        Assert.DoesNotContain("apiKey", variables.Keys);
+
+        Assert.NotNull(local.SecretVariables);
+        Assert.Equal("hunter2", local.SecretVariables!["apiKey"]);
+    }
+
+    [Fact]
+    public void A_postman_type_secret_marker_is_honoured_even_when_the_value_looks_plain()
+    {
+        Write("Local.postman_environment.json", """
+            {
+              "name": "Local",
+              "values": [
+                { "key": "note", "value": "hello", "enabled": true, "type": "secret" }
+              ]
+            }
+            """);
+
+        var local = Assert.Single(EnvironmentReader.Read(_root));
+
+        Assert.NotNull(local.SecretVariables);
+        Assert.Equal("hello", local.SecretVariables!["note"]);
+        Assert.Null(local.Variables);
+    }
+
+    [Fact]
+    public void An_unmarked_but_secret_shaped_variable_is_still_detected()
+    {
+        Write("Local.postman_environment.json", """
+            {
+              "name": "Local",
+              "values": [
+                { "key": "password", "value": "whatever-it-is", "enabled": true, "type": "default" }
+              ]
+            }
+            """);
+
+        var local = Assert.Single(EnvironmentReader.Read(_root));
+
+        Assert.NotNull(local.SecretVariables);
+        Assert.Equal("whatever-it-is", local.SecretVariables!["password"]);
+    }
+
+    [Fact]
+    public void Malformed_postman_environment_json_is_swallowed()
+    {
+        Write("Broken.postman_environment.json", "{ this is not json");
+
+        Assert.Empty(EnvironmentReader.Read(_root));
+    }
+
+    [Fact]
+    public void A_postman_environment_with_no_name_falls_back_to_the_filename()
+    {
+        Write("Staging.postman_environment.json", """
+            {
+              "values": [
+                { "key": "region", "value": "eu-west-1", "enabled": true }
+              ]
+            }
+            """);
+
+        var staging = Assert.Single(EnvironmentReader.Read(_root));
+
+        Assert.Equal("Staging", staging.Name);
+    }
+
+    [Fact]
+    public void A_postman_environment_loses_a_name_collision_to_launch_settings()
+    {
+        Write("launchSettings.json", """
+            {
+              "profiles": {
+                "Local": {
+                  "commandName": "Project",
+                  "applicationUrl": "https://localhost:7211;http://localhost:5211"
+                }
+              }
+            }
+            """);
+
+        Write("Local.postman_environment.json", """
+            {
+              "name": "Local",
+              "values": [
+                { "key": "baseUrl", "value": "https://postman-exported.example.com", "enabled": true }
+              ]
+            }
+            """);
+
+        var local = Assert.Single(EnvironmentReader.Read(_root), e => e.Name == "Local");
+
+        Assert.Equal("https://localhost:7211", local.BaseUrl);
+        Assert.Null(local.Variables);
+    }
+
     private void Write(string fileName, string content) =>
         File.WriteAllText(Path.Combine(_root, fileName), content);
 

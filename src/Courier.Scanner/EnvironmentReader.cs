@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Courier.Core.Privacy;
 
 namespace Courier.Scanner;
 
@@ -13,6 +14,10 @@ namespace Courier.Scanner;
 /// </remarks>
 public static class EnvironmentReader
 {
+    /// <summary>Keys a Postman variable or an appsettings property might use for the base URL,
+    /// checked in this order.</summary>
+    private static readonly string[] BaseUrlKeys = ["BaseUrl", "BaseAddress", "ApiBaseUrl", "ApiUrl"];
+
     public static IReadOnlyList<DerivedEnvironment> Read(string root)
     {
         var environments = new List<DerivedEnvironment>();
@@ -27,7 +32,14 @@ public static class EnvironmentReader
             ReadAppSettings(file, environments);
         }
 
-        // First writer wins, so a launch profile beats an appsettings guess for the same name.
+        foreach (var file in Find(root, "*.postman_environment.json"))
+        {
+            ReadPostmanEnvironment(file, environments);
+        }
+
+        // First writer wins, so a launch profile beats an appsettings guess, and either beats an
+        // exported Postman environment, for the same name — the running profile's real URL is more
+        // trustworthy than a file someone exported and may not have refreshed since.
         return [.. environments
             .GroupBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
@@ -177,7 +189,7 @@ public static class EnvironmentReader
         {
             var name = EnvironmentNameFrom(Path.GetFileName(file));
 
-            foreach (var key in new[] { "BaseUrl", "BaseAddress", "ApiBaseUrl", "ApiUrl" })
+            foreach (var key in BaseUrlKeys)
             {
                 if (document.RootElement.TryGetProperty(key, out var value)
                     && value.ValueKind == JsonValueKind.String
@@ -199,6 +211,107 @@ public static class EnvironmentReader
     {
         var parts = fileName.Split('.');
         return parts.Length >= 3 ? parts[1] : "Default";
+    }
+
+    /// <summary>
+    /// Reads a Postman environment export — an arbitrary bag of variables, not a single URL. A
+    /// variable is treated as secret, and its value kept only in memory for
+    /// <see cref="CollectionWriter.WriteEnvironments"/> to store, when Postman's own export marks it
+    /// <c>"type": "secret"</c> or it looks like one by <see cref="SecretPatterns"/> — the same
+    /// classifier CurlImporter and PostmanImporter already use elsewhere. Everything else becomes a
+    /// shared variable, exactly like a launchSettings profile or an appsettings base URL.
+    /// </summary>
+    private static void ReadPostmanEnvironment(string file, List<DerivedEnvironment> environments)
+    {
+        if (Parse(file) is not { } document)
+        {
+            return;
+        }
+
+        using (document)
+        {
+            if (!document.RootElement.TryGetProperty("values", out var values)
+                || values.ValueKind != JsonValueKind.Array)
+            {
+                return;
+            }
+
+            var name = document.RootElement.TryGetProperty("name", out var nameElement)
+                && nameElement.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(nameElement.GetString())
+                    ? nameElement.GetString()!
+                    : PostmanEnvironmentNameFrom(file);
+
+            var shared = new Dictionary<string, string>(StringComparer.Ordinal);
+            var secret = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            foreach (var entry in values.EnumerateArray())
+            {
+                if (!entry.TryGetProperty("key", out var keyElement)
+                    || keyElement.ValueKind != JsonValueKind.String
+                    || keyElement.GetString() is not { Length: > 0 } key)
+                {
+                    continue;
+                }
+
+                if (entry.TryGetProperty("enabled", out var enabledElement)
+                    && enabledElement.ValueKind == JsonValueKind.False)
+                {
+                    continue;
+                }
+
+                var value = entry.TryGetProperty("value", out var valueElement)
+                    && valueElement.ValueKind == JsonValueKind.String
+                        ? valueElement.GetString() ?? string.Empty
+                        : string.Empty;
+
+                var isMarkedSecret = entry.TryGetProperty("type", out var typeElement)
+                    && typeElement.ValueKind == JsonValueKind.String
+                    && string.Equals(typeElement.GetString(), "secret", StringComparison.OrdinalIgnoreCase);
+
+                if (isMarkedSecret || SecretPatterns.Classify(value, key).IsSecret)
+                {
+                    secret[key] = value;
+                }
+                else
+                {
+                    shared[key] = value;
+                }
+            }
+
+            string? baseUrl = null;
+
+            foreach (var candidate in BaseUrlKeys)
+            {
+                var match = shared.Keys.FirstOrDefault(k => string.Equals(k, candidate, StringComparison.OrdinalIgnoreCase));
+
+                if (match is not null
+                    && Uri.TryCreate(shared[match], UriKind.Absolute, out var uri))
+                {
+                    baseUrl = uri.ToString().TrimEnd('/');
+                    shared.Remove(match);
+                    break;
+                }
+            }
+
+            environments.Add(new DerivedEnvironment(
+                name,
+                baseUrl ?? string.Empty,
+                $"from {Path.GetFileName(file)}",
+                shared.Count > 0 ? shared : null,
+                secret.Count > 0 ? secret : null));
+        }
+    }
+
+    /// <summary>"Local.postman_environment.json" becomes "Local".</summary>
+    private static string PostmanEnvironmentNameFrom(string file)
+    {
+        const string Suffix = ".postman_environment.json";
+        var fileName = Path.GetFileName(file);
+
+        return fileName.EndsWith(Suffix, StringComparison.OrdinalIgnoreCase)
+            ? fileName[..^Suffix.Length]
+            : Path.GetFileNameWithoutExtension(fileName);
     }
 
     private static JsonDocument? Parse(string file)

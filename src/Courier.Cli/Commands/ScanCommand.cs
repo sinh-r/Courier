@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.Text.Json;
+using Courier.Cli.Services;
 using Courier.Core.Collections;
 using Courier.Scanner;
 
@@ -52,27 +53,31 @@ internal static class ScanCommand
             failOnUnresolvedOption,
         };
 
-        command.SetAction(parse => Execute(
+        command.SetAction((parse, ct) => ExecuteAsync(
             parse.GetValue(pathArgument)!,
             parse.GetValue(outputOption),
             parse.GetValue(jsonOption),
             parse.GetValue(baseUrlOption)!,
-            parse.GetValue(failOnUnresolvedOption)));
+            parse.GetValue(failOnUnresolvedOption),
+            ct));
 
         return command;
     }
 
-    private static int Execute(
+    private static async Task<int> ExecuteAsync(
         string path,
         string? output,
         string? jsonPath,
         string baseUrlVariable,
-        bool failOnUnresolved)
+        bool failOnUnresolved,
+        CancellationToken ct)
     {
+        using var services = CliServices.Build();
+
         var scanner = new SolutionScanner();
 
         var previous = output is not null ? CollectionWriter.ReadCache(output) : null;
-        var result = scanner.Scan(path, previous?.Hashes, previous?.Endpoints);
+        var result = scanner.Scan(path, previous?.Hashes, previous?.Endpoints, ct);
 
         Console.WriteLine(
             $"{result.Endpoints.Count} endpoints, {result.Unresolved.Count} unresolved, "
@@ -86,22 +91,41 @@ internal static class ScanCommand
             Console.WriteLine($"              {unresolved.Reason}");
         }
 
+        EnvironmentWriteReport? writeReport = null;
+
         if (output is not null)
         {
             CollectionWriter.Write(output, result, baseUrlVariable);
             Console.WriteLine($"Wrote {Path.Combine(output, CollectionFormat.GeneratedFileName)}");
+
+            writeReport = await CollectionWriter.WriteEnvironments(output, result, services.SecretStore, ct)
+                .ConfigureAwait(false);
+
+            // SEC-03, in console form: a value is never printed, only where it landed or why it
+            // couldn't. On a build agent — CliServices' EnvironmentSecretStore refuses on principle —
+            // every one of these becomes a failure line rather than a silent no-op.
+            if (writeReport.SecretsStored > 0)
+            {
+                Console.WriteLine($"  {writeReport.SecretsStored} secret variable(s) stored in {services.SecretStore.LocationDescription}");
+            }
+
+            foreach (var failure in writeReport.SecretFailures)
+            {
+                Console.WriteLine($"  secret not stored  {failure.Environment}/{failure.VariableName}");
+                Console.WriteLine($"                      {failure.Reason}");
+            }
         }
 
         if (jsonPath is not null)
         {
-            File.WriteAllText(jsonPath, ToJson(result));
+            File.WriteAllText(jsonPath, ToJson(result, writeReport));
             Console.WriteLine($"Wrote {jsonPath}");
         }
 
         return failOnUnresolved && result.Unresolved.Count > 0 ? 1 : 0;
     }
 
-    private static string ToJson(ScanResult result) => JsonSerializer.Serialize(
+    private static string ToJson(ScanResult result, EnvironmentWriteReport? writeReport) => JsonSerializer.Serialize(
         new
         {
             tier = result.Tier.ToString(),
@@ -132,6 +156,15 @@ internal static class ScanCommand
                 name = e.Name,
                 baseUrl = e.BaseUrl,
                 source = e.Source,
+                variableCount = e.Variables?.Count ?? 0,
+                secretVariableCount = e.SecretVariables?.Count ?? 0,
+            }),
+            secretsStored = writeReport?.SecretsStored ?? 0,
+            secretFailures = (writeReport?.SecretFailures ?? []).Select(f => new
+            {
+                environment = f.Environment,
+                variable = f.VariableName,
+                reason = f.Reason,
             }),
         },
         new JsonSerializerOptions { WriteIndented = true });

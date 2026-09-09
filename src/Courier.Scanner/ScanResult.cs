@@ -224,4 +224,20 @@ public sealed record EndpointAuthorization(bool AllowsAnonymous, bool RequiresAu
 }
 
 /// <param name="Source">Which file this came from, so the user can see why the URL is what it is.</param>
-public sealed record DerivedEnvironment(string Name, string BaseUrl, string Source);
+/// <param name="Variables">
+/// Extra non-secret key/value pairs beyond <paramref name="BaseUrl"/>. Populated for a Postman
+/// environment export, which is an arbitrary variable bag rather than a single URL; null for a
+/// launchSettings.json/appsettings.*.json-derived environment, which never has more than the one.
+/// </param>
+/// <param name="SecretVariables">
+/// Name to plaintext value, for variables a Postman environment export marked or looked like a
+/// secret. In-memory only: never serialized to scan-cache.json, never put in a JSON report, and
+/// never bound into a review screen beyond a count. The only consumer that may read a value out of
+/// this is <see cref="CollectionWriter.WriteEnvironments"/>, which stores it and keeps only the name.
+/// </param>
+public sealed record DerivedEnvironment(
+    string Name,
+    string BaseUrl,
+    string Source,
+    IReadOnlyDictionary<string, string>? Variables = null,
+    IReadOnlyDictionary<string, string>? SecretVariables = null);
