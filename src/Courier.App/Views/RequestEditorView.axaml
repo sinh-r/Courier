@@ -102,6 +102,10 @@
                        Text="{Binding Tabs.Active.Elapsed, Converter={StaticResource ElapsedConverter}}" />
             <Button Content="Cancel" Command="{Binding CancelSendCommand}"
                     IsVisible="{Binding Tabs.Active.IsSending}" />
+            <!-- The only other way to save was Ctrl+S with no button anywhere in the app. -->
+            <Button Content="Save" Command="{Binding SaveCommand}"
+                    IsEnabled="{Binding Tabs.Active.IsDirty}"
+                    AutomationProperties.Name="Save request" />
             <Button Classes="primary" Content="Send" Width="64"
                     Command="{Binding SendCommand}"
                     IsVisible="{Binding !Tabs.Active.IsSending}"

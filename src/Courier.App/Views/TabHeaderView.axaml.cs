@@ -39,7 +39,7 @@ public sealed partial class TabHeaderView : UserControl
     {
         if (DataContext is TabViewModel tab && FindShell() is { } shell)
         {
-            shell.Tabs.Close(tab);
+            shell.RequestCloseTab(tab);
         }
     }
 

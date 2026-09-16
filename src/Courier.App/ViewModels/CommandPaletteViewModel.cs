@@ -119,6 +119,8 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
         Add("Cancel in-flight request", "Ctrl+.", () => { });
         Add("New request", "Ctrl+N", _shell.NewTab);
         Add("Close tab", "Ctrl+W", _shell.CloseActiveTab);
+        Add("Save", "Ctrl+S", () => _ = _shell.SaveAsync());
+        Add("Save all", "Ctrl+Shift+S", () => _ = _shell.SaveAllAsync());
         Add("Import from code", string.Empty, () => _ = _shell.ImportFromCodeAsync());
         Add("New collection", string.Empty, () => _ = _shell.NewCollectionAsync());
         Add("Paste curl from clipboard", string.Empty, () => _ = _shell.ImportCurlFromClipboardAsync());

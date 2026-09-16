@@ -36,6 +36,14 @@
               <Flyout Placement="BottomEdgeAlignedLeft">
                 <StackPanel Width="220" Spacing="0">
                   <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                          Height="{DynamicResource RowHeight}" Padding="12,0" Content="Save"
+                          Command="{Binding SaveCommand}"
+                          IsEnabled="{Binding Tabs.Active.IsDirty}" />
+                  <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                          Height="{DynamicResource RowHeight}" Padding="12,0" Content="Save all"
+                          Command="{Binding SaveAllCommand}" />
+                  <Border Height="1" Background="{DynamicResource Rule}" Margin="0,4" />
+                  <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                           Height="{DynamicResource RowHeight}" Padding="12,0" Content="New request"
                           Command="{Binding NewTabCommand}" />
                   <Button Classes="bare" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"

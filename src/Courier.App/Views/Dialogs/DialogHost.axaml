@@ -26,6 +26,7 @@
       <dialogs:CapsuleExportDialog DataContext="{Binding CapsuleExport}" />
     </Panel>
     <dialogs:CapsuleDropView IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=CapsuleDrop}" />
+    <dialogs:ConfirmCloseTabView IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=ConfirmCloseTab}" />
     <Panel IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=ReconstructFromTelemetry}">
       <dialogs:TelemetryReconstructDialog DataContext="{Binding Telemetry}" />
     </Panel>

@@ -96,6 +96,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private string? _pendingSignInProfile;
 
+    /// <summary>The tab <see cref="RequestCloseTab"/> is asking about, while
+    /// <see cref="DialogKind.ConfirmCloseTab"/> is open. Null the rest of the time.</summary>
+    [ObservableProperty]
+    private TabViewModel? _pendingCloseTab;
+
     /// <summary>
     /// False for a Bearer or Basic profile that simply has no secret stored yet — signing in fixes
     /// nothing there; the fix is adding the secret in the auth profile editor.
@@ -257,6 +262,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         new("Ctrl+Enter", "Send the active request"),
         new("Ctrl+.", "Cancel the in-flight request"),
         new("Ctrl+S", "Save the active request"),
+        new("Ctrl+Shift+S", "Save every open, edited request"),
         new("Ctrl+O", "Open a collection folder"),
         new("Ctrl+F", "Search within the response"),
         new("Escape", "Dismiss the open dialog"),
@@ -322,6 +328,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public void CloseDialog()
     {
         Dialog = DialogKind.None;
+        PendingCloseTab = null;
 
         // A profile created, renamed or deleted in Settings should show up in the request tab's
         // picker the moment that dialog closes, not only after switching tabs.
@@ -374,8 +381,57 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         if (Tabs.Active is { } active)
         {
-            Tabs.Close(active);
+            RequestCloseTab(active);
         }
+    }
+
+    /// <summary>
+    /// Closes a tab, unless it has unsaved edits — every close path (the × button, middle-click,
+    /// Ctrl+W, the palette's "Close tab") reaches this rather than calling <see cref="TabCollection.Close"/>
+    /// directly, so none of them can silently drop an edit the way closing always used to.
+    /// </summary>
+    public void RequestCloseTab(TabViewModel tab)
+    {
+        if (!tab.IsDirty)
+        {
+            Tabs.Close(tab);
+            return;
+        }
+
+        PendingCloseTab = tab;
+        Dialog = DialogKind.ConfirmCloseTab;
+    }
+
+    /// <summary>"Save and close" on the confirm dialog.</summary>
+    [RelayCommand]
+    public async Task ConfirmCloseTabSaveAsync()
+    {
+        if (PendingCloseTab is not { } tab)
+        {
+            return;
+        }
+
+        if (await SaveTabAsync(tab).ConfigureAwait(true) && Tree.Folder is not null)
+        {
+            await Tree.OpenFolderAsync(Tree.Folder).ConfigureAwait(true);
+        }
+
+        Tabs.Close(tab);
+        PendingCloseTab = null;
+        Dialog = DialogKind.None;
+    }
+
+    /// <summary>"Don't save" on the confirm dialog — closes and discards the edits.</summary>
+    [RelayCommand]
+    public void ConfirmCloseTabDiscard()
+    {
+        if (PendingCloseTab is { } tab)
+        {
+            Tabs.Close(tab);
+        }
+
+        PendingCloseTab = null;
+        Dialog = DialogKind.None;
     }
 
     [RelayCommand]
@@ -582,18 +638,78 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Writes the active tab to disk as a request file. Ctrl+S. Nothing in the app could do this
-    /// before — every edit lived only in the session's SQLite blob until now.
+    /// Writes the active tab to disk as a request file. Ctrl+S, the Save button next to Send, and
+    /// the hamburger menu all reach this.
     /// </summary>
     [RelayCommand]
     public async Task SaveAsync()
     {
-        if (Tabs.Active is not { State: { } state } tab || Tree.Folder is null)
+        if (Tabs.Active is not { } tab || !await SaveTabAsync(tab).ConfigureAwait(true))
         {
             return;
         }
 
-        state.Auth = await RequestAuth.ToReferenceAsync().ConfigureAwait(true);
+        await Tree.OpenFolderAsync(Tree.Folder!).ConfigureAwait(true);
+        CollectionSyncStatus = $"Saved '{tab.Title}'";
+    }
+
+    /// <summary>
+    /// Writes every dirty tab to disk in one action — the "save the collection" ask this whole
+    /// command exists for, rather than clicking through each tab in turn.
+    /// </summary>
+    [RelayCommand]
+    public async Task SaveAllAsync()
+    {
+        var dirty = Tabs.Items.Where(t => t.IsDirty).ToList();
+
+        if (dirty.Count == 0)
+        {
+            CollectionSyncStatus = "Nothing to save";
+            return;
+        }
+
+        var saved = 0;
+        foreach (var tab in dirty)
+        {
+            if (await SaveTabAsync(tab).ConfigureAwait(true))
+            {
+                saved++;
+            }
+        }
+
+        if (saved > 0 && Tree.Folder is not null)
+        {
+            // Once for the batch, not once per tab — the tree only needs to catch up on the final
+            // state, and reopening it after every single write would be N times the disk I/O for
+            // no benefit anyone would see.
+            await Tree.OpenFolderAsync(Tree.Folder).ConfigureAwait(true);
+        }
+
+        CollectionSyncStatus = saved == dirty.Count
+            ? $"Saved {saved} request{(saved == 1 ? string.Empty : "s")}"
+            : $"Saved {saved} of {dirty.Count} requests — open a collection folder to save the rest";
+    }
+
+    /// <summary>
+    /// Writes one tab to disk as a request file. Shared by <see cref="SaveAsync"/>,
+    /// <see cref="SaveAllAsync"/> and the close-tab confirmation's "Save and close".
+    /// </summary>
+    /// <returns>False when there is no open collection folder to save into — the tab is left dirty.</returns>
+    private async Task<bool> SaveTabAsync(TabViewModel tab)
+    {
+        if (tab.State is not { } state || Tree.Folder is null)
+        {
+            return false;
+        }
+
+        // RequestAuth's fields reflect whichever tab is active; flushing it into a different,
+        // merely-dirty tab's state would overwrite that tab's auth with the active tab's edits.
+        // Every non-active tab already has an up-to-date state.Auth from the flush-on-tab-switch
+        // wired into Tabs.PropertyChanging.
+        if (ReferenceEquals(tab, Tabs.Active))
+        {
+            state.Auth = await RequestAuth.ToReferenceAsync().ConfigureAwait(true);
+        }
 
         var definition = state.ToDefinition();
         var serializer = new CollectionSerializer();
@@ -615,9 +731,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         state.IsDirty = false;
         tab.IsDirty = false;
 
-        // Without this, a first-time save is invisible until the folder is reopened — the tree has
-        // no other way to learn a file appeared under it.
-        await Tree.OpenFolderAsync(Tree.Folder).ConfigureAwait(true);
+        return true;
     }
 
     /// <summary>Opens a folder of collections. The menu, the rail's "…" button and Ctrl+O all reach this.</summary>
@@ -1115,6 +1229,7 @@ public enum DialogKind
     Keyboard,
     Appearance,
     DefaultHeaders,
+    ConfirmCloseTab,
 }
 
 public enum InspectorLayout

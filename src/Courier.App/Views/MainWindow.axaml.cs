@@ -135,6 +135,11 @@ public sealed partial class MainWindow : Window
                 e.Handled = true;
                 break;
 
+            case Key.S when control && e.KeyModifiers.HasFlag(KeyModifiers.Shift):
+                _ = shell.SaveAllAsync();
+                e.Handled = true;
+                break;
+
             case Key.S when control:
                 _ = shell.SaveAsync();
                 e.Handled = true;
