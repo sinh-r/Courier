@@ -152,8 +152,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         };
         AuthProfileEditor = new AuthProfileEditorViewModel(services);
-        RequestAuth = new AuthChoiceViewModel(services.SecretStore);
+        RequestAuth = new AuthChoiceViewModel(services);
         RequestAuth.ManageProfilesRequested += () => OpenDialog(DialogKind.AuthProfile);
+        CollectionAuth = new AuthChoiceViewModel(services);
+        CollectionAuth.ManageProfilesRequested += () => OpenDialog(DialogKind.AuthProfile);
         Trust = new TrustSettingsViewModel();
         SyncReview = new SyncReviewViewModel();
         Telemetry = new TelemetryReconstructViewModel();
@@ -232,6 +234,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// <summary>The active tab's auth choice. Bound from both the request tab's Auth panel and the
     /// inspector's Auth section, so the two always show the same thing.</summary>
     public AuthChoiceViewModel RequestAuth { get; }
+
+    /// <summary>The open collection's default auth — a request left on "Inherit" resolves to this.
+    /// A second, independent <see cref="AuthChoiceViewModel"/>, loaded and saved against
+    /// <see cref="CollectionTreeViewModel.Definition"/> instead of a request's own state.</summary>
+    public AuthChoiceViewModel CollectionAuth { get; }
+
+    [ObservableProperty]
+    private string? _collectionAuthStatus;
 
     public TrustSettingsViewModel Trust { get; }
 
@@ -321,7 +331,26 @@ public sealed partial class MainWindowViewModel : ObservableObject
         if (kind == DialogKind.AuthProfile)
         {
             AuthProfileEditor.Load(Tree.Folder, Tree.Definition?.Auth);
+            _ = CollectionAuth.LoadAsync(Tree.Definition?.Auth, Tree.Folder);
+            CollectionAuthStatus = null;
         }
+    }
+
+    /// <summary>Persists <see cref="CollectionAuth"/>'s current choice as the collection's default —
+    /// the same <c>collection.yaml</c> write <see cref="AuthProfileEditorViewModel.SetAsCollectionDefault"/>
+    /// makes for a saved profile, but for a reference that may be typed inline instead of named.</summary>
+    [RelayCommand]
+    public async Task SaveCollectionAuthAsync()
+    {
+        if (Tree.Folder is not { } folder || Tree.Definition is not { } definition)
+        {
+            CollectionAuthStatus = "Open a collection first.";
+            return;
+        }
+
+        definition.Auth = await CollectionAuth.ToReferenceAsync().ConfigureAwait(true);
+        CollectionLoader.SaveCollectionDefinition(folder, definition);
+        CollectionAuthStatus = "Collection default auth saved";
     }
 
     [RelayCommand]

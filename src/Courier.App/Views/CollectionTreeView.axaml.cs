@@ -15,17 +15,24 @@ public sealed partial class CollectionTreeView : UserControl
         Tree.DoubleTapped += OnTreeDoubleTapped;
     }
 
-    /// <summary>Double-click opens the selected request. SCAN-01's whole point is a tree worth clicking into.</summary>
+    /// <summary>Double-click opens the selected request, or — on the collection root — the auth
+    /// settings that request left on "Inherit" resolve to. SCAN-01's whole point is a tree worth
+    /// clicking into.</summary>
     private void OnTreeDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (DataContext is not CollectionTreeViewModel tree || tree.Selected?.Request is not { } request)
+        if (DataContext is not CollectionTreeViewModel tree
+            || this.FindAncestorOfType<Window>()?.DataContext is not MainWindowViewModel shell)
         {
             return;
         }
 
-        if (this.FindAncestorOfType<Window>()?.DataContext is MainWindowViewModel shell)
+        if (tree.Selected?.Request is { } request)
         {
             shell.OpenRequest(request);
+        }
+        else if (tree.Selected?.Kind == TreeNodeKind.Collection)
+        {
+            shell.OpenDialog(DialogKind.AuthProfile);
         }
     }
 }

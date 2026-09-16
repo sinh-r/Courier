@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Courier.App.Services;
 using Courier.Core.Abstractions;
 using Courier.Core.Auth;
 using Courier.Core.Collections;
@@ -7,19 +9,27 @@ using Courier.Core.Collections;
 namespace Courier.App.ViewModels;
 
 /// <summary>
-/// One request's auth choice: Inherit, no auth, a saved profile, or a configuration typed directly
-/// on the request. ENT-02. The request tab's Auth panel and the inspector's Auth section bind to
-/// the same instance of this — <see cref="MainWindowViewModel"/> owns one and reloads it whenever
-/// the active tab changes — which is what keeps the two views showing the same choice your notes
-/// call for ("the same selected option should be there at inspector tab as well").
+/// One request's auth choice — or a collection's default — expressed the same way: Inherit, no
+/// auth, a saved profile, or a configuration typed directly here. ENT-02. The request tab's Auth
+/// panel and the inspector's Auth section bind to the same instance of this for a request —
+/// <see cref="MainWindowViewModel"/> owns one and reloads it whenever the active tab changes, which
+/// is what keeps the two views showing the same choice your notes call for ("the same selected
+/// option should be there at inspector tab as well"). <see cref="MainWindowViewModel.CollectionAuth"/>
+/// is a second, independent instance of this same class, loaded against the collection's own
+/// <see cref="AuthReference"/> instead of a request's.
 /// </summary>
 public sealed partial class AuthChoiceViewModel : ObservableObject
 {
+    private readonly AppServices _services;
     private readonly ISecretStore _secrets;
     private string? _collectionFolder;
     private AuthProfile? _loadedInline;
 
-    public AuthChoiceViewModel(ISecretStore secrets) => _secrets = secrets;
+    public AuthChoiceViewModel(AppServices services)
+    {
+        _services = services;
+        _secrets = services.SecretStore;
+    }
 
     /// <summary>"Inherit from collection", "No auth", one entry per <see cref="AuthKindOptions"/>,
     /// a separator-like "── Saved profiles ──" when there are any, then each profile name.</summary>
@@ -57,6 +67,18 @@ public sealed partial class AuthChoiceViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasStoredSecret;
 
+    // --- The token panel. Only ever populated by GetTokenAsync below, for the fixed-kind inline
+    // editor above — a collection default named from a saved profile decodes via that profile's own
+    // "Get token" in the list to the left instead. ENT-04. ---
+
+    [ObservableProperty]
+    private DecodedToken? _token;
+
+    [ObservableProperty]
+    private string? _tokenStatusMessage;
+
+    public ObservableCollection<TokenClaimViewModel> Claims { get; } = [];
+
     public const string InheritOption = "Inherit from collection";
     public const string NoneOption = "No auth";
     public const string ManageProfilesOption = "Manage profiles…";
@@ -86,6 +108,13 @@ public sealed partial class AuthChoiceViewModel : ObservableObject
         : HasStoredSecret
             ? "stored in the credential store"
             : "not set on this machine";
+
+    public bool CanGetToken => ShowsEntraFields;
+
+    /// <summary>"issued 13:15 · expires 14:49 · in 47m".</summary>
+    public string TokenTimingLine => Token is null
+        ? "no token yet"
+        : $"issued {Token.IssuedAt:HH:mm} · expires {Token.ExpiresAt:HH:mm} · {Token.DescribeExpiry()}";
 
     partial void OnSelectedOptionChanged(string value)
     {
@@ -237,6 +266,66 @@ public sealed partial class AuthChoiceViewModel : ObservableObject
         return new AuthReference(AuthMode.Inline, Inline: profile);
     }
 
+    /// <summary>
+    /// Acquires and decodes a token for the Entra configuration currently typed inline — the same
+    /// acquire-then-decode <see cref="AuthProfileEditorViewModel.GetTokenAsync"/> runs for a saved
+    /// profile, run here against fields that have not (or not yet) been saved as one. ENT-04.
+    /// </summary>
+    [RelayCommand]
+    public async Task GetTokenAsync()
+    {
+        if (!CanGetToken)
+        {
+            return;
+        }
+
+        var profile = new AuthProfile
+        {
+            Kind = InlineKind,
+            Tenant = Tenant,
+            ClientId = ClientId,
+            Username = Username,
+            RedirectUri = RedirectUri,
+            Scopes = [.. ScopesText.Split(' ', StringSplitOptions.RemoveEmptyEntries)],
+            SecretRef = _loadedInline?.SecretRef,
+        };
+
+        if (SecretInput.Length > 0)
+        {
+            profile.SecretRef ??= Guid.NewGuid().ToString("n");
+            await _secrets.SetAsync(profile.SecretKey, SecretInput).ConfigureAwait(false);
+            SecretInput = string.Empty;
+            HasStoredSecret = true;
+        }
+
+        _loadedInline = profile;
+        TokenStatusMessage = "Signing in…";
+
+        try
+        {
+            var acquired = await _services.Entra.AcquireAsync(profile, interactiveAllowed: true).ConfigureAwait(false);
+            Show(TokenDecoder.TryDecode(acquired.AccessToken));
+            TokenStatusMessage = $"Token acquired · {acquired.Account ?? "no account name"}";
+        }
+        catch (InteractiveAuthRequiredException ex)
+        {
+            TokenStatusMessage = ex.Message;
+        }
+    }
+
+    private void Show(DecodedToken? token)
+    {
+        Token = token;
+        Claims.Clear();
+
+        foreach (var claim in TokenClaimViewModel.Build(token, []))
+        {
+            Claims.Add(claim);
+        }
+
+        OnPropertyChanged(nameof(TokenTimingLine));
+    }
+
     private void RaiseVisibility()
     {
         OnPropertyChanged(nameof(IsInline));
@@ -245,6 +334,7 @@ public sealed partial class AuthChoiceViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowsUsername));
         OnPropertyChanged(nameof(ShowsRedirectUri));
         OnPropertyChanged(nameof(ShowsSecretField));
+        OnPropertyChanged(nameof(CanGetToken));
         OnPropertyChanged(nameof(SecretFieldLabel));
         OnPropertyChanged(nameof(SecretStatusText));
     }

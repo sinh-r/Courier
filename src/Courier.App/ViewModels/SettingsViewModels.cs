@@ -912,25 +912,10 @@ public sealed partial class AuthProfileEditorViewModel : ObservableObject
         Token = token;
         Claims.Clear();
 
-        if (token is null)
+        foreach (var claim in TokenClaimViewModel.Build(token, requiredScopes))
         {
-            return;
+            Claims.Add(claim);
         }
-
-        var missing = token.MissingScopes(requiredScopes);
-
-        Claims.Add(new TokenClaimViewModel("aud", token.Audience ?? "—", null));
-        Claims.Add(new TokenClaimViewModel("iss", token.Issuer ?? "—", null));
-        Claims.Add(new TokenClaimViewModel(
-            "scp",
-            string.Join(" ", token.Scopes),
-            missing.Count == 0 ? null : $"▲ {string.Join(", ", missing)} not granted — writes will 403"));
-        Claims.Add(new TokenClaimViewModel("roles", string.Join(", ", token.Roles), null));
-        Claims.Add(new TokenClaimViewModel("upn", token.UserPrincipalName ?? "—", null));
-        Claims.Add(new TokenClaimViewModel(
-            "exp",
-            token.ExpiresAt is null ? "—" : $"{token.ExpiresAt.Value.ToUnixTimeSeconds()} · {token.ExpiresAt:HH:mm:ss}",
-            token.IsExpiredByItsOwnClaim ? "▲ expired" : null));
 
         OnPropertyChanged(nameof(TokenTimingLine));
         OnPropertyChanged(nameof(ScopeLine));
@@ -950,7 +935,37 @@ public sealed partial class AuthProfileEditorViewModel : ObservableObject
 }
 
 /// <param name="Warning">Non-null only when the claim needs the reader to act. ENT-04, SCAN-06.</param>
-public sealed record TokenClaimViewModel(string Name, string Value, string? Warning);
+public sealed record TokenClaimViewModel(string Name, string Value, string? Warning)
+{
+    /// <summary>The plain-table row set ENT-04 asks for, with the SCAN-06 missing-scope warning.
+    /// Shared by <see cref="AuthProfileEditorViewModel.Show"/> and
+    /// <see cref="AuthChoiceViewModel"/>'s own token panel, so the two decode displays never drift.</summary>
+    public static IReadOnlyList<TokenClaimViewModel> Build(DecodedToken? token, IReadOnlyList<string> requiredScopes)
+    {
+        if (token is null)
+        {
+            return [];
+        }
+
+        var missing = token.MissingScopes(requiredScopes);
+
+        return
+        [
+            new("aud", token.Audience ?? "—", null),
+            new("iss", token.Issuer ?? "—", null),
+            new(
+                "scp",
+                string.Join(" ", token.Scopes),
+                missing.Count == 0 ? null : $"▲ {string.Join(", ", missing)} not granted — writes will 403"),
+            new("roles", string.Join(", ", token.Roles), null),
+            new("upn", token.UserPrincipalName ?? "—", null),
+            new(
+                "exp",
+                token.ExpiresAt is null ? "—" : $"{token.ExpiresAt.Value.ToUnixTimeSeconds()} · {token.ExpiresAt:HH:mm:ss}",
+                token.IsExpiredByItsOwnClaim ? "▲ expired" : null),
+        ];
+    }
+}
 
 /// <summary>Trust and network. Every row states its source. UI_SPEC 5.7.</summary>
 public sealed partial class TrustSettingsViewModel : ObservableObject

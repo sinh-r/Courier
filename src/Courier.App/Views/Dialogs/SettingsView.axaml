@@ -380,6 +380,109 @@
                            Text="Decoded, not validated. Courier is not the resource server and does not have the signing keys, so it reports what the token says about itself and nothing more." />
               </StackPanel>
 
+              <!--
+                Collection default. What a request left on "Inherit from collection" actually uses —
+                the same Inherit/None/fixed-kind/saved-profile choice a request's own Auth tab offers,
+                but for the collection itself, typed here rather than requiring a profile be saved
+                first. ENT-02, ENT-06.
+              -->
+              <Border BorderBrush="{DynamicResource Rule}" BorderThickness="0,1,0,0" Padding="0,14,0,0" Margin="0,4,0,0">
+                <StackPanel Spacing="14">
+                  <TextBlock Classes="heading" Text="Collection default" />
+                  <TextBlock Classes="meta" TextWrapping="Wrap"
+                             Text="Used by any request in this collection left on &quot;Inherit from collection&quot;." />
+
+                  <Grid ColumnDefinitions="90,*">
+                    <TextBlock Grid.Column="0" Classes="meta" Text="Auth" VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding CollectionAuth.Options}"
+                              SelectedItem="{Binding CollectionAuth.SelectedOption, Mode=TwoWay}"
+                              AutomationProperties.Name="Collection default auth" />
+                  </Grid>
+
+                  <StackPanel Spacing="8" IsVisible="{Binding CollectionAuth.IsInline}">
+
+                    <Grid ColumnDefinitions="90,*" IsVisible="{Binding CollectionAuth.ShowsEntraFields}">
+                      <TextBlock Grid.Column="0" Classes="meta" Text="Tenant" VerticalAlignment="Center" />
+                      <TextBox Grid.Column="1" Classes="mono" PlaceholderText="contoso.onmicrosoft.com"
+                                Text="{Binding CollectionAuth.Tenant}" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="90,*" IsVisible="{Binding CollectionAuth.ShowsEntraFields}">
+                      <TextBlock Grid.Column="0" Classes="meta" Text="Client ID" VerticalAlignment="Center" />
+                      <TextBox Grid.Column="1" Classes="mono" Text="{Binding CollectionAuth.ClientId}" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="90,*" IsVisible="{Binding CollectionAuth.ShowsEntraFields}">
+                      <TextBlock Grid.Column="0" Classes="meta" Text="Scope" VerticalAlignment="Center" />
+                      <TextBox Grid.Column="1" Classes="mono" PlaceholderText="api://orders/.default"
+                                Text="{Binding CollectionAuth.ScopesText}" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="90,*" IsVisible="{Binding CollectionAuth.ShowsRedirectUri}">
+                      <TextBlock Grid.Column="0" Classes="meta" Text="Redirect URI" VerticalAlignment="Center" />
+                      <TextBox Grid.Column="1" Classes="mono" PlaceholderText="http://localhost"
+                                Text="{Binding CollectionAuth.RedirectUri}" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="90,*" IsVisible="{Binding CollectionAuth.ShowsUsername}">
+                      <TextBlock Grid.Column="0" Classes="meta" Text="Username" VerticalAlignment="Center" />
+                      <TextBox Grid.Column="1" Classes="mono" Text="{Binding CollectionAuth.Username}" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="90,*,Auto" IsVisible="{Binding CollectionAuth.ShowsSecretField}">
+                      <TextBlock Grid.Column="0" Classes="meta" VerticalAlignment="Center"
+                                 Text="{Binding CollectionAuth.SecretFieldLabel}" />
+                      <TextBox Grid.Column="1" Classes="mono" PasswordChar="•" PlaceholderText="new value"
+                                Text="{Binding CollectionAuth.SecretInput}" />
+                      <TextBlock Grid.Column="2" Classes="meta" Margin="6,0,0,0" VerticalAlignment="Center"
+                                 Text="{Binding CollectionAuth.SecretStatusText}" />
+                    </Grid>
+
+                  </StackPanel>
+
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Button Content="Save" Command="{Binding SaveCollectionAuthCommand}" />
+                    <Button Content="Get token" IsVisible="{Binding CollectionAuth.CanGetToken}"
+                            Command="{Binding CollectionAuth.GetTokenCommand}" />
+                  </StackPanel>
+
+                  <TextBlock Classes="meta" Text="{Binding CollectionAuthStatus}"
+                             IsVisible="{Binding CollectionAuthStatus, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+                  <StackPanel Spacing="6" IsVisible="{Binding CollectionAuth.CanGetToken}">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Grid.Column="0" Classes="heading" Text="Decoded token" />
+                      <TextBlock Grid.Column="1" Classes="meta" Text="{Binding CollectionAuth.TokenTimingLine}" />
+                    </Grid>
+                    <TextBlock Classes="meta" Text="{Binding CollectionAuth.TokenStatusMessage}"
+                               IsVisible="{Binding CollectionAuth.TokenStatusMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+                    <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1">
+                      <ItemsControl ItemsSource="{Binding CollectionAuth.Claims}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:TokenClaimViewModel">
+                            <Border Height="{DynamicResource RowHeight}" Padding="8,0"
+                                    BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+                              <Grid ColumnDefinitions="90,*,Auto">
+                                <TextBlock Grid.Column="0" Classes="mono meta" VerticalAlignment="Center"
+                                           Text="{Binding Name}" />
+                                <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center"
+                                           Text="{Binding Value}" />
+                                <TextBlock Grid.Column="2" Classes="meta" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Secret}"
+                                           Text="{Binding Warning}" />
+                              </Grid>
+                            </Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Border>
+                  </StackPanel>
+
+                </StackPanel>
+              </Border>
+
             </StackPanel>
           </ScrollViewer>
         </Grid>
