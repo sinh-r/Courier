@@ -1,0 +1,60 @@
+<Project>
+
+  <!--
+    Local dev only: Windows Smart App Control has been observed blocking both the Avalonia
+    Roslyn analyzer DLLs (CS8034 at compile time) and freshly-built Debug binaries (a
+    FileLoadException at run time) on this machine — a Code Integrity policy block, not a
+    malware detection. Signing with a local self-signed cert trusted via
+    CurrentUser\TrustedPublisher works around both. See build/New-LocalDevSigningCert.ps1 for
+    the one-time setup and build/Sign-LocalDevBinary.ps1 for why TrustedPublisher rather than
+    Root is enough. This has nothing to do with real release signing, which is a separate
+    concern for the release pipeline (release.yml signs with a CA-issued cert via SignPath
+    when configured).
+
+    Debug + Windows only, and explicitly never in CI (which only ever builds Release anyway —
+    this condition is belt-and-braces, matching Directory.Build.props' own
+    ContinuousIntegrationBuild check). Both targets are also a safe no-op on a machine that
+    has not run the cert setup, so neither needs to be conditional per contributor.
+  -->
+  <PropertyGroup>
+    <_LocalDevSigningApplies Condition="'$(OS)' == 'Windows_NT' AND '$(Configuration)' == 'Debug' AND '$(CI)' != 'true'">true</_LocalDevSigningApplies>
+  </PropertyGroup>
+
+  <!--
+    Runs before csc ever tries to load an analyzer for this project, which is what an
+    AfterTargets="Build" hook cannot do: the NuGet-cached Avalonia analyzer DLLs are not
+    something this build produces, and the CS8034 failure happens while loading them for
+    compilation, before the Build target — let alone anything after it — would ever run.
+    Scoped to the whole avalonia package folder (every installed version's analyzers, a
+    handful of files), not just the two DLLs seen blocked so far, so a different Avalonia
+    analyzer or generator DLL getting blocked later does not need a second fix here.
+  -->
+  <Target Name="SignAvaloniaAnalyzers"
+          BeforeTargets="CoreCompile"
+          Condition="'$(_LocalDevSigningApplies)' == 'true' AND '$(NuGetPackageRoot)' != ''">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)build\Sign-LocalDevBinary.ps1&quot; -Directory &quot;$(NuGetPackageRoot)avalonia&quot;"
+          ContinueOnError="WarnAndContinue" />
+  </Target>
+
+  <!--
+    Every project's own output, not only test projects: Courier.App's own build output has
+    been blocked at run time the same way test binaries were on EventPublisherConsumer, which
+    is where this workaround started. Signs the whole output directory, not just
+    $(TargetPath) — copied dependencies (Avalonia.*.dll, SQLitePCLRaw's native provider, and
+    similar) have all been observed blocked independently of the project's own assembly.
+  -->
+  <Target Name="SignLocalDevOutput"
+          AfterTargets="Build"
+          Condition="'$(_LocalDevSigningApplies)' == 'true' AND '$(TargetDir)' != ''">
+    <!--
+      TargetDir is empty on the outer build of a multi-targeted project like Courier.App
+      (net10.0 and net10.0-windows...) when it is built without picking one TFM — that pass
+      orchestrates the per-TFM inner builds, which each have a real TargetDir and run this
+      target on their own, so the guard above just skips the pass that has nothing to sign.
+    -->
+
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)build\Sign-LocalDevBinary.ps1&quot; -Directory &quot;$(TargetDir.TrimEnd('\'))&quot;"
+          ContinueOnError="WarnAndContinue" />
+  </Target>
+
+</Project>

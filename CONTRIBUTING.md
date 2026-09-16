@@ -18,6 +18,30 @@ dotnet build Courier.slnx
 Use `build/Run-Tests.ps1`, not `dotnet test` — see the script header for why the latter reports
 zero tests on this toolchain.
 
+### Windows: "An Application Control policy has blocked this file"
+
+If `dotnet build` on `Courier.App` fails with `CS8034: Unable to load Analyzer assembly
+...Avalonia.Analyzers.CSharp.dll ...`, or a freshly-built test binary fails to run with
+`System.IO.FileLoadException: ... An Application Control policy has blocked this file.
+(0x800711C7)`, that's Windows Smart App Control refusing to load an unsigned binary it has not
+built reputation for yet — not a virus detection, and not specific to this repo. Confirm it with
+`Get-WinEvent -LogName "Microsoft-Windows-CodeIntegrity/Operational"`, which shows a matching
+"Smart App Control Block Details" event.
+
+Fix it once with:
+
+```
+./build/New-LocalDevSigningCert.ps1
+```
+
+This creates a local, self-signed code-signing certificate and trusts it via
+`Cert:\CurrentUser\TrustedPublisher`. `Directory.Build.targets` then signs the blocked files
+(the NuGet-cached Avalonia analyzer DLLs before compiling, and every project's own Debug output
+afterward) automatically on every build from then on — see that script's and
+`build/Sign-LocalDevBinary.ps1`'s headers for the mechanism. This is local dev tooling only: it
+never runs in CI or a Release build, and has nothing to do with the real release signing the
+release pipeline does with a CA-issued certificate. Safe to skip if you never hit this.
+
 To run the app:
 
 ```
