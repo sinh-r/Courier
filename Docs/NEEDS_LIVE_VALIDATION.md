@@ -23,6 +23,14 @@ Everything here is production-shaped and unit-tested. None of it has completed a
 
 **Why it could not be tested.** No Entra tenant, and no domain-joined machine.
 
+**Status.** The auth layer this validated against now runs end-to-end — a request, a collection
+default, or a saved profile in `auth/` resolves to one profile (`Courier.Core/Auth/AuthResolver.cs`)
+and is applied at send time by `RequestPreparer`, in both the app and `courier run`. The auth editor
+in the app surfaces two Entra grants: client credentials and authorization code + PKCE, since those
+are the two `courier run` can meaningfully attempt (client credentials unattended; auth code only
+when a cached token already exists). Windows sign-in and device code are unchanged from before —
+implemented, not yet offered in the editor — pending the same tenant this section has always needed.
+
 **The specific risk.** TECH_SPEC §1.2 and §7.2 both flag window-handle parenting under Avalonia as
 the likeliest wall in the whole plan. `ActiveWindowHandleProvider` supplies the HWND from
 `TopLevel.TryGetPlatformHandle()`, which is the documented approach and looks correct — but a

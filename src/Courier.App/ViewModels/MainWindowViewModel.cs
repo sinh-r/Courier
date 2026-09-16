@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Courier.App.Services;
 using Courier.Core.Abstractions;
+using Courier.Core.Auth;
 using Courier.Core.Collections;
 using Courier.Core.Export;
 using Courier.Core.Http;
@@ -31,6 +32,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private bool _revertingEnvironmentSelection;
     private ScanResult? _lastScanResult;
     private IReadOnlyList<HeaderValue> _defaultHeaders = [];
+
+    /// <summary>The profile the last Send actually resolved to, so a "Sign in" retry after a
+    /// <see cref="PendingSignInProfile"/> failure re-acquires with the exact same configuration
+    /// rather than re-resolving (and possibly re-reading a since-changed auth choice).</summary>
+    private AuthProfile? _lastAuthProfile;
 
     /// <summary>The window this shell is drawn in, set once the window opens. Needed for file pickers.</summary>
     public TopLevel? TopLevel { get; set; }
@@ -82,6 +88,24 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private int _historyCount;
 
+    /// <summary>
+    /// Non-null only right after a Send failed because auth needs an interactive sign-in (ENT-05).
+    /// Drives the "Sign in" button next to the send error — the alternative, prompting the moment
+    /// Send is clicked, is exactly the silent block ENT-05 forbids.
+    /// </summary>
+    [ObservableProperty]
+    private string? _pendingSignInProfile;
+
+    /// <summary>
+    /// False for a Bearer or Basic profile that simply has no secret stored yet — signing in fixes
+    /// nothing there; the fix is adding the secret in the auth profile editor.
+    /// </summary>
+    public bool CanSignInForPendingProfile =>
+        PendingSignInProfile is not null
+        && _lastAuthProfile?.Kind is AuthKind.EntraClientCredentials or AuthKind.EntraAuthorizationCode;
+
+    partial void OnPendingSignInProfileChanged(string? value) => OnPropertyChanged(nameof(CanSignInForPendingProfile));
+
     public MainWindowViewModel(AppServices services)
     {
         _services = services;
@@ -122,7 +146,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 CollectionSyncStatus = status.Message;
             }
         };
-        AuthProfileEditor = new AuthProfileEditorViewModel();
+        AuthProfileEditor = new AuthProfileEditorViewModel(services);
+        RequestAuth = new AuthChoiceViewModel(services.SecretStore);
+        RequestAuth.ManageProfilesRequested += () => OpenDialog(DialogKind.AuthProfile);
         Trust = new TrustSettingsViewModel();
         SyncReview = new SyncReviewViewModel();
         Telemetry = new TelemetryReconstructViewModel();
@@ -141,12 +167,25 @@ public sealed partial class MainWindowViewModel : ObservableObject
         DefaultHeadersEditor.Load(_defaultHeaders.Select(h => (h.Name, h.Value, h.Enabled, (string?)null)));
 
         // The Headers tab's "inherited" rows depend on which tab is active; this is what makes
-        // switching tabs refresh them.
+        // switching tabs refresh them. The auth pair does the same for RequestAuth, on both sides
+        // of the switch: PropertyChanging flushes whatever was being typed into the tab being left
+        // (RequestAuth is a live editor, not a direct binding onto TabState the way Url or Headers
+        // are, so nothing else would persist that edit) before PropertyChanged loads the tab being
+        // entered.
+        Tabs.PropertyChanging += async (_, e) =>
+        {
+            if (e.PropertyName == nameof(TabCollection.Active) && Tabs.Active?.State is { } leaving)
+            {
+                leaving.Auth = await RequestAuth.ToReferenceAsync().ConfigureAwait(true);
+            }
+        };
+
         Tabs.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is null or nameof(TabCollection.Active))
             {
                 OnPropertyChanged(nameof(InheritedHeadersForActiveTab));
+                _ = RequestAuth.LoadAsync(Tabs.Active?.State?.Auth, Tree.Folder);
             }
         };
 
@@ -184,6 +223,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public EnvironmentsViewModel Environments { get; }
 
     public AuthProfileEditorViewModel AuthProfileEditor { get; }
+
+    /// <summary>The active tab's auth choice. Bound from both the request tab's Auth panel and the
+    /// inspector's Auth section, so the two always show the same thing.</summary>
+    public AuthChoiceViewModel RequestAuth { get; }
 
     public TrustSettingsViewModel Trust { get; }
 
@@ -268,10 +311,22 @@ public sealed partial class MainWindowViewModel : ObservableObject
             Environments.Reopen(Tree.Folder, ActiveEnvironment);
             Environments.RefreshDetectedProfiles(Tree.Definition?.ScannedFrom?.Path);
         }
+
+        if (kind == DialogKind.AuthProfile)
+        {
+            AuthProfileEditor.Load(Tree.Folder, Tree.Definition?.Auth);
+        }
     }
 
     [RelayCommand]
-    public void CloseDialog() => Dialog = DialogKind.None;
+    public void CloseDialog()
+    {
+        Dialog = DialogKind.None;
+
+        // A profile created, renamed or deleted in Settings should show up in the request tab's
+        // picker the moment that dialog closes, not only after switching tabs.
+        _ = RequestAuth.LoadAsync(Tabs.Active?.State?.Auth, Tree.Folder);
+    }
 
     [RelayCommand]
     public void ToggleInspector() => IsInspectorVisible = !IsInspectorVisible;
@@ -403,6 +458,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
+            // Committed first so Send always reflects whatever is currently selected in the Auth
+            // panel, exactly like every other field on the tab.
+            state.Auth = await RequestAuth.ToReferenceAsync(ct).ConfigureAwait(true);
+
             var request = state.ToDefinition();
 
             var scopes = new VariableScopes
@@ -422,30 +481,52 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 inheritedHeaders[header.Name] = header;
             }
 
+            var resolved = AuthResolver.Resolve(
+                request.Auth,
+                Tree.Definition?.Auth,
+                name => Tree.Folder is null ? null : AuthProfileStore.Load(Tree.Folder, name));
+
+            _lastAuthProfile = resolved.Profile;
+
             var preparation = await RequestPreparer.PrepareAsync(
                 request,
                 scopes,
                 _services.Variables,
-                [.. inheritedHeaders.Values],
-                Tree.Definition?.Settings,
-                Tree.Definition?.InjectTraceParent ?? false,
-                EnvironmentName == "None" ? null : EnvironmentName,
-                ct).ConfigureAwait(true);
+                inheritedHeaders: [.. inheritedHeaders.Values],
+                collectionSettings: Tree.Definition?.Settings,
+                injectTraceParent: Tree.Definition?.InjectTraceParent ?? false,
+                environmentName: EnvironmentName == "None" ? null : EnvironmentName,
+                auth: new AuthPlan(resolved, _services.AuthRegistry),
+                ct: ct).ConfigureAwait(true);
 
             if (!preparation.Succeeded)
             {
                 tab.SendError = preparation.Error;
+                PendingSignInProfile = preparation.SignInProfile;
                 return;
             }
+
+            PendingSignInProfile = null;
 
             var result = await _services.Executor.SendAsync(preparation.Request!, ct).ConfigureAwait(true);
 
             tab.Response?.Dispose();
             tab.Response = new ResponseViewModel(result);
 
+            Inspector.Profile = resolved.Profile;
+            Inspector.ShowToken(
+                preparation.Request!.Auth?.Token,
+                preparation.Request.Auth?.Identity ?? resolved.Profile?.Username);
+
             var database = await _services.DatabaseAsync().ConfigureAwait(true);
             await new HistoryStore(database)
-                .RecordAsync(result, EnvironmentName, Tree.CollectionName, state.EndpointId ?? state.RequestPath, ct)
+                .RecordAsync(
+                    result,
+                    EnvironmentName,
+                    Tree.CollectionName,
+                    state.EndpointId ?? state.RequestPath,
+                    preparation.Request.SecretValues,
+                    ct)
                 .ConfigureAwait(true);
 
             HistoryCount++;
@@ -466,6 +547,41 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public void CancelSend() => Tabs.Active?.CancelSend();
 
     /// <summary>
+    /// The "Sign in" button beside a send error that named <see cref="PendingSignInProfile"/>.
+    /// ENT-05: the prompt only happens here, after the user has explicitly asked for it — never as
+    /// a side effect of the Send button itself.
+    /// </summary>
+    [RelayCommand]
+    public async Task SignInAndRetryAsync()
+    {
+        if (_lastAuthProfile is not { Kind: AuthKind.EntraClientCredentials or AuthKind.EntraAuthorizationCode } profile
+            || Tabs.Active is not { } tab)
+        {
+            return;
+        }
+
+        tab.SendError = null;
+        var ct = tab.BeginSend();
+
+        try
+        {
+            await _services.Entra.AcquireAsync(profile, true, ct).ConfigureAwait(true);
+            PendingSignInProfile = null;
+        }
+        catch (InteractiveAuthRequiredException ex)
+        {
+            tab.SendError = ex.Message;
+            return;
+        }
+        finally
+        {
+            tab.CompleteSend();
+        }
+
+        await SendAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
     /// Writes the active tab to disk as a request file. Ctrl+S. Nothing in the app could do this
     /// before — every edit lived only in the session's SQLite blob until now.
     /// </summary>
@@ -476,6 +592,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             return;
         }
+
+        state.Auth = await RequestAuth.ToReferenceAsync().ConfigureAwait(true);
 
         var definition = state.ToDefinition();
         var serializer = new CollectionSerializer();
@@ -533,6 +651,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         CollectionWriter.WriteCollectionDefinition(path, name);
 
         await OpenAndPrimeFolderAsync(path).ConfigureAwait(true);
+
+        // Auth is one of the three places your process notes call out: the request itself, the
+        // collection default, or a saved profile set up separately — all optional, so this only
+        // points at where to go, rather than opening the dialog and asking for it up front.
+        CollectionSyncStatus = $"{name} created — add auth in Settings → Auth profiles if this API needs it";
     }
 
     /// <summary>The folder picker both <see cref="OpenFolderAsync"/> and <see cref="NewCollectionAsync"/> use.</summary>
@@ -566,6 +689,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // into the moment a collection opens, not only after a trip through the settings dialog.
         Environments.Load(Tree.Folder, ActiveEnvironment);
         Environments.RefreshDetectedProfiles(Tree.Definition?.ScannedFrom?.Path);
+        _ = RequestAuth.LoadAsync(Tabs.Active?.State?.Auth, Tree.Folder);
         Dialog = DialogKind.None;
     }
 
@@ -744,6 +868,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         RefreshAvailableEnvironments();
         Environments.Load(Tree.Folder, ActiveEnvironment);
         Environments.RefreshDetectedProfiles(Tree.Definition?.ScannedFrom?.Path);
+        _ = RequestAuth.LoadAsync(Tabs.Active?.State?.Auth, Tree.Folder);
         Dialog = DialogKind.None;
     }
 

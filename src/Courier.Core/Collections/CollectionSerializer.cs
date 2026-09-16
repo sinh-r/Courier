@@ -1,3 +1,4 @@
+using Courier.Core.Auth;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -51,6 +52,12 @@ public sealed class CollectionSerializer
             ?? throw new CollectionFormatException("The file is empty or contains no request.");
 
         AssertReadableVersion(request.Courier);
+
+        if (request.Auth is not null)
+        {
+            request.Auth = AuthReference.Normalize(request.Auth);
+        }
+
         return request;
     }
 
@@ -63,8 +70,31 @@ public sealed class CollectionSerializer
             ?? throw new CollectionFormatException("The file is empty or contains no collection.");
 
         AssertReadableVersion(collection.Courier);
+
+        // Pre-ENT-02 files named a default profile with the now-legacy AuthProfile string. A
+        // collection is the top of the chain, so its own Inherit is meaningless and is read as None.
+        if (collection.Auth is not null)
+        {
+            var normalized = AuthReference.Normalize(collection.Auth);
+            collection.Auth = normalized.Mode == AuthMode.Inherit ? normalized with { Mode = AuthMode.None } : normalized;
+        }
+        else if (collection.AuthProfile is { Length: > 0 } legacyProfile)
+        {
+            collection.Auth = new AuthReference(AuthMode.Profile, legacyProfile);
+        }
+
         return collection;
     }
+
+    /// <summary>A saved auth profile in <c>auth/*.auth.yaml</c>. Contains configuration only — no
+    /// secret ever passes through here (STOR-04, P2).</summary>
+    public string SerializeAuthProfile(AuthProfile profile) => WithBanner(
+        _serializer.Serialize(profile),
+        "The secret for this profile, if it needs one, lives in the OS credential store, never here.");
+
+    public AuthProfile DeserializeAuthProfile(string yaml) =>
+        _deserializer.Deserialize<AuthProfile>(yaml)
+            ?? throw new CollectionFormatException("The file is empty or contains no auth profile.");
 
     public string SerializeEnvironment(EnvironmentDefinition environment) =>
         WithBanner(_serializer.Serialize(environment));

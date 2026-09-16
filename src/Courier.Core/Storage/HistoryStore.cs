@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Courier.Core.Http;
+using Courier.Core.Privacy;
 using Microsoft.Data.Sqlite;
 
 namespace Courier.Core.Storage;
@@ -18,13 +19,26 @@ public sealed class HistoryStore
 
     public HistoryStore(CourierDatabase database) => _database = database;
 
+    /// <summary>Value shown in place of anything redacted. Distinct enough that it never reads as real data.</summary>
+    private const string RedactedMarker = "••• redacted";
+
+    /// <param name="secretValues">
+    /// Values known to be secret for this exchange — <see cref="PreparedRequest.SecretValues"/>, an
+    /// auth token above all. History is local and never leaves the machine, but SEC-07's "never in
+    /// a log line" applies to the history database too: a bearer token or Basic credential sent once
+    /// should not sit in plaintext in every subsequent history export or screen share.
+    /// </param>
     public async Task<long> RecordAsync(
         ExchangeResult result,
         string? environmentName,
         string? collectionName,
         string? requestId,
+        IReadOnlyList<string>? secretValues = null,
         CancellationToken ct = default)
     {
+        var secrets = secretValues is { Count: > 0 }
+            ? new HashSet<string>(secretValues, StringComparer.Ordinal)
+            : null;
         await using var command = _database.CreateCommand(
             """
             INSERT INTO history (
@@ -52,11 +66,11 @@ public sealed class HistoryStore
         command.Parameters.AddWithValue("$traceId", (object?)result.TraceId ?? DBNull.Value);
         command.Parameters.AddWithValue("$failureKind", (object?)result.Failure?.Kind.ToString() ?? DBNull.Value);
         command.Parameters.AddWithValue("$failureMessage", (object?)result.Failure?.Explanation ?? DBNull.Value);
-        command.Parameters.AddWithValue("$requestHeaders", JsonSerializer.Serialize(result.Request.Headers));
+        command.Parameters.AddWithValue("$requestHeaders", JsonSerializer.Serialize(Redact(result.Request.Headers, secrets)));
         command.Parameters.AddWithValue("$requestBody", (object?)result.Request.Body ?? DBNull.Value);
         command.Parameters.AddWithValue(
             "$responseHeaders",
-            result.Response is null ? DBNull.Value : JsonSerializer.Serialize(result.Response.Headers));
+            result.Response is null ? DBNull.Value : JsonSerializer.Serialize(Redact(result.Response.Headers, secrets)));
         command.Parameters.AddWithValue("$responseBody", (object?)result.Response?.Body ?? DBNull.Value);
         command.Parameters.AddWithValue("$responseBodyPath", (object?)result.Response?.BodyPath ?? DBNull.Value);
 
@@ -169,6 +183,28 @@ public sealed class HistoryStore
         json is null
             ? []
             : JsonSerializer.Deserialize<List<KeyValuePair<string, string>>>(json) ?? [];
+
+    /// <summary>
+    /// Replaces a header's value when it is a value the caller flagged as secret, or when the
+    /// header's own name says it holds a credential (Authorization above all) — belt and braces,
+    /// since an auth provider that forgets to report a value should not leave it in plain text.
+    /// </summary>
+    private static List<KeyValuePair<string, string>> Redact(
+        IReadOnlyList<KeyValuePair<string, string>> headers,
+        IReadOnlySet<string>? knownSecrets)
+    {
+        var redacted = new List<KeyValuePair<string, string>>(headers.Count);
+
+        foreach (var header in headers)
+        {
+            var isSecret = knownSecrets?.Contains(header.Value) == true
+                || SecretPatterns.Classify(header.Value, header.Key).Kind == SecretKind.Secret;
+
+            redacted.Add(isSecret ? new KeyValuePair<string, string>(header.Key, RedactedMarker) : header);
+        }
+
+        return redacted;
+    }
 }
 
 public sealed record HistoryQuery

@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Courier.Core.Abstractions;
 using Courier.Core.Privacy;
 using Microsoft.Identity.Client;
@@ -119,13 +121,18 @@ public sealed class EntraAuthProvider : IAuthProvider, IDisposable
                 "No client secret is stored for this profile. Add it in the auth profile settings; "
                 + "it goes to the credential store, never to the collection file.");
 
-        var application = (IConfidentialClientApplication)GetOrCreate(profile, () =>
-            ConfidentialClientApplicationBuilder
+        // The fingerprint, not the secret itself, joins the cache key — a rotated secret must not
+        // reuse an MSAL app built with the old one, which would keep authenticating as a credential
+        // that no longer exists in Entra until the process restarted.
+        var application = (IConfidentialClientApplication)GetOrCreate(
+            profile,
+            () => ConfidentialClientApplicationBuilder
                 .Create(profile.ClientId)
                 .WithClientSecret(secret)
                 .WithAuthority(AuthorityFor(profile))
                 .WithHttpClientFactory(_httpClientFactory)
-                .Build());
+                .Build(),
+            Fingerprint(secret));
 
         var result = await application
             .AcquireTokenForClient(scopes)
@@ -246,9 +253,9 @@ public sealed class EntraAuthProvider : IAuthProvider, IDisposable
         return builder.Build();
     }
 
-    private IClientApplicationBase GetOrCreate(AuthProfile profile, Func<IClientApplicationBase> factory)
+    private IClientApplicationBase GetOrCreate(AuthProfile profile, Func<IClientApplicationBase> factory, string? secretFingerprint = null)
     {
-        var key = $"{profile.Name}|{profile.Kind}|{profile.Tenant}|{profile.ClientId}";
+        var key = $"{profile.Name}|{profile.Kind}|{profile.Tenant}|{profile.ClientId}|{secretFingerprint}";
         if (!_applications.TryGetValue(key, out var application))
         {
             application = factory();
@@ -256,6 +263,22 @@ public sealed class EntraAuthProvider : IAuthProvider, IDisposable
         }
 
         return application;
+    }
+
+    /// <summary>A short, one-way stand-in for a secret in a cache key. Never the secret itself.</summary>
+    private static string Fingerprint(string secret) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(secret)))[..12];
+
+    /// <summary>
+    /// Drops the cached MSAL application for a profile, so the next acquisition rebuilds it —
+    /// "Sign out" in the auth panel, and what a stale broker account needs.
+    /// </summary>
+    public void Forget(AuthProfile profile)
+    {
+        foreach (var key in _applications.Keys.Where(k => k.StartsWith($"{profile.Name}|{profile.Kind}|", StringComparison.Ordinal)).ToList())
+        {
+            _applications.Remove(key);
+        }
     }
 
     private string AuthorityFor(AuthProfile profile) =>

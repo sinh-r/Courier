@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Globalization;
 using System.Text.Json;
 using Courier.Cli.Services;
+using Courier.Core.Auth;
 using Courier.Core.Collections;
 using Courier.Scripting.Running;
 
@@ -123,6 +124,9 @@ internal static class RunCommand
             DefaultSettings = collection.Definition.Settings,
             InjectTraceParent = collection.Definition.InjectTraceParent,
             StopOnFailure = bail,
+            CollectionAuth = collection.Definition.Auth,
+            AuthProfiles = name => AuthProfileStore.Load(folder, name),
+            AuthRegistry = services.AuthRegistry,
         };
 
         // Every host the collection names becomes a legitimate destination. SEC-01 denies anything

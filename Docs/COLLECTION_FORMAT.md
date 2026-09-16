@@ -40,8 +40,10 @@ my-collection/
 ├─ endpoints.overlay.yaml        human-owned. Courier never writes to it.
 ├─ requests/
 │  └─ *.request.yaml             one file per hand-authored request
-└─ environments/
-   └─ *.env.yaml                 shared values only; local values live in the credential store
+├─ environments/
+│  └─ *.env.yaml                 shared values only; local values live in the credential store
+└─ auth/
+   └─ *.auth.yaml                saved auth profiles, committed; secrets live in the credential store
 ```
 
 ### The two-file split
@@ -96,7 +98,9 @@ variables:                    # shared, committed. Never secrets — see SEC-03.
 headers:                      # applied to every request unless overridden
   - name: Accept
     value: application/json
-authProfile: entra-qa         # names a profile; the profile holds no secret either
+auth:                         # ENT-02. The default for every request left on Inherit.
+  mode: Profile                # None | Profile | Inline. (Inherit means the same as None here —
+  profile: entra-qa            # there is nothing above a collection to inherit from.)
 settings:
   followRedirects: true
   maxRedirects: 10
@@ -138,9 +142,9 @@ body:
     {
       "customerId": "{{customerId}}"
     }
-auth:
-  profile: entra-qa
-  inheritFromCollection: false
+auth:                                    # ENT-02, ENT-06. Absent, or mode: Inherit, takes the
+  mode: Profile                          # collection's default (above) instead.
+  profile: entra-qa                      # Mode: Inherit | None | Profile | Inline
 scripts:
   preRequest: |
     pm.environment.set("nonce", Date.now());
@@ -197,6 +201,27 @@ localNames:                   # names only — values live in the OS credential 
 `ISecretStore` at resolution time under the key `env/<environment>/<variable>`. A secret-shaped
 value typed into `shared` is flagged inline before it can be committed (SEC-03).
 
+### 5.5 `auth/*.auth.yaml`
+
+A saved, named auth profile. ENT-02, ENT-06. Committed, and shared with the team — a secret is
+never written here; only a `secretRef`, an opaque id keyed into each person's own credential store.
+
+```yaml
+courier: 1
+name: entra-qa
+kind: EntraClientCredentials   # Bearer | Basic | EntraClientCredentials | EntraAuthorizationCode
+tenant: contoso.onmicrosoft.com
+clientId: 11111111-1111-1111-1111-111111111111
+scopes:
+  - api://orders/.default
+secretRef: 9f8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d
+```
+
+The file name (`entra-qa.auth.yaml` above) is what a request's or collection's `auth.profile`
+names — it is authoritative over the `name:` field inside, so renaming the file is how a profile
+gets renamed. `secretRef` survives that rename; the credential store key is built from it, not from
+the name, so a teammate's already-stored secret is never orphaned by a rename someone else made.
+
 ## 6. Variable references
 
 `{{name}}`, resolved with the precedence CORE-04 fixes:
@@ -216,6 +241,11 @@ instead of silently sending a request with a missing path segment.
 - A reader encountering unknown properties must ignore them. Adding an optional property is not a
   version change.
 - Adding a value to an enum **is** a version change if an older reader would misinterpret it.
+
+**Auth, specifically:** a file written before ENT-02 names a profile with a bare `authProfile:`
+string (collection) or `auth: { profile: ..., inheritFromCollection: ... }` (request). Both are
+read into the current `auth: { mode, profile, inline }` shape on load and are never written again —
+the file rewrites itself into the current shape the next time anything saves it.
 
 ## 8. What is deliberately not in the format
 

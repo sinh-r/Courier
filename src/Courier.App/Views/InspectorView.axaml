@@ -34,9 +34,18 @@
       <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel>
 
-          <!-- Auth. ENT-04's decoded token panel in miniature; the full table is in settings. -->
+          <!--
+            Auth. ENT-04's decoded token panel in miniature; the full table is in settings. The
+            picker here is the same RequestAuth instance the request tab's Auth panel binds to, so
+            changing it in either place moves both — your notes' "the same selected option should
+            be there at inspector tab as well".
+          -->
           <Expander IsExpanded="{Binding Inspector.AuthExpanded}" Header="Auth">
             <StackPanel Margin="8" Spacing="4">
+              <ComboBox HorizontalAlignment="Stretch" Margin="0,0,0,4"
+                        ItemsSource="{Binding RequestAuth.Options}"
+                        SelectedItem="{Binding RequestAuth.SelectedOption, Mode=TwoWay}"
+                        AutomationProperties.Name="Auth" />
               <Grid ColumnDefinitions="84,*">
                 <TextBlock Grid.Column="0" Classes="meta" Text="Profile" />
                 <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Inspector.Profile.Name}" />

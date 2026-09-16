@@ -251,83 +251,138 @@
         </ScrollViewer>
 
         <!--
-          Auth profile. UI_SPEC 5.6: Windows sign-in as the primary route, manual client
-          credentials secondary, and a decoded token panel that deserves real estate because it
-          turns a 401 from a mystery into a five-second diagnosis.
+          Auth profiles. ENT-02, ENT-06: named presets saved to the open collection's auth/ folder
+          and shared through git — never the secret, only a pointer into each person's own
+          credential store. A profile picked here can be set as the collection's default, which is
+          what a request left on "Inherit from collection" actually uses.
         -->
-        <ScrollViewer Padding="16"
-                      IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=AuthProfile}">
-          <StackPanel Spacing="14">
+        <Grid ColumnDefinitions="200,*"
+              IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=AuthProfile}">
 
-            <TextBlock Classes="heading" Text="Entra · QA" />
-            <TextBlock Classes="meta" Text="Applies to Orders.Api and Payments" />
-
-            <Border BorderBrush="{DynamicResource Ink}" BorderThickness="1" Padding="14">
-              <StackPanel Spacing="8">
-                <TextBlock Classes="heading" Text="Use my Windows sign-in" />
-                <TextBlock Classes="meta" TextWrapping="Wrap"
-                           Text="Integrated Windows authentication against the tenant. No secret stored anywhere." />
-                <Grid ColumnDefinitions="90,*" Margin="0,4,0,0">
-                  <TextBlock Grid.Column="0" Classes="meta" Text="Tenant" />
-                  <TextBlock Grid.Column="1" Classes="mono" Text="{Binding AuthProfileEditor.Tenant}" />
-                </Grid>
-                <Grid ColumnDefinitions="90,*">
-                  <TextBlock Grid.Column="0" Classes="meta" Text="Client" />
-                  <TextBlock Grid.Column="1" Classes="mono" Text="{Binding AuthProfileEditor.ClientId}" />
-                </Grid>
-                <Grid ColumnDefinitions="90,*">
-                  <TextBlock Grid.Column="0" Classes="meta" Text="Scope" />
-                  <TextBlock Grid.Column="1" Classes="mono" Text="{Binding AuthProfileEditor.ScopeLine}" />
-                </Grid>
+          <!-- The list. New/Delete act on whatever is selected, or on NewProfileName for a create. -->
+          <DockPanel Grid.Column="0" Margin="0,16,0,0">
+            <StackPanel DockPanel.Dock="Bottom" Margin="16,8" Spacing="6">
+              <TextBox Classes="mono" PlaceholderText="new profile name"
+                        Text="{Binding AuthProfileEditor.NewProfileName}" />
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Button Content="New" Command="{Binding AuthProfileEditor.StartNewProfileCommand}" />
+                <Button Content="Delete" IsEnabled="{Binding AuthProfileEditor.SelectedProfileName, Converter={x:Static ObjectConverters.IsNotNull}}"
+                        Command="{Binding AuthProfileEditor.DeleteCommand}" />
               </StackPanel>
-            </Border>
-
-            <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1" Padding="14">
-              <StackPanel Spacing="6">
-                <TextBlock Classes="heading" Text="Client credentials" />
-                <TextBlock Classes="meta" TextWrapping="Wrap"
-                           Text="Client id and secret. The secret goes to Credential Manager, never to the collection file." />
-                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
-                  <TextBlock Text="▲" Foreground="{DynamicResource Secret}" />
-                  <TextBlock Classes="meta" Foreground="{DynamicResource Secret}" Text="Secret required" />
-                </StackPanel>
-              </StackPanel>
-            </Border>
-
-            <!-- The decoded token panel. ENT-04: a plain table, and never a validity verdict. -->
-            <StackPanel Spacing="6">
-              <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Grid.Column="0" Classes="heading" Text="Decoded token" />
-                <TextBlock Grid.Column="1" Classes="meta" Text="{Binding AuthProfileEditor.TokenTimingLine}" />
-              </Grid>
-
-              <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1">
-                <ItemsControl ItemsSource="{Binding AuthProfileEditor.Claims}">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:TokenClaimViewModel">
-                      <Border Height="{DynamicResource RowHeight}" Padding="8,0"
-                              BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
-                        <Grid ColumnDefinitions="90,*,Auto">
-                          <TextBlock Grid.Column="0" Classes="mono meta" VerticalAlignment="Center"
-                                     Text="{Binding Name}" />
-                          <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center"
-                                     Text="{Binding Value}" />
-                          <TextBlock Grid.Column="2" Classes="meta" VerticalAlignment="Center"
-                                     Foreground="{DynamicResource Secret}"
-                                     Text="{Binding Warning}" />
-                        </Grid>
-                      </Border>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </Border>
-
-              <TextBlock Classes="meta" TextWrapping="Wrap"
-                         Text="Decoded, not validated. Courier is not the resource server and does not have the signing keys, so it reports what the token says about itself and nothing more." />
             </StackPanel>
 
-          </StackPanel>
-        </ScrollViewer>
+            <ListBox ItemsSource="{Binding AuthProfileEditor.ProfileNames}"
+                     SelectedItem="{Binding AuthProfileEditor.SelectedProfileName, Mode=TwoWay}" />
+          </DockPanel>
+
+          <ScrollViewer Grid.Column="1" Padding="16"
+                        BorderBrush="{DynamicResource Rule}" BorderThickness="1,0,0,0">
+            <StackPanel Spacing="14">
+
+              <TextBlock Classes="heading" Text="{Binding AuthProfileEditor.SelectedProfileName, FallbackValue='New profile', TargetNullValue='New profile'}" />
+              <TextBlock Classes="meta" Text="{Binding AuthProfileEditor.StatusMessage}"
+                         IsVisible="{Binding AuthProfileEditor.StatusMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+              <Grid ColumnDefinitions="90,*">
+                <TextBlock Grid.Column="0" Classes="meta" Text="Kind" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:AuthKindOptions.Labels}"
+                          SelectedItem="{Binding AuthProfileEditor.KindLabel, Mode=TwoWay}" />
+              </Grid>
+
+              <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1" Padding="14"
+                      IsVisible="{Binding AuthProfileEditor.ShowsEntraFields}">
+                <StackPanel Spacing="8">
+                  <Grid ColumnDefinitions="90,*">
+                    <TextBlock Grid.Column="0" Classes="meta" Text="Tenant" />
+                    <TextBox Grid.Column="1" Classes="mono" PlaceholderText="contoso.onmicrosoft.com"
+                             Text="{Binding AuthProfileEditor.Tenant}" />
+                  </Grid>
+                  <Grid ColumnDefinitions="90,*">
+                    <TextBlock Grid.Column="0" Classes="meta" Text="Client" />
+                    <TextBox Grid.Column="1" Classes="mono" Text="{Binding AuthProfileEditor.ClientId}" />
+                  </Grid>
+                  <Grid ColumnDefinitions="90,*">
+                    <TextBlock Grid.Column="0" Classes="meta" Text="Scope" />
+                    <TextBox Grid.Column="1" Classes="mono" PlaceholderText="api://orders/.default"
+                             Text="{Binding AuthProfileEditor.ScopesText}" />
+                  </Grid>
+                  <Grid ColumnDefinitions="90,*" IsVisible="{Binding AuthProfileEditor.ShowsRedirectUri}">
+                    <TextBlock Grid.Column="0" Classes="meta" Text="Redirect URI" />
+                    <TextBox Grid.Column="1" Classes="mono" PlaceholderText="http://localhost"
+                             Text="{Binding AuthProfileEditor.RedirectUri}" />
+                  </Grid>
+                </StackPanel>
+              </Border>
+
+              <Grid ColumnDefinitions="90,*" IsVisible="{Binding AuthProfileEditor.ShowsUsername}">
+                <TextBlock Grid.Column="0" Classes="meta" Text="Username" VerticalAlignment="Center" />
+                <TextBox Grid.Column="1" Classes="mono" Text="{Binding AuthProfileEditor.Username}" />
+              </Grid>
+
+              <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1" Padding="14"
+                      IsVisible="{Binding AuthProfileEditor.ShowsSecretField}">
+                <StackPanel Spacing="6">
+                  <TextBlock Classes="heading" Text="{Binding AuthProfileEditor.SecretFieldLabel}" />
+                  <TextBlock Classes="meta" TextWrapping="Wrap"
+                             Text="Goes to the OS credential store, never to a file in the collection." />
+                  <TextBox Classes="mono" PasswordChar="•" PlaceholderText="new value"
+                           Text="{Binding AuthProfileEditor.SecretInput}" />
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="▲" Foreground="{DynamicResource Secret}"
+                               IsVisible="{Binding !AuthProfileEditor.HasStoredSecret}" />
+                    <TextBlock Classes="meta" Foreground="{DynamicResource Secret}"
+                               Text="{Binding AuthProfileEditor.SecretStatusText}" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Button Content="Save" Command="{Binding AuthProfileEditor.SaveCommand}" />
+                <Button Content="Get token" IsVisible="{Binding AuthProfileEditor.CanGetToken}"
+                        Command="{Binding AuthProfileEditor.GetTokenCommand}" />
+                <Button Content="Set as collection default"
+                        IsEnabled="{Binding !AuthProfileEditor.IsCollectionDefault}"
+                        Command="{Binding AuthProfileEditor.SetAsCollectionDefaultCommand}"
+                        CommandParameter="{Binding Tree}" />
+                <TextBlock Classes="meta" VerticalAlignment="Center" Text="✓ collection default"
+                           IsVisible="{Binding AuthProfileEditor.IsCollectionDefault}" />
+              </StackPanel>
+
+              <!-- The decoded token panel. ENT-04: a plain table, and never a validity verdict. -->
+              <StackPanel Spacing="6" IsVisible="{Binding AuthProfileEditor.CanGetToken}">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Grid.Column="0" Classes="heading" Text="Decoded token" />
+                  <TextBlock Grid.Column="1" Classes="meta" Text="{Binding AuthProfileEditor.TokenTimingLine}" />
+                </Grid>
+
+                <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1">
+                  <ItemsControl ItemsSource="{Binding AuthProfileEditor.Claims}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:TokenClaimViewModel">
+                        <Border Height="{DynamicResource RowHeight}" Padding="8,0"
+                                BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+                          <Grid ColumnDefinitions="90,*,Auto">
+                            <TextBlock Grid.Column="0" Classes="mono meta" VerticalAlignment="Center"
+                                       Text="{Binding Name}" />
+                            <TextBlock Grid.Column="1" Classes="mono" VerticalAlignment="Center"
+                                       Text="{Binding Value}" />
+                            <TextBlock Grid.Column="2" Classes="meta" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Secret}"
+                                       Text="{Binding Warning}" />
+                          </Grid>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Border>
+
+                <TextBlock Classes="meta" TextWrapping="Wrap"
+                           Text="Decoded, not validated. Courier is not the resource server and does not have the signing keys, so it reports what the token says about itself and nothing more." />
+              </StackPanel>
+
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
 
         <!--
           Trust and network. UI_SPEC 5.7: every row states its source — from Windows certificate

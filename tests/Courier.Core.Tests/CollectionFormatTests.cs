@@ -41,7 +41,7 @@ public sealed class CollectionFormatTests
             ContentType = "application/json",
             Text = "{\n  \"customerId\": \"{{customerId}}\"\n}",
         },
-        Auth = new AuthReference("entra-qa", InheritFromCollection: false),
+        Auth = new AuthReference(AuthMode.Profile, "entra-qa"),
         Scripts = new RequestScripts("pm.environment.set('n', 1);", "pm.test('ok', function () {});"),
         Assertions =
         {
@@ -111,8 +111,8 @@ public sealed class CollectionFormatTests
     {
         var restored = _serializer.DeserializeRequest(_serializer.SerializeRequest(FullyPopulated()));
 
-        Assert.Equal("entra-qa", restored.Auth!.Profile);
-        Assert.False(restored.Auth.InheritFromCollection);
+        Assert.Equal(AuthMode.Profile, restored.Auth!.Mode);
+        Assert.Equal("entra-qa", restored.Auth.Profile);
 
         Assert.Contains("pm.environment", restored.Scripts!.PreRequest, StringComparison.Ordinal);
         Assert.Contains("pm.test", restored.Scripts.PostResponse, StringComparison.Ordinal);

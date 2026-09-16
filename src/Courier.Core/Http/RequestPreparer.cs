@@ -1,4 +1,5 @@
 using System.Text;
+using Courier.Core.Auth;
 using Courier.Core.Collections;
 using Courier.Core.Variables;
 
@@ -33,6 +34,7 @@ public static class RequestPreparer
         RequestSettings? collectionSettings = null,
         bool injectTraceParent = false,
         string? environmentName = null,
+        AuthPlan? auth = null,
         CancellationToken ct = default)
     {
         var urlResult = await variables.SubstituteAsync(request.Url, scopes, ct).ConfigureAwait(false);
@@ -114,9 +116,59 @@ public static class RequestPreparer
             bodyBytes = Encoding.UTF8.GetBytes(body.Text);
         }
 
+        var method = string.IsNullOrWhiteSpace(request.Method) ? "GET" : request.Method;
+        var queryParams = new List<KeyValuePair<string, string>>();
+        var secretValues = new List<string>();
+        AuthResult? authResult = null;
+
+        if (auth is { } plan)
+        {
+            if (plan.Resolved.Problem is { } problem)
+            {
+                return PreparationResult.Fail(problem);
+            }
+
+            if (plan.Resolved.HasAuth)
+            {
+                try
+                {
+                    authResult = await plan.Registry
+                        .ApplyAsync(plan.Resolved, new AuthContext(uri, method, bodyBytes), ct)
+                        .ConfigureAwait(false);
+                }
+                catch (InteractiveAuthRequiredException ex)
+                {
+                    return PreparationResult.NeedsSignIn(ex.ProfileName, ex.Message);
+                }
+
+                // The Auth tab wins over a header typed by hand on the same request (e.g. a stale
+                // Authorization the user left there) — matching the precedent this decision follows.
+                foreach (var header in authResult.Headers)
+                {
+                    headers.RemoveAll(h => string.Equals(h.Key, header.Key, StringComparison.OrdinalIgnoreCase));
+                    headers.Add(header);
+                }
+
+                queryParams.AddRange(authResult.QueryParameters);
+                secretValues.AddRange(authResult.SecretValues());
+            }
+        }
+
+        if (queryParams.Count > 0)
+        {
+            var pairs = new List<string>();
+            if (!string.IsNullOrEmpty(uri.Query))
+            {
+                pairs.Add(uri.Query.TrimStart('?'));
+            }
+
+            pairs.AddRange(queryParams.Select(p => $"{Uri.EscapeDataString(p.Key)}={Uri.EscapeDataString(p.Value)}"));
+            uri = new UriBuilder(uri) { Query = string.Join("&", pairs) }.Uri;
+        }
+
         var prepared = new PreparedRequest
         {
-            Method = string.IsNullOrWhiteSpace(request.Method) ? "GET" : request.Method,
+            Method = method,
             Url = uri,
             Headers = headers,
             BodyBytes = bodyBytes,
@@ -124,20 +176,35 @@ public static class RequestPreparer
             Settings = request.Settings.InheritFrom(collectionSettings ?? RequestSettings.Defaults),
             EnvironmentName = environmentName,
             InjectTraceParent = injectTraceParent,
+            Auth = authResult,
+            SecretValues = secretValues,
         };
 
         return PreparationResult.Ok(prepared);
     }
 }
 
+/// <param name="Resolved">What <see cref="AuthResolver.Resolve"/> decided applies to this request.</param>
+/// <param name="Registry">Dispatches <see cref="ResolvedAuth.Profile"/> to the provider that knows its kind.</param>
+public sealed record AuthPlan(ResolvedAuth Resolved, AuthProviderRegistry Registry);
+
 /// <param name="Error">
 /// Plain, active, specific: what is wrong and where. UI_SPEC 3.7 — never "an error occurred".
 /// </param>
-public sealed record PreparationResult(PreparedRequest? Request, string? Error)
+/// <param name="SignInProfile">
+/// Non-null only when <see cref="Error"/> is because auth needs an interactive sign-in the caller
+/// has not warned about yet (ENT-05) — the name of the profile to sign in with, for a "Sign in"
+/// button next to the error rather than a dead end.
+/// </param>
+public sealed record PreparationResult(PreparedRequest? Request, string? Error, string? SignInProfile = null)
 {
     public bool Succeeded => Request is not null;
+
+    public bool NeedsInteractiveSignIn => SignInProfile is not null;
 
     public static PreparationResult Ok(PreparedRequest request) => new(request, null);
 
     public static PreparationResult Fail(string error) => new(null, error);
+
+    public static PreparationResult NeedsSignIn(string profileName, string error) => new(null, error, profileName);
 }

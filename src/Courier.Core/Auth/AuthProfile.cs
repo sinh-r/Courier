@@ -60,14 +60,47 @@ public sealed class AuthProfile
     public bool ReuseDeveloperToolTokens { get; set; } = true;
 
     /// <summary>
+    /// Opaque id minted the first time a secret is saved for this profile, and kept from then on.
+    /// Renaming or moving the profile must not orphan its secret in the credential store, which a
+    /// name-keyed lookup would do the moment <see cref="Name"/> changed.
+    /// </summary>
+    public string? SecretRef { get; set; }
+
+    /// <summary>
     /// The credential store key for this profile's secret — client secret, password or AWS secret
     /// key, depending on the kind. The value never appears in the file this profile is written to.
     /// </summary>
-    public SecretKey SecretKey => new(Abstractions.SecretKey.AuthScope, Name);
+    public SecretKey SecretKey => new(Abstractions.SecretKey.AuthScope, SecretRef ?? Name);
 
     /// <summary>True when the profile needs a secret the user has not supplied yet.</summary>
     public bool RequiresSecret => Kind is AuthKind.EntraClientCredentials or AuthKind.Basic
         or AuthKind.ApiKey or AuthKind.Bearer or AuthKind.AwsSigV4 or AuthKind.OAuth2ClientCredentials;
+
+    /// <summary>
+    /// Deep-enough copy for <see cref="Collections.RequestDefinition.Clone"/>: this is a mutable
+    /// class embedded in an immutable <see cref="Collections.AuthReference"/> record, so the record
+    /// copy constructor alone would leave two requests sharing one profile instance.
+    /// </summary>
+    public AuthProfile Clone() => new()
+    {
+        Name = Name,
+        Kind = Kind,
+        Description = Description,
+        Tenant = Tenant,
+        ClientId = ClientId,
+        Authority = Authority,
+        Scopes = [.. Scopes],
+        RedirectUri = RedirectUri,
+        Username = Username,
+        ApiKeyHeader = ApiKeyHeader,
+        ApiKeyLocation = ApiKeyLocation,
+        AwsRegion = AwsRegion,
+        AwsService = AwsService,
+        AwsAccessKeyId = AwsAccessKeyId,
+        RefreshLeewaySeconds = RefreshLeewaySeconds,
+        ReuseDeveloperToolTokens = ReuseDeveloperToolTokens,
+        SecretRef = SecretRef,
+    };
 }
 
 /// <summary>

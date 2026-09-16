@@ -1,4 +1,5 @@
 using Courier.Core.Abstractions;
+using Courier.Core.Auth;
 using Courier.Core.Collections;
 using Courier.Core.Http;
 using Courier.Core.Privacy;
@@ -29,6 +30,18 @@ internal sealed class CliServices : IDisposable
         Trace = new TraceInjector();
         Executor = new RequestExecutor(Egress, Cookies, Trace);
         Variables = new VariableResolver(SecretStore);
+
+        // No broker on the CLI: there is no window to attach one to, and a build agent has no
+        // interactive Windows session for WAM to reach anyway. Client credentials — the one Entra
+        // grant this composition root can actually complete unattended — needs none of that.
+        Entra = new EntraAuthProvider(SecretStore, Egress, EgressPolicy);
+        AuthRegistry = new AuthProviderRegistry(new Dictionary<AuthKind, IAuthProvider>
+        {
+            [AuthKind.Bearer] = new BearerAuthProvider(SecretStore),
+            [AuthKind.Basic] = new BasicAuthProvider(SecretStore),
+            [AuthKind.EntraClientCredentials] = Entra,
+            [AuthKind.EntraAuthorizationCode] = Entra,
+        });
     }
 
     public ISecretStore SecretStore { get; }
@@ -49,12 +62,17 @@ internal sealed class CliServices : IDisposable
 
     public VariableResolver Variables { get; }
 
+    public EntraAuthProvider Entra { get; }
+
+    public AuthProviderRegistry AuthRegistry { get; }
+
     public static CliServices Build() => new();
 
     public void Dispose()
     {
         Trace.Dispose();
         Egress.Dispose();
+        Entra.Dispose();
     }
 }
 

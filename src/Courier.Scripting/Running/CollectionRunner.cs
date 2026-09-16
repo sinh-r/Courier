@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Courier.Core.Auth;
 using Courier.Core.Collections;
 using Courier.Core.Http;
 using Courier.Core.Privacy;
@@ -125,19 +126,34 @@ public sealed class CollectionRunner
             Global = context.Environment.AsReadOnly(),
         };
 
+        AuthPlan? authPlan = null;
+        if (plan.AuthRegistry is { } registry)
+        {
+            var resolved = AuthResolver.Resolve(request.Auth, plan.CollectionAuth, plan.AuthProfiles);
+            authPlan = new AuthPlan(resolved, registry);
+        }
+
         var preparation = await RequestPreparer.PrepareAsync(
             request,
             scopes,
             _variables,
-            plan.CollectionHeaders,
-            plan.DefaultSettings,
-            plan.InjectTraceParent,
-            plan.EnvironmentName,
-            ct).ConfigureAwait(false);
+            inheritedHeaders: plan.CollectionHeaders,
+            collectionSettings: plan.DefaultSettings,
+            injectTraceParent: plan.InjectTraceParent,
+            environmentName: plan.EnvironmentName,
+            auth: authPlan,
+            ct: ct).ConfigureAwait(false);
 
         if (!preparation.Succeeded)
         {
-            return new RequestRunResult(request.Name, request.Method, request.Url, null, [], scriptRuns, preparation.Error);
+            // An auth-code profile needs a browser open to a person, which CI does not have. This
+            // is where that shows up as a clear, specific failure rather than a hang.
+            var error = preparation.NeedsInteractiveSignIn
+                ? $"{preparation.Error} This grant type needs an interactive sign-in, which is not "
+                  + "available here. Use client credentials for unattended runs."
+                : preparation.Error;
+
+            return new RequestRunResult(request.Name, request.Method, request.Url, null, [], scriptRuns, error);
         }
 
         var result = await _executor.SendAsync(preparation.Request!, ct).ConfigureAwait(false);
@@ -182,6 +198,19 @@ public sealed record RunPlan
 
     /// <summary>Applied to every request unless overridden. From <c>collection.yaml</c>.</summary>
     public IReadOnlyList<HeaderValue> CollectionHeaders { get; init; } = [];
+
+    /// <summary>The collection's default auth, from <c>collection.yaml</c>. Null means none set.</summary>
+    public AuthReference? CollectionAuth { get; init; }
+
+    /// <summary>Looks up a saved profile by name, from the collection's <c>auth/</c> folder.</summary>
+    public Func<string, AuthProfile?> AuthProfiles { get; init; } = _ => null;
+
+    /// <summary>
+    /// Null skips auth resolution entirely, which existing callers (and every test that has no
+    /// reason to care about auth) keep doing without change. Set by <c>courier run</c> once a
+    /// secret store is available to build providers from.
+    /// </summary>
+    public AuthProviderRegistry? AuthRegistry { get; init; }
 
     public IReadOnlyList<IReadOnlyDictionary<string, string>> Data { get; init; } = [];
 

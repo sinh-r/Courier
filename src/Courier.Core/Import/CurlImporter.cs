@@ -71,7 +71,7 @@ public static class CurlImporter
                     // Credentials on a curl line are a secret. They are not written into the
                     // request; the user points it at an auth profile instead. P2.
                     var user = tokens[++i].Split(':', 2)[0];
-                    request.Auth = new AuthReference(null);
+                    request.Auth = new AuthReference(AuthMode.Inherit);
                     request.UnresolvedNotes.Add(
                         $"The command carried basic credentials for '{user}'. Create an auth profile; "
                         + "the password was not copied into this request.");

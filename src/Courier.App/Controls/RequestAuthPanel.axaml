@@ -5,18 +5,65 @@
              x:DataType="vm:MainWindowViewModel">
 
   <!--
-    Per-request auth. The profile carries the configuration; the secret lives in the credential
-    store and is never shown here, only located. P2.
+    Per-request auth. ENT-02, ENT-06. The picker offers Inherit from collection, no auth, the fixed
+    kinds, and every saved profile; RequestAuth is the same instance the inspector's Auth section
+    binds to, so the two never disagree about what is selected. The profile carries the
+    configuration; the secret lives in the credential store and is never shown here, only located.
   -->
   <StackPanel Margin="8" Spacing="8">
 
     <Grid ColumnDefinitions="120,*">
-      <TextBlock Grid.Column="0" Classes="meta" Text="Profile" VerticalAlignment="Center" />
-      <ComboBox Grid.Column="1" HorizontalAlignment="Left" Width="240"
-                ItemsSource="{x:Static vm:AuthProfileNames.All}"
-                SelectedItem="{Binding Tabs.Active.State.AuthProfile, Mode=TwoWay}"
-                AutomationProperties.Name="Auth profile" />
+      <TextBlock Grid.Column="0" Classes="meta" Text="Auth" VerticalAlignment="Center" />
+      <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                ItemsSource="{Binding RequestAuth.Options}"
+                SelectedItem="{Binding RequestAuth.SelectedOption, Mode=TwoWay}"
+                AutomationProperties.Name="Auth" />
     </Grid>
+
+    <TextBlock Classes="meta" Text="{Binding RequestAuth.ResolutionNote, StringFormat='from {0}'}"
+               IsVisible="{Binding RequestAuth.ResolutionNote, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+    <!-- The inline editor. Only the rows relevant to the chosen kind are shown. -->
+    <StackPanel Spacing="8" IsVisible="{Binding RequestAuth.IsInline}">
+
+      <Grid ColumnDefinitions="120,*" IsVisible="{Binding RequestAuth.ShowsEntraFields}">
+        <TextBlock Grid.Column="0" Classes="meta" Text="Tenant" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Classes="mono" PlaceholderText="contoso.onmicrosoft.com"
+                  Text="{Binding RequestAuth.Tenant}" />
+      </Grid>
+
+      <Grid ColumnDefinitions="120,*" IsVisible="{Binding RequestAuth.ShowsEntraFields}">
+        <TextBlock Grid.Column="0" Classes="meta" Text="Client ID" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Classes="mono" Text="{Binding RequestAuth.ClientId}" />
+      </Grid>
+
+      <Grid ColumnDefinitions="120,*" IsVisible="{Binding RequestAuth.ShowsEntraFields}">
+        <TextBlock Grid.Column="0" Classes="meta" Text="Scope" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Classes="mono" PlaceholderText="api://orders/.default"
+                  Text="{Binding RequestAuth.ScopesText}" />
+      </Grid>
+
+      <Grid ColumnDefinitions="120,*" IsVisible="{Binding RequestAuth.ShowsRedirectUri}">
+        <TextBlock Grid.Column="0" Classes="meta" Text="Redirect URI" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Classes="mono" PlaceholderText="http://localhost"
+                  Text="{Binding RequestAuth.RedirectUri}" />
+      </Grid>
+
+      <Grid ColumnDefinitions="120,*" IsVisible="{Binding RequestAuth.ShowsUsername}">
+        <TextBlock Grid.Column="0" Classes="meta" Text="Username" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Classes="mono" Text="{Binding RequestAuth.Username}" />
+      </Grid>
+
+      <Grid ColumnDefinitions="120,*,Auto" IsVisible="{Binding RequestAuth.ShowsSecretField}">
+        <TextBlock Grid.Column="0" Classes="meta" VerticalAlignment="Center"
+                   Text="{Binding RequestAuth.SecretFieldLabel}" />
+        <TextBox Grid.Column="1" Classes="mono" PasswordChar="•" PlaceholderText="new value"
+                  Text="{Binding RequestAuth.SecretInput}" />
+        <TextBlock Grid.Column="2" Classes="meta" Margin="6,0,0,0" VerticalAlignment="Center"
+                   Text="{Binding RequestAuth.SecretStatusText}" />
+      </Grid>
+
+    </StackPanel>
 
     <Grid ColumnDefinitions="120,*">
       <TextBlock Grid.Column="0" Classes="meta" Text="Identity" VerticalAlignment="Center" />
@@ -37,7 +84,8 @@
     </Grid>
 
     <StackPanel Orientation="Horizontal" Spacing="6">
-      <Button Content="Refresh token" />
+      <Button Content="Sign in" IsVisible="{Binding CanSignInForPendingProfile}"
+              Command="{Binding SignInAndRetryCommand}" />
       <Button Content="Decode token"
               Command="{Binding OpenDialogCommand}"
               CommandParameter="{x:Static vm:DialogKind.AuthProfile}" />

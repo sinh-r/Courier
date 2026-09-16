@@ -23,9 +23,15 @@ public static class CollectionFormat
 
     public const string EnvironmentsFolder = "environments";
 
+    /// <summary>Saved auth profiles, committed and shared. Secrets never live here — only in each
+    /// person's credential store, keyed by <see cref="Auth.AuthProfile.SecretRef"/>.</summary>
+    public const string AuthFolder = "auth";
+
     public const string RequestFileExtension = ".request.yaml";
 
     public const string EnvironmentFileExtension = ".env.yaml";
+
+    public const string AuthFileExtension = ".auth.yaml";
 
     public const string CapsuleExtension = ".capsule";
 
@@ -86,7 +92,17 @@ public sealed class CollectionDefinition
     /// <summary>Headers applied to every request unless overridden.</summary>
     public List<HeaderValue> Headers { get; set; } = [];
 
-    /// <summary>Default auth profile name for requests that inherit.</summary>
+    /// <summary>
+    /// The collection's default auth: a saved profile or one configured inline. Null and
+    /// <see cref="AuthMode.None"/> mean the same thing — no auth — since there is nothing above a
+    /// collection for <see cref="AuthMode.Inherit"/> to reach.
+    /// </summary>
+    public AuthReference? Auth { get; set; }
+
+    /// <summary>
+    /// Read-only legacy field. Superseded by <see cref="Auth"/>; never written by this build.
+    /// A collection saved before ENT-02 named its default profile here.
+    /// </summary>
     public string? AuthProfile { get; set; }
 
     /// <summary>Redirect, retry and timeout defaults. CORE-11.</summary>

@@ -628,14 +628,58 @@ public sealed partial class EnvironmentVariableViewModel : ObservableObject
     }
 }
 
-/// <summary>The auth profile editor and the decoded token panel. ENT-02, ENT-04.</summary>
+/// <summary>
+/// Settings → Auth profiles: the list of profiles saved in the open collection's <c>auth/</c>
+/// folder, the editor for whichever is selected, and the decoded-token panel. ENT-02, ENT-04.
+/// </summary>
 public sealed partial class AuthProfileEditorViewModel : ObservableObject
 {
+    private readonly AppServices _services;
+    private string? _folder;
+    private string? _collectionDefaultName;
+    private AuthProfile? _loaded;
+    private int _loadToken;
+
+    public AuthProfileEditorViewModel(AppServices services) => _services = services;
+
+    public ObservableCollection<string> ProfileNames { get; } = [];
+
+    [ObservableProperty]
+    private string? _selectedProfileName;
+
+    [ObservableProperty]
+    private string _newProfileName = string.Empty;
+
+    [ObservableProperty]
+    private string _kindLabel = AuthKindOptions.Labels[0];
+
     [ObservableProperty]
     private string? _tenant;
 
     [ObservableProperty]
     private string? _clientId;
+
+    [ObservableProperty]
+    private string? _username;
+
+    [ObservableProperty]
+    private string? _redirectUri;
+
+    [ObservableProperty]
+    private string _scopesText = string.Empty;
+
+    /// <summary>Never round-tripped from disk. Cleared the moment it is saved to the credential store.</summary>
+    [ObservableProperty]
+    private string _secretInput = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasStoredSecret;
+
+    [ObservableProperty]
+    private bool _isCollectionDefault;
+
+    [ObservableProperty]
+    private string? _statusMessage;
 
     [ObservableProperty]
     private DecodedToken? _token;
@@ -644,12 +688,219 @@ public sealed partial class AuthProfileEditorViewModel : ObservableObject
 
     public ObservableCollection<TokenClaimViewModel> Claims { get; } = [];
 
+    public AuthKind Kind => AuthKindOptions.KindFor(KindLabel);
+
+    public bool ShowsEntraFields => Kind is AuthKind.EntraClientCredentials or AuthKind.EntraAuthorizationCode;
+
+    public bool ShowsUsername => Kind == AuthKind.Basic;
+
+    public bool ShowsRedirectUri => Kind == AuthKind.EntraAuthorizationCode;
+
+    public bool ShowsSecretField => Kind is AuthKind.Bearer or AuthKind.Basic or AuthKind.EntraClientCredentials;
+
+    public bool CanGetToken => Kind is AuthKind.EntraClientCredentials or AuthKind.EntraAuthorizationCode;
+
+    public string SecretFieldLabel => Kind switch
+    {
+        AuthKind.Bearer => "Token",
+        AuthKind.Basic => "Password",
+        AuthKind.EntraClientCredentials => "Client secret",
+        _ => "Secret",
+    };
+
+    public string SecretStatusText => !ShowsSecretField
+        ? string.Empty
+        : HasStoredSecret ? "stored in the credential store" : "not set on this machine";
+
     public string ScopeLine => Scopes.Count == 0 ? "none" : string.Join(" ", Scopes);
 
     /// <summary>"issued 13:15 · expires 14:49 · in 47m".</summary>
     public string TokenTimingLine => Token is null
         ? "no token yet"
         : $"issued {Token.IssuedAt:HH:mm} · expires {Token.ExpiresAt:HH:mm} · {Token.DescribeExpiry()}";
+
+    /// <summary>Loads the list of saved profiles for the open collection. Call on opening the dialog.</summary>
+    public void Load(string? folder, AuthReference? collectionAuth)
+    {
+        _folder = folder;
+        ProfileNames.Clear();
+
+        if (folder is not null)
+        {
+            foreach (var name in AuthProfileStore.ListNames(folder))
+            {
+                ProfileNames.Add(name);
+            }
+        }
+
+        _collectionDefaultName = collectionAuth is { Mode: AuthMode.Profile } ? collectionAuth.Profile : null;
+        var toSelect = ProfileNames.FirstOrDefault(n => n == _collectionDefaultName) ?? ProfileNames.FirstOrDefault();
+        var unchanged = SelectedProfileName == toSelect;
+
+        SelectedProfileName = toSelect;
+
+        // The property setter is a no-op — and OnSelectedProfileNameChanged never fires — when
+        // toSelect equals whatever SelectedProfileName already was, e.g. reopening onto a
+        // collection with no profiles right after one that also had none. Without this, that leaves
+        // the previous collection's fields showing.
+        if (unchanged)
+        {
+            _ = LoadProfileAsync(toSelect);
+        }
+    }
+
+    partial void OnSelectedProfileNameChanged(string? value) => _ = LoadProfileAsync(value);
+
+    partial void OnKindLabelChanged(string value) => RaiseVisibility();
+
+    private async Task LoadProfileAsync(string? name)
+    {
+        var token = ++_loadToken;
+        StatusMessage = null;
+
+        var profile = name is null || _folder is null ? null : AuthProfileStore.Load(_folder, name);
+        _loaded = profile;
+
+        KindLabel = AuthKindOptions.LabelFor(profile?.Kind ?? AuthKind.None);
+        Tenant = profile?.Tenant;
+        ClientId = profile?.ClientId;
+        Username = profile?.Username;
+        RedirectUri = profile?.RedirectUri;
+        ScopesText = profile is null ? string.Empty : string.Join(' ', profile.Scopes);
+        SecretInput = string.Empty;
+        IsCollectionDefault = name is not null && name == _collectionDefaultName;
+
+        HasStoredSecret = profile?.SecretRef is not null
+            && await _services.SecretStore.GetAsync(profile.SecretKey).ConfigureAwait(true) is not null;
+
+        if (token != _loadToken)
+        {
+            return; // Superseded by another selection while the secret lookup was in flight.
+        }
+
+        RaiseVisibility();
+    }
+
+    /// <summary>The header's "New" action: an empty Bearer profile, named once saved.</summary>
+    [RelayCommand]
+    public void StartNewProfile()
+    {
+        SelectedProfileName = null;
+        _loaded = null;
+        NewProfileName = string.Empty;
+        KindLabel = AuthKindOptions.Labels[0];
+        Tenant = ClientId = Username = RedirectUri = null;
+        ScopesText = string.Empty;
+        SecretInput = string.Empty;
+        HasStoredSecret = false;
+        RaiseVisibility();
+    }
+
+    /// <summary>Saves the fields under <see cref="NewProfileName"/> (a new profile) or the
+    /// currently selected name (an edit), storing a freshly typed secret first.</summary>
+    [RelayCommand]
+    public async Task SaveAsync()
+    {
+        if (_folder is null)
+        {
+            StatusMessage = "Open a collection first.";
+            return;
+        }
+
+        var name = (SelectedProfileName ?? NewProfileName).Trim();
+        if (name.Length == 0)
+        {
+            StatusMessage = "Name this profile before saving.";
+            return;
+        }
+
+        var profile = new AuthProfile
+        {
+            Name = name,
+            Kind = Kind,
+            Tenant = Tenant,
+            ClientId = ClientId,
+            Username = Username,
+            RedirectUri = RedirectUri,
+            Scopes = [.. ScopesText.Split(' ', StringSplitOptions.RemoveEmptyEntries)],
+            SecretRef = _loaded?.SecretRef,
+        };
+
+        if (SecretInput.Length > 0)
+        {
+            profile.SecretRef ??= Guid.NewGuid().ToString("n");
+            await _services.SecretStore.SetAsync(profile.SecretKey, SecretInput).ConfigureAwait(true);
+            SecretInput = string.Empty;
+            HasStoredSecret = true;
+        }
+
+        AuthProfileStore.Save(_folder, profile);
+        _loaded = profile;
+
+        if (!ProfileNames.Contains(name))
+        {
+            ProfileNames.Add(name);
+        }
+
+        SelectedProfileName = name;
+        NewProfileName = string.Empty;
+        StatusMessage = $"Saved {name}";
+        RaiseVisibility();
+    }
+
+    [RelayCommand]
+    public void Delete()
+    {
+        if (_folder is null || SelectedProfileName is not { } name)
+        {
+            return;
+        }
+
+        AuthProfileStore.Delete(_folder, name);
+        ProfileNames.Remove(name);
+        SelectedProfileName = ProfileNames.FirstOrDefault();
+        StatusMessage = $"Deleted {name}";
+    }
+
+    /// <summary>Acquires a token for an Entra profile and decodes it, so a profile can be checked
+    /// before any request ever uses it.</summary>
+    [RelayCommand]
+    public async Task GetTokenAsync()
+    {
+        if (_loaded is not { } profile || !CanGetToken)
+        {
+            return;
+        }
+
+        StatusMessage = "Signing in…";
+
+        try
+        {
+            var acquired = await _services.Entra.AcquireAsync(profile, interactiveAllowed: true).ConfigureAwait(true);
+            Show(TokenDecoder.TryDecode(acquired.AccessToken), []);
+            StatusMessage = $"Token acquired · {acquired.Account ?? "no account name"}";
+        }
+        catch (InteractiveAuthRequiredException ex)
+        {
+            StatusMessage = ex.Message;
+        }
+    }
+
+    /// <summary>Sets this profile as the collection's default, so a request left on Inherit uses it.</summary>
+    [RelayCommand]
+    public void SetAsCollectionDefault(CollectionTreeViewModel tree)
+    {
+        if (_folder is null || SelectedProfileName is not { } name || tree.Definition is not { } definition)
+        {
+            return;
+        }
+
+        definition.Auth = new AuthReference(AuthMode.Profile, name);
+        CollectionLoader.SaveCollectionDefinition(_folder, definition);
+        _collectionDefaultName = name;
+        IsCollectionDefault = true;
+        StatusMessage = $"{name} is now the collection default";
+    }
 
     /// <summary>
     /// Rebuilds the claim table. The warning column is where SCAN-06 meets ENT-04: a scope the
@@ -683,6 +934,18 @@ public sealed partial class AuthProfileEditorViewModel : ObservableObject
 
         OnPropertyChanged(nameof(TokenTimingLine));
         OnPropertyChanged(nameof(ScopeLine));
+    }
+
+    private void RaiseVisibility()
+    {
+        OnPropertyChanged(nameof(Kind));
+        OnPropertyChanged(nameof(ShowsEntraFields));
+        OnPropertyChanged(nameof(ShowsUsername));
+        OnPropertyChanged(nameof(ShowsRedirectUri));
+        OnPropertyChanged(nameof(ShowsSecretField));
+        OnPropertyChanged(nameof(CanGetToken));
+        OnPropertyChanged(nameof(SecretFieldLabel));
+        OnPropertyChanged(nameof(SecretStatusText));
     }
 }
 

@@ -1,3 +1,4 @@
+using Courier.Core.Auth;
 using Courier.Core.Collections;
 using Courier.Core.Privacy;
 
@@ -42,7 +43,14 @@ public sealed record PreparedRequest
 
     /// <summary>
     /// Values known to be secret, registered with the log redactor before the send so they cannot
-    /// appear in any log line this request produces. SEC-07.
+    /// appear in any log line this request produces. SEC-07. <see cref="Storage.HistoryStore"/>
+    /// also scrubs these — and the Authorization header regardless — before writing history.
     /// </summary>
     public IReadOnlyList<string> SecretValues { get; init; } = [];
+
+    /// <summary>
+    /// What the auth provider contributed, if any — identity, expiry and granted scopes for the
+    /// inspector's Auth panel (ENT-04). Null for a request sent with no auth.
+    /// </summary>
+    public AuthResult? Auth { get; init; }
 }

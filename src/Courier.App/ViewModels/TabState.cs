@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Courier.Core.Auth;
 using Courier.Core.Collections;
 
 namespace Courier.App.ViewModels;
@@ -74,7 +75,12 @@ public sealed class TabState
 
     public Dictionary<string, string> PathParams { get; set; } = [];
 
-    public string? AuthProfile { get; set; }
+    /// <summary>
+    /// The tab's own auth choice — Inherit, None, a saved profile, or one configured inline —
+    /// mirrored between the request's Auth tab and the inspector's Auth section, which bind to the
+    /// same <see cref="AuthSelectorViewModel"/> instance over this. ENT-02.
+    /// </summary>
+    public AuthReference? Auth { get; set; }
 
     public string? PreRequestScript { get; set; }
 
@@ -123,7 +129,7 @@ public sealed class TabState
                 BinaryPath = BodyBinaryPath,
                 GraphQlVariables = BodyGraphQlVariables,
             },
-        Auth = AuthProfile is null ? null : new AuthReference(AuthProfile),
+        Auth = Auth is null ? null : Auth with { Inline = Auth.Inline?.Clone() },
         Scripts = PreRequestScript is null && PostResponseScript is null
             ? null
             : new RequestScripts(PreRequestScript, PostResponseScript),
@@ -165,7 +171,7 @@ public sealed class TabState
             Headers = [.. request.Headers],
             Query = query,
             PathParams = new Dictionary<string, string>(request.PathParams),
-            AuthProfile = request.Auth?.Profile,
+            Auth = request.Auth,
             PreRequestScript = request.Scripts?.PreRequest,
             PostResponseScript = request.Scripts?.PostResponse,
             Assertions = [.. request.Assertions],

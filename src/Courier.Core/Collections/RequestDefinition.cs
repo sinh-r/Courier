@@ -1,3 +1,5 @@
+using Courier.Core.Auth;
+
 namespace Courier.Core.Collections;
 
 /// <summary>
@@ -76,7 +78,7 @@ public sealed class RequestDefinition
         Query = [.. Query.Select(q => q with { })],
         Headers = [.. Headers.Select(h => h with { })],
         Body = Body?.Clone(),
-        Auth = Auth is null ? null : Auth with { },
+        Auth = Auth is null ? null : Auth with { Inline = Auth.Inline?.Clone() },
         Scripts = Scripts is null ? null : Scripts with { },
         Assertions = [.. Assertions.Select(a => a with { })],
         Settings = Settings with { },
@@ -121,14 +123,53 @@ public sealed record HeaderValue(string Name, string Value, bool Enabled = true,
     }
 }
 
-/// <param name="Profile">Names an auth profile; the profile holds the configuration, never a secret.</param>
-public sealed record AuthReference(string? Profile, bool InheritFromCollection = true)
+/// <summary>
+/// What a request's (or a collection's) auth reference resolves to. ENT-02, ENT-06.
+/// </summary>
+public enum AuthMode
 {
-    /// <summary>For the deserializer. See <see cref="QueryParameter"/>.</summary>
+    /// <summary>Take whatever the collection specifies. Not valid on a collection itself.</summary>
+    Inherit,
+
+    /// <summary>Send with no auth, overriding whatever the collection would have supplied.</summary>
+    None,
+
+    /// <summary>Named profile from the collection's <c>auth/</c> folder. See <see cref="Auth.AuthProfileStore"/>.</summary>
+    Profile,
+
+    /// <summary>Configured directly on this request or collection, not shared or named.</summary>
+    Inline,
+}
+
+/// <param name="Profile">Names an auth profile in <c>auth/</c>; the profile holds the configuration, never a secret.</param>
+/// <param name="Inline">Set only when <see cref="Mode"/> is <see cref="AuthMode.Inline"/>.</param>
+public sealed record AuthReference(AuthMode Mode, string? Profile = null, AuthProfile? Inline = null)
+{
+    /// <summary>For the deserializer. A positional record has no parameterless constructor.</summary>
     public AuthReference()
-        : this((string?)null)
+        : this(AuthMode.Inherit)
     {
     }
+
+    /// <summary>
+    /// Read-only legacy field: before ENT-02 the only two states were "a named profile" and
+    /// "inheritFromCollection: false" with none. Never written by this build — <see cref="Mode"/>
+    /// says the same thing more directly — but a collection saved by an older Courier still has it,
+    /// and <see cref="Normalize"/> reads it back.
+    /// </summary>
+    public bool? InheritFromCollection { get; set; }
+
+    /// <summary>
+    /// Migrates a reference just read from disk into the current shape. A pre-ENT-02 file has no
+    /// <c>mode:</c> key at all, so <see cref="Mode"/> deserializes to its default, <c>Inherit</c>,
+    /// and the two legacy signals below are what actually said what the user meant.
+    /// </summary>
+    public static AuthReference Normalize(AuthReference reference) => reference switch
+    {
+        { Mode: AuthMode.Inherit, Profile.Length: > 0 } => reference with { Mode = AuthMode.Profile },
+        { Mode: AuthMode.Inherit, InheritFromCollection: false } => reference with { Mode = AuthMode.None },
+        _ => reference,
+    };
 }
 
 public sealed record RequestScripts(string? PreRequest = null, string? PostResponse = null)

@@ -33,6 +33,7 @@ public sealed class AppServices : IDisposable
     private readonly Lazy<Task<CourierDatabase>> _database;
     private readonly Lazy<EntraAuthProvider> _entra;
     private readonly Lazy<DeveloperToolTokenSource> _developerTokens;
+    private readonly Lazy<AuthProviderRegistry> _authRegistry;
 
     private AppServices(string[] commandLineArgs)
     {
@@ -68,6 +69,17 @@ public sealed class AppServices : IDisposable
             () => new EntraAuthProvider(SecretStore, Egress, EgressPolicy, CreateBrokerConfigurator()));
 
         _developerTokens = new Lazy<DeveloperToolTokenSource>(() => new DeveloperToolTokenSource(Egress));
+
+        // Touching this touches Entra, which is the whole MSAL load PERF-01 keeps off the startup
+        // path — hence lazy here too, not built eagerly alongside Bearer and Basic.
+        _authRegistry = new Lazy<AuthProviderRegistry>(() => new AuthProviderRegistry(
+            new Dictionary<AuthKind, IAuthProvider>
+            {
+                [AuthKind.Bearer] = new BearerAuthProvider(SecretStore),
+                [AuthKind.Basic] = new BasicAuthProvider(SecretStore),
+                [AuthKind.EntraClientCredentials] = Entra,
+                [AuthKind.EntraAuthorizationCode] = Entra,
+            }));
 
         // Deferred: opening SQLite migrates a schema, and PERF-01 does not have room for that
         // before first paint.
@@ -119,6 +131,9 @@ public sealed class AppServices : IDisposable
 
     /// <summary>Constructed on first use. Loading Azure.Identity is not free either.</summary>
     public DeveloperToolTokenSource DeveloperTokens => _developerTokens.Value;
+
+    /// <summary>Dispatches a resolved auth profile to the provider that applies it. ENT-02, ENT-06.</summary>
+    public AuthProviderRegistry AuthRegistry => _authRegistry.Value;
 
     public StartupJobQueue StartupJobs { get; }
 
