@@ -5,7 +5,7 @@
 # the managed case.
 
 PackageIdentifier: Courier.Courier
-PackageVersion: 0.3.3
+PackageVersion: 0.3.4
 MinimumOSVersion: 10.0.19041.0
 InstallerType: wix
 Scope: machine
@@ -18,10 +18,10 @@ ReleaseDate: 2026-09-06
 
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/courier-api/courier/releases/download/v0.3.3/Courier-0.3.3-x64.msi
-    InstallerSha256: 29447c0d4171f25e939535e7133b9a30719c9867540650f5b1fcde1f0586ee5a
+    InstallerUrl: https://github.com/courier-api/courier/releases/download/v0.3.4/Courier-0.3.4-x64.msi
+    InstallerSha256: 76af1274a27be3cb570ce3c9c80ca704c95e3653e41a85151cab9c4fb673bc59
   - Architecture: arm64
-    InstallerUrl: https://github.com/courier-api/courier/releases/download/v0.3.3/Courier-0.1.0-arm64.msi
+    InstallerUrl: https://github.com/courier-api/courier/releases/download/v0.3.4/Courier-0.1.0-arm64.msi
     InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
 
 FileExtensions:
