@@ -32,6 +32,10 @@ public sealed class MinimalApiScanner
         ("MapDelete", "DELETE"), ("MapHead", "HEAD"), ("MapOptions", "OPTIONS"),
     ];
 
+    private const string UnreadableVersionNote =
+        "The route has an API version segment, but no HasApiVersion with a literal version was found "
+        + "on its route group, so the version token is left in the URL. Replace it with the version to call.";
+
     /// <summary>Parses one file. Never throws on malformed code — that is the point of this tier.</summary>
     public IReadOnlyList<object> ScanFile(string path, string text)
     {
@@ -108,13 +112,20 @@ public sealed class MinimalApiScanner
             return;
         }
 
-        var locals = BuildLocalPrefixes(invocation);
-        var template = RouteResolver.JoinSegments(ResolvePrefix(member.Expression, locals), routeLiteral);
+        var group = ResolveGroup(member.Expression, BuildLocalGroups(invocation));
+        var template = RouteResolver.SubstituteVersion(
+            RouteResolver.JoinSegments(group.Prefix, routeLiteral),
+            group.Version);
 
         if (!TryResolveParameters(handlerExpr, template, methodsByName, localFunctionsByName, out var parameters, out var notes, out var bodyTypeName, out var failureReason))
         {
             results.Add(new UnresolvedEndpoint(declaringType, actionName, path, line, failureReason!));
             return;
+        }
+
+        if (RouteResolver.HasUnresolvedVersion(template))
+        {
+            notes.Add(UnreadableVersionNote);
         }
 
         var chain = ReadFluentChain(invocation);
@@ -183,13 +194,20 @@ public sealed class MinimalApiScanner
             return;
         }
 
-        var locals = BuildLocalPrefixes(invocation);
-        var template = RouteResolver.JoinSegments(ResolvePrefix(member.Expression, locals), routeLiteral);
+        var group = ResolveGroup(member.Expression, BuildLocalGroups(invocation));
+        var template = RouteResolver.SubstituteVersion(
+            RouteResolver.JoinSegments(group.Prefix, routeLiteral),
+            group.Version);
 
         if (!TryResolveParameters(handlerExpr, template, methodsByName, localFunctionsByName, out var parameters, out var notes, out var bodyTypeName, out var failureReason))
         {
             results.Add(new UnresolvedEndpoint(declaringType, actionName, path, line, failureReason!));
             return;
+        }
+
+        if (RouteResolver.HasUnresolvedVersion(template))
+        {
+            notes.Add(UnreadableVersionNote);
         }
 
         var chain = ReadFluentChain(invocation);
@@ -218,13 +236,13 @@ public sealed class MinimalApiScanner
 
     /// <summary>
     /// Every local declared before this point in the containing method (or, for top-level
-    /// statements, the whole file), mapped to the route prefix its initializer resolves to. A
+    /// statements, the whole file), mapped to the route group its initializer resolves to. A
     /// variable that is not actually a route group resolves to an empty prefix, which is harmless
     /// unless something later tries to use it as one.
     /// </summary>
-    private static Dictionary<string, string> BuildLocalPrefixes(SyntaxNode node)
+    private static Dictionary<string, RouteGroup> BuildLocalGroups(SyntaxNode node)
     {
-        var locals = new Dictionary<string, string>(StringComparer.Ordinal);
+        var locals = new Dictionary<string, RouteGroup>(StringComparer.Ordinal);
         SyntaxNode scope = node.Ancestors().OfType<BlockSyntax>().FirstOrDefault()
             ?? node.SyntaxTree.GetRoot();
 
@@ -235,39 +253,46 @@ public sealed class MinimalApiScanner
                 continue;
             }
 
-            locals[declarator.Identifier.Text] = ResolvePrefix(initializer, locals);
+            locals[declarator.Identifier.Text] = ResolveGroup(initializer, locals);
         }
 
         return locals;
     }
 
     /// <summary>
-    /// Resolves the route prefix an expression contributes: a local variable's stored prefix, a
-    /// <c>MapGroup("x")</c> call combined with its own receiver's prefix, or — for any other call in
-    /// the chain (<c>HasApiVersion</c>, <c>WithOpenApi</c>, <c>NewVersionedApi</c>, ...) — whatever
-    /// its receiver resolves to, since those calls do not change the path.
+    /// Resolves the route group an expression contributes: a local variable's stored group, a
+    /// <c>MapGroup("x")</c> call combined with its own receiver's prefix, a <c>HasApiVersion(...)</c>
+    /// call that sets the version the group's <c>{version:apiVersion}</c> token takes, or — for any
+    /// other call in the chain (<c>WithOpenApi</c>, <c>NewVersionedApi</c>, ...) — whatever its
+    /// receiver resolves to, since those calls change neither the path nor the version.
     /// </summary>
-    private static string ResolvePrefix(ExpressionSyntax expression, IReadOnlyDictionary<string, string> locals)
+    private static RouteGroup ResolveGroup(ExpressionSyntax expression, IReadOnlyDictionary<string, RouteGroup> locals)
     {
         switch (expression)
         {
             case IdentifierNameSyntax identifier:
-                return locals.TryGetValue(identifier.Identifier.Text, out var prefix) ? prefix : string.Empty;
+                return locals.TryGetValue(identifier.Identifier.Text, out var group) ? group : RouteGroup.Empty;
 
             case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax innerMember } inner:
-                var receiverPrefix = ResolvePrefix(innerMember.Expression, locals);
+                var receiver = ResolveGroup(innerMember.Expression, locals);
 
-                if (innerMember.Name.Identifier.Text == "MapGroup"
-                    && inner.ArgumentList.Arguments.Count > 0
-                    && SyntaxHelpers.StringValue(inner.ArgumentList.Arguments[0].Expression) is { } literal)
+                switch (innerMember.Name.Identifier.Text)
                 {
-                    return RouteResolver.JoinSegments(receiverPrefix, literal);
+                    case "MapGroup"
+                        when inner.ArgumentList.Arguments.Count > 0
+                             && SyntaxHelpers.StringValue(inner.ArgumentList.Arguments[0].Expression) is { } literal:
+                        return receiver with { Prefix = RouteResolver.JoinSegments(receiver.Prefix, literal) };
+
+                    // A group can declare several versions; the first one declared wins, the same
+                    // way the first [ApiVersion] on a controller does.
+                    case "HasApiVersion" when receiver.Version is null:
+                        return receiver with { Version = ApiVersionReader.FromArguments(inner.ArgumentList) };
                 }
 
-                return receiverPrefix;
+                return receiver;
 
             default:
-                return string.Empty;
+                return RouteGroup.Empty;
         }
     }
 
@@ -398,6 +423,12 @@ public sealed class MinimalApiScanner
     private static string DeclaringTypeFor(SyntaxNode node, string path) =>
         node.Ancestors().OfType<ClassDeclarationSyntax>().FirstOrDefault()?.Identifier.Text
         ?? Path.GetFileNameWithoutExtension(path);
+
+    /// <param name="Version">Formatted by <see cref="ApiVersionReader"/>, or null when none was declared or readable.</param>
+    private readonly record struct RouteGroup(string Prefix, string? Version)
+    {
+        public static RouteGroup Empty => new(string.Empty, null);
+    }
 
     private readonly record struct FluentChainResult(
         EndpointAuthorization Authorization,

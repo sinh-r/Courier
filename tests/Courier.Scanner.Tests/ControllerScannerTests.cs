@@ -17,12 +17,12 @@ public sealed class ControllerScannerTests
 
         var routes = result.Endpoints.Select(e => $"{e.Method} {e.RouteTemplate}").ToList();
 
-        Assert.Contains("GET api/v2.0/Orders", routes);
-        Assert.Contains("GET api/v2.0/Orders/{id}", routes);
-        Assert.Contains("POST api/v2.0/Orders", routes);
-        Assert.Contains("PATCH api/v2.0/Orders/{id}/lines", routes);
-        Assert.Contains("POST api/v2.0/Orders/{id}/cancel", routes);
-        Assert.Contains("GET api/v2.0/Orders/{id}/audit", routes);
+        Assert.Contains("GET api/v2/Orders", routes);
+        Assert.Contains("GET api/v2/Orders/{id}", routes);
+        Assert.Contains("POST api/v2/Orders", routes);
+        Assert.Contains("PATCH api/v2/Orders/{id}/lines", routes);
+        Assert.Contains("POST api/v2/Orders/{id}/cancel", routes);
+        Assert.Contains("GET api/v2/Orders/{id}/audit", routes);
     }
 
     [Fact]
@@ -30,7 +30,7 @@ public sealed class ControllerScannerTests
     {
         var result = ScanOrders();
 
-        // SCAN-02: [controller] becomes Orders, and {version:apiVersion} becomes the declared 2.0.
+        // SCAN-02: [controller] becomes Orders, and {version:apiVersion} becomes the declared 2.0, formatted as v2.
         Assert.All(
             result.Endpoints.Where(e => e.RouteTemplate.StartsWith("api/", StringComparison.Ordinal)),
             e =>

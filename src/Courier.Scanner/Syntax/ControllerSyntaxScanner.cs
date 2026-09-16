@@ -29,6 +29,10 @@ public sealed class ControllerSyntaxScanner
         "HttpGet", "HttpPost", "HttpPut", "HttpPatch", "HttpDelete", "HttpHead", "HttpOptions",
     ];
 
+    private const string UnreadableVersionNote =
+        "The route has an API version segment, but no [ApiVersion] with a literal version was found "
+        + "on the controller, so the version token is left in the URL. Replace it with the version to call.";
+
     /// <summary>Parses one file. Never throws on malformed code — that is the point of this tier.</summary>
     public IReadOnlyList<object> ScanFile(string path, string text)
     {
@@ -76,7 +80,7 @@ public sealed class ControllerSyntaxScanner
         var controllerName = type.Identifier.Text;
         var declaringType = QualifiedName(type);
         var controllerRoute = SyntaxHelpers.AttributeArgument(type.AttributeLists, "Route", 0);
-        var apiVersion = SyntaxHelpers.AttributeArgument(type.AttributeLists, "ApiVersion", 0);
+        var apiVersion = ApiVersionReader.FromAttributes(type.AttributeLists);
         var controllerAuth = ReadAuthorization(type.AttributeLists);
 
         foreach (var method in type.Members.OfType<MethodDeclarationSyntax>())
@@ -138,6 +142,11 @@ public sealed class ControllerSyntaxScanner
 
                 var notes = new List<string>();
                 var parameters = SyntaxHelpers.ReadParameters(method.ParameterList.Parameters, template, notes, out var bodyTypeName);
+
+                if (RouteResolver.HasUnresolvedVersion(template))
+                {
+                    notes.Add(UnreadableVersionNote);
+                }
 
                 results.Add(new ScannedEndpoint(
                     EndpointIdentity.Compute(verb, template, declaringType),

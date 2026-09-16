@@ -77,15 +77,46 @@ public static class RouteResolver
         Replace(sb, "[area]", areaName ?? string.Empty);
         Replace(sb, "{area}", areaName ?? string.Empty);
 
-        if (apiVersion is not null)
-        {
-            // {version:apiVersion} is the conventional form from Asp.Versioning.
-            Replace(sb, "{version:apiVersion}", apiVersion);
-            Replace(sb, "{version}", apiVersion);
-            Replace(sb, "{v:apiVersion}", apiVersion);
-        }
+        ReplaceVersion(sb, apiVersion);
 
         return Tidy(sb.ToString());
+    }
+
+    /// <summary>
+    /// Substitutes the API version token in an already-composed template. Minimal APIs need this on
+    /// its own: a route group has no controller or action tokens, but it can still carry a version.
+    /// </summary>
+    /// <param name="apiVersion">A version already formatted by <see cref="ApiVersionReader"/>.</param>
+    public static string SubstituteVersion(string template, string? apiVersion)
+    {
+        if (apiVersion is null || template.Length == 0)
+        {
+            return template;
+        }
+
+        var sb = new StringBuilder(template);
+        ReplaceVersion(sb, apiVersion);
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// True when the template still carries an <c>apiVersion</c>-constrained token, i.e. the
+    /// version could not be read and the URL cannot be sent as-is.
+    /// </summary>
+    public static bool HasUnresolvedVersion(string template) =>
+        template.Contains(":apiVersion}", StringComparison.Ordinal);
+
+    private static void ReplaceVersion(StringBuilder sb, string? apiVersion)
+    {
+        if (apiVersion is null)
+        {
+            return;
+        }
+
+        // {version:apiVersion} is the conventional form from Asp.Versioning.
+        Replace(sb, "{version:apiVersion}", apiVersion);
+        Replace(sb, "{version}", apiVersion);
+        Replace(sb, "{v:apiVersion}", apiVersion);
     }
 
     private static void Replace(StringBuilder sb, string token, string value) =>
