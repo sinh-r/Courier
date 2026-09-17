@@ -862,6 +862,12 @@ public sealed partial class AuthProfileEditorViewModel : ObservableObject
         StatusMessage = $"Deleted {name}";
     }
 
+    /// <summary>Raised on any failure to acquire a token — not just an expected one — so the shell
+    /// can put it in front of the user as a popup rather than leaving it in this pane's status line
+    /// alone. An async command's exception otherwise has nowhere to go: a button's ICommand.Execute
+    /// never awaits the task, so anything this method does not itself report is simply dropped.</summary>
+    public event Action<string>? TokenAcquireFailed;
+
     /// <summary>Acquires a token for an Entra profile and decodes it, so a profile can be checked
     /// before any request ever uses it.</summary>
     [RelayCommand]
@@ -883,6 +889,12 @@ public sealed partial class AuthProfileEditorViewModel : ObservableObject
         catch (InteractiveAuthRequiredException ex)
         {
             StatusMessage = ex.Message;
+            TokenAcquireFailed?.Invoke(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Could not get a token — {ex.Message}";
+            TokenAcquireFailed?.Invoke(StatusMessage);
         }
     }
 

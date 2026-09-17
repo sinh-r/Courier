@@ -310,8 +310,20 @@ public sealed partial class AuthChoiceViewModel : ObservableObject
         catch (InteractiveAuthRequiredException ex)
         {
             TokenStatusMessage = ex.Message;
+            TokenAcquireFailed?.Invoke(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            TokenStatusMessage = $"Could not get a token — {ex.Message}";
+            TokenAcquireFailed?.Invoke(TokenStatusMessage);
         }
     }
+
+    /// <summary>Raised on any failure to acquire a token — not just an expected one — so the shell
+    /// can put it in front of the user as a popup rather than leaving it in this panel's status line
+    /// alone. An async command's exception otherwise has nowhere to go: a button's ICommand.Execute
+    /// never awaits the task, so anything this method does not itself report is simply dropped.</summary>
+    public event Action<string>? TokenAcquireFailed;
 
     private void Show(DecodedToken? token)
     {

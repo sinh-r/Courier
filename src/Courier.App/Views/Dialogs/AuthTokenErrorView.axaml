@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             x:Class="Courier.App.Views.Dialogs.AuthTokenErrorView"
+             x:DataType="vm:MainWindowViewModel">
+
+  <!--
+    Not part of the Dialog state machine: "Get token" fails while the Settings dialog that
+    triggered it is still open, and Settings is itself one value of that single-selection Dialog
+    property. Layering this on top instead of switching Dialog to it is what keeps the user's place
+    in Settings intact while still surfacing the failure, per DialogHost's "explicit action" rule —
+    this is reached only by clicking Get token, never unprompted.
+  -->
+
+  <Border Classes="floating" Width="420" Padding="24"
+          HorizontalAlignment="Center" VerticalAlignment="Center">
+    <StackPanel Spacing="14">
+
+      <TextBlock Classes="title" Text="Couldn't get a token" />
+
+      <TextBlock Classes="meta" TextWrapping="Wrap" Text="{Binding AuthTokenError}" />
+
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <Button Classes="primary" Content="Close" Command="{Binding DismissAuthTokenErrorCommand}" />
+      </StackPanel>
+
+    </StackPanel>
+  </Border>
+
+</UserControl>

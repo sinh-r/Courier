@@ -152,10 +152,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         };
         AuthProfileEditor = new AuthProfileEditorViewModel(services);
+        AuthProfileEditor.TokenAcquireFailed += message => AuthTokenError = message;
         RequestAuth = new AuthChoiceViewModel(services);
         RequestAuth.ManageProfilesRequested += () => OpenDialog(DialogKind.AuthProfile);
+        RequestAuth.TokenAcquireFailed += message => AuthTokenError = message;
         CollectionAuth = new AuthChoiceViewModel(services);
         CollectionAuth.ManageProfilesRequested += () => OpenDialog(DialogKind.AuthProfile);
+        CollectionAuth.TokenAcquireFailed += message => AuthTokenError = message;
         Trust = new TrustSettingsViewModel();
         SyncReview = new SyncReviewViewModel();
         Telemetry = new TelemetryReconstructViewModel();
@@ -242,6 +245,16 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     private string? _collectionAuthStatus;
+
+    /// <summary>Non-null puts <see cref="Views.Dialogs.AuthTokenErrorView"/> on screen, layered over
+    /// whatever else is open — a "Get token" failure needs to reach the user even while the Settings
+    /// dialog that triggered it stays open, which the single-value <see cref="Dialog"/> state machine
+    /// cannot do without replacing that dialog.</summary>
+    [ObservableProperty]
+    private string? _authTokenError;
+
+    [RelayCommand]
+    public void DismissAuthTokenError() => AuthTokenError = null;
 
     public TrustSettingsViewModel Trust { get; }
 

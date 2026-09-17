@@ -33,6 +33,13 @@
     <dialogs:CommandPaletteView IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=CommandPalette}" />
     <dialogs:TabOverflowView IsVisible="{Binding Dialog, Converter={StaticResource DialogIsConverter}, ConverterParameter=TabOverflow}" />
     <dialogs:SettingsView IsVisible="{Binding Dialog, Converter={StaticResource DialogIsSettingsConverter}}" />
+
+    <!--
+      Layered above everything else, including Settings, rather than driven by Dialog: a "Get
+      token" failure happens while Settings is open, and this must not replace it. See
+      AuthTokenErrorView's own comment.
+    -->
+    <dialogs:AuthTokenErrorView IsVisible="{Binding AuthTokenError, Converter={x:Static ObjectConverters.IsNotNull}}" />
   </Panel>
 
 </UserControl>
