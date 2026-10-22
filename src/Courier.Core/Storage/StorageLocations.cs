@@ -30,6 +30,12 @@ public static class StorageLocations
     /// <summary>User preferences. Never holds a credential.</summary>
     public static string Settings => Path.Combine(Root, "settings.json");
 
+    /// <summary>
+    /// Global variables: one environment file every collection can read. Machine-local and outside
+    /// any git tree; local-column values still go to the credential store, never this folder.
+    /// </summary>
+    public static string Globals => Path.Combine(Root, "globals");
+
     /// <summary>Imported capsules staged before the user opens them. CAP-09: written nowhere else.</summary>
     public static string CapsuleInbox => Path.Combine(Root, "capsules");
 
@@ -45,6 +51,8 @@ public static class StorageLocations
             "Diagnostic logs. Secret values are removed before writing, at every verbosity level."),
         new("Settings", Settings,
             "Preferences and window layout. Contains no credentials."),
+        new("Global variables", Globals,
+            "Variables every collection can use. Shared values only; local values are in the credential store."),
         new("Capsule inbox", CapsuleInbox,
             "Capsules you imported. Inert data; nothing here is executed."),
         new("Secrets", SecretStoreDescription,

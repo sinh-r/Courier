@@ -170,6 +170,7 @@ public sealed class DialogIsSettingsConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         value is DialogKind.Environments
+            or DialogKind.GlobalVariables
             or DialogKind.AuthProfile
             or DialogKind.TrustAndNetwork
             or DialogKind.Storage

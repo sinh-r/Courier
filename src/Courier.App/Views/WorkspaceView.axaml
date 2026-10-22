@@ -69,11 +69,16 @@
       Request over response, split 45/55 and draggable. The splitter is a 1px rule, like every
       other division in the application.
     -->
-    <Grid RowDefinitions="45*,1,55*">
-      <views:RequestEditorView Grid.Row="0" DataContext="{Binding}" />
-      <GridSplitter Grid.Row="1" ResizeDirection="Rows" Background="{DynamicResource Rule}" />
-      <views:ResponseView Grid.Row="2" DataContext="{Binding}" />
-    </Grid>
+    <Panel>
+      <Grid RowDefinitions="45*,1,55*" IsVisible="{Binding IsRequestWorkspaceVisible}">
+        <views:RequestEditorView Grid.Row="0" DataContext="{Binding}" />
+        <GridSplitter Grid.Row="1" ResizeDirection="Rows" Background="{DynamicResource Rule}" />
+        <views:ResponseView Grid.Row="2" DataContext="{Binding}" />
+      </Grid>
+
+      <!-- The collection's own page, in place of the panes above, while the collection root is open. -->
+      <views:CollectionOverviewView DataContext="{Binding}" IsVisible="{Binding IsCollectionOverviewOpen}" />
+    </Panel>
 
   </DockPanel>
 

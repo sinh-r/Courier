@@ -18,15 +18,27 @@ namespace Courier.App.ViewModels;
 /// </summary>
 public sealed partial class EnvironmentsViewModel : ObservableObject
 {
+    /// <summary>The one environment the global variables are stored as.</summary>
+    public const string GlobalsName = "Globals";
+
     private readonly ISecretStore _secrets;
+    private readonly string _secretScope;
     private string? _folder;
     private bool _suppressDirtyTracking;
     private bool _revertingSelection;
     private string? _pendingSwitch;
 
-    public EnvironmentsViewModel(ISecretStore secrets)
+    /// <param name="isGlobal">
+    /// True for the machine-wide global variables rather than a collection's environments: one
+    /// fixed environment, no picker, no "new environment", and local values keyed under
+    /// <see cref="SecretKey.GlobalScope"/> so they can never collide with a collection environment
+    /// that happens to be called <see cref="GlobalsName"/> too.
+    /// </param>
+    public EnvironmentsViewModel(ISecretStore secrets, bool isGlobal = false)
     {
         _secrets = secrets;
+        IsGlobal = isGlobal;
+        _secretScope = isGlobal ? SecretKey.GlobalScope : SecretKey.EnvironmentScope;
 
         Variables.CollectionChanged += (_, e) =>
         {
@@ -100,6 +112,34 @@ public sealed partial class EnvironmentsViewModel : ObservableObject
 
     public bool HasEnvironment => Name.Length > 0;
 
+    public bool IsGlobal { get; }
+
+    /// <summary>Collection mode only: the picker and "New environment" make no sense for the one
+    /// fixed globals environment.</summary>
+    public bool AllowsMultipleEnvironments => !IsGlobal && HasFolder;
+
+    /// <summary>Whose variables these are, above the table — with several collections open, the
+    /// pane has to say which one it is editing.</summary>
+    [ObservableProperty]
+    private string _scopeLabel = string.Empty;
+
+    public string SharedColumnLabel => IsGlobal ? "Shared · plain file on this machine" : "Shared · goes in git";
+
+    public string ColumnsNote => IsGlobal
+        ? "Global variables are available to every collection, and a collection's own variable of the same name always wins. "
+          + "Write {{global.name}} to use the global one regardless. Local values live in the operating system credential store."
+        : "Shared values live in the collection folder. Local values live in the operating system credential store and are never "
+          + "written to any file Courier creates. Move to local, then Save, to actually store a value there. "
+          + "Write {{collection.Environment.name}} to use another environment's value regardless of which one is selected.";
+
+    partial void OnHasFolderChanged(bool value) => OnPropertyChanged(nameof(AllowsMultipleEnvironments));
+
+    private SecretKey KeyFor(string variableName) => new(_secretScope, $"{Name}/{variableName}");
+
+    private string DisplayPathFor(string environmentName) => IsGlobal && _folder is not null
+        ? Path.Combine(_folder, CollectionFormat.EnvironmentsFolder, $"{environmentName}{CollectionFormat.EnvironmentFileExtension}")
+        : $"{CollectionFormat.EnvironmentsFolder}/{environmentName}{CollectionFormat.EnvironmentFileExtension}";
+
     /// <summary>An environment other than the one just saved or discarded is waiting to be shown —
     /// the picker's visible selection has been reverted back to <see cref="Name"/> until then.</summary>
     public bool HasPendingSwitch => _pendingSwitch is not null;
@@ -130,6 +170,9 @@ public sealed partial class EnvironmentsViewModel : ObservableObject
     {
         _folder = folder;
         HasFolder = folder is not null;
+        ScopeLabel = IsGlobal
+            ? "Global variables · every collection"
+            : folder is null ? string.Empty : $"{Path.GetFileName(folder)} · collection environments";
 
         RefreshAvailableEnvironmentNames();
 
@@ -139,9 +182,7 @@ public sealed partial class EnvironmentsViewModel : ObservableObject
             Variables.Clear();
 
             Name = environment?.Name ?? string.Empty;
-            FilePath = environment is null
-                ? string.Empty
-                : $"{CollectionFormat.EnvironmentsFolder}/{environment.Name}{CollectionFormat.EnvironmentFileExtension}";
+            FilePath = environment is null ? string.Empty : DisplayPathFor(environment.Name);
 
             if (environment is not null)
             {
@@ -337,7 +378,7 @@ public sealed partial class EnvironmentsViewModel : ObservableObject
 
         if (row.OriginalLocalName is { } existing)
         {
-            await _secrets.DeleteAsync(new SecretKey(SecretKey.EnvironmentScope, $"{Name}/{existing}"));
+            await _secrets.DeleteAsync(KeyFor(existing));
         }
 
         await SaveAsync();
@@ -387,16 +428,16 @@ public sealed partial class EnvironmentsViewModel : ObservableObject
 
                 if (row.PendingLocalValue is { } value)
                 {
-                    await _secrets.SetAsync(new SecretKey(SecretKey.EnvironmentScope, $"{Name}/{row.Name}"), value);
+                    await _secrets.SetAsync(KeyFor(row.Name), value);
                     row.ClearPendingLocalValue();
                 }
                 else if (row.OriginalLocalName is { } original && !string.Equals(original, row.Name, StringComparison.Ordinal))
                 {
-                    var oldKey = new SecretKey(SecretKey.EnvironmentScope, $"{Name}/{original}");
+                    var oldKey = KeyFor(original);
                     var existingValue = await _secrets.GetAsync(oldKey);
                     if (existingValue is not null)
                     {
-                        await _secrets.SetAsync(new SecretKey(SecretKey.EnvironmentScope, $"{Name}/{row.Name}"), existingValue);
+                        await _secrets.SetAsync(KeyFor(row.Name), existingValue);
                         await _secrets.DeleteAsync(oldKey);
                     }
                 }
@@ -417,7 +458,7 @@ public sealed partial class EnvironmentsViewModel : ObservableObject
         IsDirty = false;
         SaveStatus = new EnvironmentSaveStatus(
             true,
-            $"Saved to {CollectionFormat.EnvironmentsFolder}/{Name}{CollectionFormat.EnvironmentFileExtension} · "
+            $"Saved to {DisplayPathFor(Name)} · "
             + $"{DateTimeOffset.Now:HH:mm} · {definition.Shared.Count} shared, {definition.LocalNames.Count} local");
 
         RefreshAvailableEnvironmentNames();
@@ -435,6 +476,11 @@ public sealed partial class EnvironmentsViewModel : ObservableObject
     [RelayCommand]
     private void NewEnvironment()
     {
+        if (IsGlobal)
+        {
+            return;
+        }
+
         if (_folder is null)
         {
             SaveStatus = new EnvironmentSaveStatus(false, "Not saved — open a collection folder first.");

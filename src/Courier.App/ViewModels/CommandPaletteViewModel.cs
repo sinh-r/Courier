@@ -48,8 +48,8 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
                     PaletteKind.Endpoint,
                     request.Method,
                     request.Url,
-                    _shell.Tree.CollectionName ?? "collection",
-                    () => _shell.OpenRequest(request)));
+                    node.Collection?.Name ?? "collection",
+                    () => _shell.OpenRequest(request, node.Collection)));
             }
         }
 

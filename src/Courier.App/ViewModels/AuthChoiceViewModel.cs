@@ -25,10 +25,22 @@ public sealed partial class AuthChoiceViewModel : ObservableObject
     private string? _collectionFolder;
     private AuthProfile? _loadedInline;
 
-    public AuthChoiceViewModel(AppServices services)
+    /// <summary>False for a collection's own default: there is nothing above a collection for
+    /// "Inherit from collection" to reach, so the option is left out and an unset choice reads as
+    /// "No auth" instead.</summary>
+    private readonly bool _offersInherit;
+
+    public AuthChoiceViewModel(AppServices services, bool offersInherit = true)
     {
         _services = services;
         _secrets = services.SecretStore;
+        _offersInherit = offersInherit;
+
+        if (!offersInherit)
+        {
+            Options.Remove(InheritOption);
+            _selectedOption = NoneOption;
+        }
     }
 
     /// <summary>"Inherit from collection", "No auth", one entry per <see cref="AuthKindOptions"/>,
@@ -82,6 +94,8 @@ public sealed partial class AuthChoiceViewModel : ObservableObject
     public const string InheritOption = "Inherit from collection";
     public const string NoneOption = "No auth";
     public const string ManageProfilesOption = "Manage profiles…";
+
+    public bool IsInherit => SelectedOption == InheritOption;
 
     public bool IsInline => SelectedOption != NoneOption && AuthKindOptions.Labels.Contains(SelectedOption);
 
@@ -170,7 +184,7 @@ public sealed partial class AuthChoiceViewModel : ObservableObject
                 break;
 
             default:
-                SelectedOption = InheritOption;
+                SelectedOption = _offersInherit ? InheritOption : NoneOption;
                 await LoadInlineAsync(null, ct).ConfigureAwait(false);
                 break;
         }
@@ -181,7 +195,11 @@ public sealed partial class AuthChoiceViewModel : ObservableObject
         var current = SelectedOption;
 
         Options.Clear();
-        Options.Add(InheritOption);
+        if (_offersInherit)
+        {
+            Options.Add(InheritOption);
+        }
+
         Options.Add(NoneOption);
 
         foreach (var label in AuthKindOptions.Labels.Skip(1)) // skip "No auth", already added above
@@ -340,6 +358,7 @@ public sealed partial class AuthChoiceViewModel : ObservableObject
 
     private void RaiseVisibility()
     {
+        OnPropertyChanged(nameof(IsInherit));
         OnPropertyChanged(nameof(IsInline));
         OnPropertyChanged(nameof(InlineKind));
         OnPropertyChanged(nameof(ShowsEntraFields));

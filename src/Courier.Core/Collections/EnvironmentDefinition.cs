@@ -28,8 +28,14 @@ public sealed class EnvironmentDefinition
     public List<string> LocalNames { get; set; } = [];
 
     /// <summary>The credential store key for a local variable in this environment.</summary>
-    public SecretKey SecretKeyFor(string variableName) =>
-        new(SecretKey.EnvironmentScope, $"{Name}/{variableName}");
+    public SecretKey SecretKeyFor(string variableName) => SecretKeyFor(variableName, SecretKey.EnvironmentScope);
+
+    /// <summary>
+    /// The same key under another scope. The machine-wide global variables are stored as an
+    /// environment too, under <see cref="SecretKey.GlobalScope"/>, so a collection environment that
+    /// happens to share their name can never read or overwrite their local values.
+    /// </summary>
+    public SecretKey SecretKeyFor(string variableName, string scope) => new(scope, $"{Name}/{variableName}");
 
     /// <summary>
     /// Shared entries whose value looks like a credential. Drives the inline warning:

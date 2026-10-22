@@ -87,7 +87,7 @@ public sealed partial class TabCollection : ObservableObject
 
         if (Active == tab)
         {
-            Select(Items.Count == 0 ? null : Items[Math.Min(index, Items.Count - 1)]);
+            Activate(Items.Count == 0 ? null : Items[Math.Min(index, Items.Count - 1)]);
         }
 
         Notify();
@@ -98,6 +98,21 @@ public sealed partial class TabCollection : ObservableObject
     /// serialized POCO, mark it active, and let the single content presenter rebind.
     /// </summary>
     public void Select(TabViewModel? tab)
+    {
+        if (tab is not null)
+        {
+            Chosen?.Invoke();
+        }
+
+        Activate(tab);
+    }
+
+    /// <summary>Raised whenever the user picks or opens a tab — including the one already active —
+    /// so the shell can put the request panes back in front of the collection overview. Not raised
+    /// when closing a tab merely moves the selection to its neighbour.</summary>
+    public event Action? Chosen;
+
+    private void Activate(TabViewModel? tab)
     {
         if (ReferenceEquals(Active, tab))
         {
@@ -215,7 +230,7 @@ public sealed partial class TabCollection : ObservableObject
             Items.Add(tab);
         }
 
-        Select(Items[0]);
+        Activate(Items[0]);
         Notify();
     }
 

@@ -37,6 +37,10 @@ public sealed class TabState
 
     public string? CollectionName { get; set; }
 
+    /// <summary>The folder of the collection this tab belongs to — with several open, what decides
+    /// which collection's environment, variables and auth a send uses, and where Save writes.</summary>
+    public string? CollectionFolder { get; set; }
+
     public string? EnvironmentName { get; set; }
 
     /// <summary>Unsaved edits show as a filled dot in place of the close affordance. UI_SPEC 4.2.</summary>

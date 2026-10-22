@@ -48,6 +48,17 @@ public sealed class AppSettings
     /// <summary>"Light", "Dark" or "System".</summary>
     public string Theme { get; set; } = "System";
 
+    /// <summary>The collection folder open when the app last had one, reopened on launch next to
+    /// the restored tabs. A path, never a credential.</summary>
+    public string? LastCollectionFolder { get; set; }
+
+    /// <summary>Every collection folder open in the tree, reopened together on launch. Paths only.</summary>
+    public List<string> OpenCollectionFolders { get; set; } = [];
+
+    /// <summary>The environment each collection folder was last sending with — each collection
+    /// keeps its own. A name, never a value.</summary>
+    public Dictionary<string, string> CollectionEnvironments { get; set; } = [];
+
     /// <summary>
     /// Applied to every outbound request, under the collection's own headers and the request's own,
     /// which each win by name. Courier sent neither an <c>Accept</c> nor a <c>User-Agent</c> before

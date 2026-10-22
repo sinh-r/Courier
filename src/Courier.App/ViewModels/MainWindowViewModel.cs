@@ -30,6 +30,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private readonly AppServices _services;
     private readonly DispatcherTimer _elapsedTimer;
     private bool _revertingEnvironmentSelection;
+
+    /// <summary>True while the picker is being pointed at a different collection's environment, so
+    /// that switch is not mistaken for the user choosing a new environment for that collection.</summary>
+    private bool _switchingCollection;
+
+    /// <summary>The machine-wide global variables, as last saved. Every send falls back to these.</summary>
+    private EnvironmentDefinition _globals;
+
     private ScanResult? _lastScanResult;
     private IReadOnlyList<HeaderValue> _defaultHeaders = [];
 
@@ -115,38 +123,35 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         _services = services;
         Tabs = new TabCollection(services.DatabaseAsync);
-        Tree = new CollectionTreeViewModel(services);
-        Inspector = new InspectorViewModel(services);
-        Palette = new CommandPaletteViewModel(this);
-        Environments = new EnvironmentsViewModel(services.SecretStore);
-        Environments.EnvironmentCreated += name =>
+        Tree = new CollectionTreeViewModel(services)
         {
-            // Setting EnvironmentName first runs OnEnvironmentNameChanged, which resolves
-            // ActiveEnvironment and — if the dialog happens to be open — already reloads the pane
-            // from it. The explicit Load below still has to run either way: it is what keeps the
-            // pane's own idea of "what am I editing" in sync with the newly created environment
-            // even while Settings is closed, so a later Reopen (see OpenDialog) finds the right
-            // name to reload instead of whatever the pane last had open.
-            EnvironmentName = name;
-            RefreshAvailableEnvironments();
-            Environments.Load(Tree.Folder, ActiveEnvironment);
+            // A collection reopened next launch comes back on the environment it was left on; one
+            // opened for the first time starts on its first environment, so Send works without
+            // an extra click nobody would expect to need.
+            InitialEnvironmentFor = folder =>
+                AppSettingsStore.Load().CollectionEnvironments.TryGetValue(folder, out var saved)
+                    ? saved
+                    : CollectionLoader.ListEnvironments(folder).FirstOrDefault() ?? "None",
         };
-        Environments.EnvironmentSaved += definition =>
+        Tree.PropertyChanged += (_, e) =>
         {
-            // Keeps ActiveEnvironment from going stale the instant a variable is saved — without
-            // this, the next Load() (reopening the pane, or clicking to another settings section
-            // and back) rebuilds the grid from the pre-save copy and a just-added row disappears.
-            if (string.Equals(definition.Name, EnvironmentName, StringComparison.Ordinal))
+            if (e.PropertyName == nameof(CollectionTreeViewModel.Current))
             {
-                ActiveEnvironment = definition;
-                EnvironmentHasSecrets = definition.LocalNames.Count > 0;
+                OnCurrentCollectionChanged();
             }
         };
-        Environments.PropertyChanged += (_, e) =>
+        Inspector = new InspectorViewModel(services);
+        Palette = new CommandPaletteViewModel(this);
+        _environments = EnvironmentsEditorFor(null);
+
+        // The globals are one environment file outside any collection. A file that cannot be read
+        // starts the table empty rather than taking the app down; the next Save rewrites it.
+        _globals = LoadGlobals();
+        GlobalVariables = new EnvironmentsViewModel(services.SecretStore, isGlobal: true);
+        GlobalVariables.EnvironmentSaved += definition => _globals = definition;
+        GlobalVariables.PropertyChanged += (_, e) =>
         {
-            // Mirrored into the status bar so the confirmation (or the reason a save did not
-            // happen) is still visible after the dialog closes, not only while it is open.
-            if (e.PropertyName == nameof(EnvironmentsViewModel.SaveStatus) && Environments.SaveStatus is { } status)
+            if (e.PropertyName == nameof(EnvironmentsViewModel.SaveStatus) && GlobalVariables.SaveStatus is { } status)
             {
                 CollectionSyncStatus = status.Message;
             }
@@ -156,7 +161,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         RequestAuth = new AuthChoiceViewModel(services);
         RequestAuth.ManageProfilesRequested += () => OpenDialog(DialogKind.AuthProfile);
         RequestAuth.TokenAcquireFailed += message => AuthTokenError = message;
-        CollectionAuth = new AuthChoiceViewModel(services);
+        CollectionAuth = new AuthChoiceViewModel(services, offersInherit: false);
         CollectionAuth.ManageProfilesRequested += () => OpenDialog(DialogKind.AuthProfile);
         CollectionAuth.TokenAcquireFailed += message => AuthTokenError = message;
         Trust = new TrustSettingsViewModel();
@@ -190,12 +195,25 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         };
 
+        // Picking or opening any tab puts the request panes back in front of the collection page.
+        Tabs.Chosen += () => CollectionOverview = null;
+
         Tabs.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is null or nameof(TabCollection.Active))
             {
+                // A tab belongs to a collection; making it active makes that collection current,
+                // which is what points the environment picker at the environment it sends with.
+                // A tab of a closed collection still sends with it, but the tree cannot point at
+                // what it no longer shows, so the current collection stays put.
+                if (CollectionFor(Tabs.Active?.State) is { } collection && Tree.Collections.Contains(collection))
+                {
+                    Tree.Current = collection;
+                }
+
                 OnPropertyChanged(nameof(InheritedHeadersForActiveTab));
-                _ = RequestAuth.LoadAsync(Tabs.Active?.State?.Auth, Tree.Folder);
+                OnPropertyChanged(nameof(CollectionAuthSummary));
+                _ = RequestAuth.LoadAsync(Tabs.Active?.State?.Auth, CollectionFor(Tabs.Active?.State)?.Folder);
             }
         };
 
@@ -230,7 +248,97 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public CommandPaletteViewModel Palette { get; }
 
-    public EnvironmentsViewModel Environments { get; }
+    /// <summary>
+    /// The current collection's environments — Settings, the title-bar picker's inline create, and
+    /// the collection page's Environments tab all edit through this one. Each collection folder has
+    /// its own editor (see <see cref="_environmentEditors"/>), swapped in when it becomes current,
+    /// so unsaved edits in one collection survive switching to another and back.
+    /// </summary>
+    [ObservableProperty]
+    private EnvironmentsViewModel _environments;
+
+    /// <summary>One editor per collection folder, kept after a collection is closed too, so edits
+    /// not yet saved are still there if it is reopened this session.</summary>
+    private readonly Dictionary<string, EnvironmentsViewModel> _environmentEditors = new(OpenCollection.FolderComparer);
+
+    /// <summary>The editor for <paramref name="folder"/>, created and loaded the first time it is
+    /// needed. Null folder (nothing open) gets one shared, empty editor.</summary>
+    private EnvironmentsViewModel EnvironmentsEditorFor(string? folder)
+    {
+        if (folder is null)
+        {
+            return _noCollectionEnvironments ??= CreateEnvironmentsEditor();
+        }
+
+        if (!_environmentEditors.TryGetValue(folder, out var editor))
+        {
+            editor = CreateEnvironmentsEditor();
+            _environmentEditors[folder] = editor;
+        }
+
+        return editor;
+    }
+
+    private EnvironmentsViewModel? _noCollectionEnvironments;
+
+    /// <summary>A collection's environments editor, wired to the shell. Every handler checks it is
+    /// still the visible one: an editor for a collection that is not current must not repoint the
+    /// picker or overwrite the loaded environment.</summary>
+    private EnvironmentsViewModel CreateEnvironmentsEditor()
+    {
+        var editor = new EnvironmentsViewModel(_services.SecretStore);
+
+        editor.EnvironmentCreated += name =>
+        {
+            if (!ReferenceEquals(editor, Environments))
+            {
+                return;
+            }
+
+            // Setting EnvironmentName runs OnEnvironmentNameChanged, which resolves
+            // ActiveEnvironment. The explicit Load below keeps the pane's own idea of "what am I
+            // editing" in sync with the newly created environment even while Settings is closed,
+            // so a later Reopen (see OpenDialog) finds the right name to reload.
+            RefreshAvailableEnvironments();
+            EnvironmentName = name;
+            editor.Load(Tree.Folder, ActiveEnvironment);
+
+            if (CollectionOverview is { } overview && Tree.Folder is { } folder
+                && OpenCollection.IsSameFolder(overview.Folder, folder))
+            {
+                overview.Environments = [.. AvailableEnvironments.Where(e => e != "None")];
+            }
+        };
+
+        editor.EnvironmentSaved += definition =>
+        {
+            // Keeps ActiveEnvironment from going stale the instant a variable is saved — without
+            // this, the next Load() (reopening the pane, or clicking to another settings section
+            // and back) rebuilds the grid from the pre-save copy and a just-added row disappears.
+            if (ReferenceEquals(editor, Environments)
+                && string.Equals(definition.Name, EnvironmentName, StringComparison.Ordinal))
+            {
+                ActiveEnvironment = definition;
+                EnvironmentHasSecrets = definition.LocalNames.Count > 0;
+            }
+        };
+
+        editor.PropertyChanged += (_, e) =>
+        {
+            // Mirrored into the status bar so the confirmation (or the reason a save did not
+            // happen) is still visible after the dialog closes, not only while it is open.
+            if (e.PropertyName == nameof(EnvironmentsViewModel.SaveStatus) && editor.SaveStatus is { } status)
+            {
+                CollectionSyncStatus = status.Message;
+            }
+        };
+
+        return editor;
+    }
+
+    /// <summary>The global variables: available to every collection, overridden by any collection
+    /// variable of the same name, and reachable regardless as <c>{{global.name}}</c>.</summary>
+    public EnvironmentsViewModel GlobalVariables { get; }
 
     public AuthProfileEditorViewModel AuthProfileEditor { get; }
 
@@ -245,6 +353,126 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     private string? _collectionAuthStatus;
+
+    /// <summary>Non-null while the collection's own page (Overview, Auth) is shown in place of the
+    /// request and response panes — what clicking the collection root in the tree opens.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCollectionOverviewOpen))]
+    [NotifyPropertyChangedFor(nameof(IsRequestWorkspaceVisible))]
+    private CollectionOverviewViewModel? _collectionOverview;
+
+    public bool IsCollectionOverviewOpen => CollectionOverview is not null;
+
+    public bool IsRequestWorkspaceVisible => CollectionOverview is null;
+
+    /// <summary>What a request left on "Inherit from collection" resolves to, for its Auth tab.</summary>
+    public string CollectionAuthSummary => CollectionFor(Tabs.Active?.State) is { } collection
+        ? CollectionOverviewViewModel.Describe(collection.Definition.Auth)
+        : "no collection open";
+
+    /// <summary>Opens the current collection's page — Overview by default, or straight to its Auth
+    /// tab from a request's "Edit collection auth". Reloads <see cref="CollectionAuth"/> each time,
+    /// so it always starts from what <c>collection.yaml</c> actually says.</summary>
+    [RelayCommand]
+    public void OpenCollectionOverview(int tab = CollectionOverviewViewModel.OverviewTab)
+    {
+        if (Tree.Current is not { } collection)
+        {
+            return;
+        }
+
+        // The Environments tab edits whichever collection the page is showing, and keeps its own
+        // unsaved edits if it was already on this one.
+        Environments.Reopen(collection.Folder, ActiveEnvironment);
+        Environments.RefreshDetectedProfiles(collection.Definition.ScannedFrom?.Path);
+
+        // Already showing this collection: just switch pages, rather than rebuilding and dropping
+        // a description or auth edit that has not been saved yet.
+        if (CollectionOverview is { } open && OpenCollection.IsSameFolder(open.Folder, collection.Folder))
+        {
+            open.SelectedTabIndex = tab;
+            return;
+        }
+
+        CollectionOverview = new CollectionOverviewViewModel(
+            collection.Folder,
+            collection.Definition,
+            collection.Root,
+            [.. AvailableEnvironments.Where(e => e != "None")])
+        {
+            SelectedTabIndex = tab,
+        };
+
+        _ = CollectionAuth.LoadAsync(collection.Definition.Auth, collection.Folder);
+        CollectionAuthStatus = null;
+    }
+
+    [RelayCommand]
+    public void OpenCollectionAuth() => OpenCollectionOverview(CollectionOverviewViewModel.AuthTab);
+
+    /// <summary>The tree's "Environments…" on a collection root: its page, on the Environments tab.</summary>
+    [RelayCommand]
+    public void ManageCollectionEnvironments(TreeNode? node)
+    {
+        if (node?.Collection is { } collection)
+        {
+            Tree.Current = collection;
+        }
+
+        OpenCollectionOverview(CollectionOverviewViewModel.EnvironmentsTab);
+    }
+
+    /// <summary>The tree's "Close collection": takes it out of the workspace, leaves its files
+    /// alone, and stops reopening it next launch.</summary>
+    [RelayCommand]
+    public void CloseCollection(TreeNode? node)
+    {
+        if (node?.Collection is not { } collection)
+        {
+            return;
+        }
+
+        if (CollectionOverview is { } overview && OpenCollection.IsSameFolder(overview.Folder, collection.Folder))
+        {
+            CollectionOverview = null;
+        }
+
+        Tree.Close(collection);
+        RememberOpenCollections();
+
+        // Its open tabs keep sending with it — same definition, same environment — just from here
+        // instead of the tree.
+        _detachedCollections[collection.Folder] = collection;
+        CollectionSyncStatus = $"{collection.Name} closed";
+    }
+
+    [RelayCommand]
+    public void CloseCollectionOverview() => CollectionOverview = null;
+
+    /// <summary>The collection page's Save: its description and default auth, in one
+    /// <c>collection.yaml</c> write — to the collection the page is showing, which is not
+    /// necessarily the current one by the time Save is clicked.</summary>
+    [RelayCommand]
+    public async Task SaveCollectionOverviewAsync()
+    {
+        if (CollectionOverview is not { } overview)
+        {
+            return;
+        }
+
+        // The tree's copy when the collection is still open: a save or "New folder" since the page
+        // opened reloads it, and writing the page's older snapshot back would undo that.
+        var definition = Tree.Find(overview.Folder)?.Definition ?? overview.Definition;
+
+        definition.Description = string.IsNullOrWhiteSpace(overview.Description) ? null : overview.Description;
+        definition.Auth = await CollectionAuth.ToReferenceAsync().ConfigureAwait(true);
+        CollectionLoader.SaveCollectionDefinition(overview.Folder, definition);
+
+        overview.MarkSaved(definition.Auth);
+        overview.Status = "Saved to collection.yaml";
+        CollectionSyncStatus = $"Saved {overview.Name}";
+        OnPropertyChanged(nameof(CollectionAuthSummary));
+    }
 
     /// <summary>Non-null puts <see cref="Views.Dialogs.AuthTokenErrorView"/> on screen, layered over
     /// whatever else is open — a "Get token" failure needs to reach the user even while the Settings
@@ -341,6 +569,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             Environments.RefreshDetectedProfiles(Tree.Definition?.ScannedFrom?.Path);
         }
 
+        if (kind == DialogKind.GlobalVariables)
+        {
+            GlobalVariables.Reopen(StorageLocations.Globals, _globals);
+        }
+
         if (kind == DialogKind.AuthProfile)
         {
             AuthProfileEditor.Load(Tree.Folder, Tree.Definition?.Auth);
@@ -364,6 +597,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
         definition.Auth = await CollectionAuth.ToReferenceAsync().ConfigureAwait(true);
         CollectionLoader.SaveCollectionDefinition(folder, definition);
         CollectionAuthStatus = "Collection default auth saved";
+
+        if (CollectionOverview is { } overview)
+        {
+            overview.AuthSummary = CollectionOverviewViewModel.Describe(definition.Auth);
+        }
+
+        OnPropertyChanged(nameof(CollectionAuthSummary));
     }
 
     [RelayCommand]
@@ -374,7 +614,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         // A profile created, renamed or deleted in Settings should show up in the request tab's
         // picker the moment that dialog closes, not only after switching tabs.
-        _ = RequestAuth.LoadAsync(Tabs.Active?.State?.Auth, Tree.Folder);
+        _ = RequestAuth.LoadAsync(Tabs.Active?.State?.Auth, CollectionFor(Tabs.Active?.State)?.Folder);
     }
 
     [RelayCommand]
@@ -401,8 +641,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// <summary>The tree's "New request" context-menu item, on a Collection or Folder node — a
     /// Request node has no <see cref="TreeNodeKind.Folder"/> children to scope one to.</summary>
     [RelayCommand]
-    public void NewRequestInFolder(TreeNode? node) =>
+    public void NewRequestInFolder(TreeNode? node)
+    {
+        if (node?.Collection is { } collection)
+        {
+            Tree.Current = collection;
+        }
+
         OpenNewRequestTab(node?.Kind == TreeNodeKind.Folder ? node.FolderPath : null);
+    }
 
     /// <summary>
     /// Shared by the generic "+"/"New request" (unscoped) and the tree's folder-scoped one. No
@@ -415,6 +662,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Method = "GET",
         EnvironmentName = EnvironmentName,
         CollectionName = Tree.CollectionName,
+        CollectionFolder = Tree.Folder,
         Folder = folder,
     });
 
@@ -453,9 +701,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        if (await SaveTabAsync(tab).ConfigureAwait(true) && Tree.Folder is not null)
+        if (await SaveTabAsync(tab).ConfigureAwait(true) && Tree.Find(tab.State?.CollectionFolder) is { } collection)
         {
-            await Tree.OpenFolderAsync(Tree.Folder).ConfigureAwait(true);
+            await Tree.OpenFolderAsync(collection.Folder).ConfigureAwait(true);
         }
 
         Tabs.Close(tab);
@@ -476,9 +724,21 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Dialog = DialogKind.None;
     }
 
-    [RelayCommand]
-    public void OpenRequest(RequestDefinition request) =>
-        Tabs.Open(TabState.FromDefinition(request, Tree.CollectionName, EnvironmentName));
+    /// <summary>Opens a request in a tab that remembers which collection it came from — the tree
+    /// passes the node's collection, so a request always sends with its own collection's variables.</summary>
+    public void OpenRequest(RequestDefinition request, OpenCollection? collection = null)
+    {
+        collection ??= Tree.Current;
+
+        if (collection is not null)
+        {
+            Tree.Current = collection;
+        }
+
+        var state = TabState.FromDefinition(request, collection?.Name, collection?.EnvironmentName ?? EnvironmentName);
+        state.CollectionFolder = collection?.Folder;
+        Tabs.Open(state);
+    }
 
     /// <summary>
     /// Parses a pasted curl command into a new tab. CORE-09. Reused by both entry points: the URL
@@ -488,6 +748,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         var request = CurlImporter.Parse(command);
         var state = TabState.FromDefinition(request, Tree.CollectionName, EnvironmentName);
+        state.CollectionFolder = Tree.Folder;
 
         // The stripped -u password and a rejected --insecure have nowhere else to land — the
         // capsule banner is the one mechanism the tab already has for "this came from somewhere,
@@ -562,10 +823,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
             var request = state.ToDefinition();
 
+            // The tab's own collection, which is not necessarily the one selected in the tree:
+            // with several open, a request must never borrow another collection's baseUrl.
+            var collection = CollectionFor(state);
+            var environment = EnvironmentFor(collection);
             var scopes = new VariableScopes
             {
-                Environment = ActiveEnvironment,
-                Collection = Tree.Definition?.Variables ?? new Dictionary<string, string>(StringComparer.Ordinal),
+                Environment = environment,
+                Collection = collection?.Definition.Variables ?? new Dictionary<string, string>(StringComparer.Ordinal),
+                GlobalEnvironment = _globals,
+                EnvironmentLookup = collection is null
+                    ? null
+                    : name => LoadEnvironmentOrNull(collection.Folder, name),
             };
 
             var inheritedHeaders = new Dictionary<string, HeaderValue>(StringComparer.OrdinalIgnoreCase);
@@ -574,15 +843,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 inheritedHeaders[header.Name] = header;
             }
 
-            foreach (var header in Tree.Definition?.Headers ?? [])
+            foreach (var header in collection?.Definition.Headers ?? [])
             {
                 inheritedHeaders[header.Name] = header;
             }
 
             var resolved = AuthResolver.Resolve(
                 request.Auth,
-                Tree.Definition?.Auth,
-                name => Tree.Folder is null ? null : AuthProfileStore.Load(Tree.Folder, name));
+                collection?.Definition.Auth,
+                name => collection is null ? null : AuthProfileStore.Load(collection.Folder, name));
 
             _lastAuthProfile = resolved.Profile;
 
@@ -591,9 +860,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 scopes,
                 _services.Variables,
                 inheritedHeaders: [.. inheritedHeaders.Values],
-                collectionSettings: Tree.Definition?.Settings,
-                injectTraceParent: Tree.Definition?.InjectTraceParent ?? false,
-                environmentName: EnvironmentName == "None" ? null : EnvironmentName,
+                collectionSettings: collection?.Definition.Settings,
+                injectTraceParent: collection?.Definition.InjectTraceParent ?? false,
+                environmentName: environment?.Name,
                 auth: new AuthPlan(resolved, _services.AuthRegistry),
                 ct: ct).ConfigureAwait(true);
 
@@ -620,8 +889,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
             await new HistoryStore(database)
                 .RecordAsync(
                     result,
-                    EnvironmentName,
-                    Tree.CollectionName,
+                    environment?.Name ?? "None",
+                    collection?.Name,
                     state.EndpointId ?? state.RequestPath,
                     preparation.Request.SecretValues,
                     ct)
@@ -691,7 +960,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        await Tree.OpenFolderAsync(Tree.Folder!).ConfigureAwait(true);
+        if (Tree.Find(tab.State?.CollectionFolder) is { } collection)
+        {
+            await Tree.OpenFolderAsync(collection.Folder).ConfigureAwait(true);
+        }
+
         CollectionSyncStatus = $"Saved '{tab.Title}'";
     }
 
@@ -719,12 +992,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
 
-        if (saved > 0 && Tree.Folder is not null)
+        // Once per collection touched, not once per tab — the tree only needs to catch up on the
+        // final state, and reopening it after every single write would be N times the disk I/O for
+        // no benefit anyone would see.
+        var touched = dirty
+            .Where(t => !t.IsDirty)
+            .Select(t => Tree.Find(t.State?.CollectionFolder))
+            .OfType<OpenCollection>()
+            .Distinct()
+            .ToList();
+
+        foreach (var collection in touched)
         {
-            // Once for the batch, not once per tab — the tree only needs to catch up on the final
-            // state, and reopening it after every single write would be N times the disk I/O for
-            // no benefit anyone would see.
-            await Tree.OpenFolderAsync(Tree.Folder).ConfigureAwait(true);
+            await Tree.OpenFolderAsync(collection.Folder).ConfigureAwait(true);
         }
 
         CollectionSyncStatus = saved == dirty.Count
@@ -736,13 +1016,22 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// Writes one tab to disk as a request file. Shared by <see cref="SaveAsync"/>,
     /// <see cref="SaveAllAsync"/> and the close-tab confirmation's "Save and close".
     /// </summary>
-    /// <returns>False when there is no open collection folder to save into — the tab is left dirty.</returns>
+    /// <returns>False when there is no collection folder to save into — the tab is left dirty.</returns>
     private async Task<bool> SaveTabAsync(TabViewModel tab)
     {
-        if (tab.State is not { } state || Tree.Folder is null)
+        // The tab's own collection, open or not. A tab that never belonged to one (a fresh "+"
+        // before anything was open) lands in the current collection and belongs to it from then on.
+        var folder = CollectionFor(tab.State)?.Folder;
+
+        if (tab.State is not { } state || folder is null)
         {
             return false;
         }
+
+        // Re-pointing a request at a different collection would be a move, not a save; a tab
+        // keeps the collection it was opened in, and only an unowned one adopts one here.
+        state.CollectionFolder ??= folder;
+        state.CollectionName ??= Path.GetFileName(folder);
 
         // RequestAuth's fields reflect whichever tab is active; flushing it into a different,
         // merely-dirty tab's state would overwrite that tab's auth with the active tab's edits.
@@ -761,7 +1050,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // segment cleanly), so the file layout a human browsing the git repo sees matches what the
         // tree already shows, not just what the YAML's own folder: field says.
         var path = state.RequestPath ?? Path.Combine(
-            Tree.Folder,
+            folder,
             CollectionFormat.RequestsFolder,
             state.Folder ?? string.Empty,
             CollectionFormat.FileNameFor(definition));
@@ -776,7 +1065,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         return true;
     }
 
-    /// <summary>Opens a folder of collections. The menu, the rail's "…" button and Ctrl+O all reach this.</summary>
+    /// <summary>Opens a collection folder next to the ones already open. The menu, the rail's "…"
+    /// button and Ctrl+O all reach this.</summary>
     [RelayCommand]
     public async Task OpenFolderAsync()
     {
@@ -811,7 +1101,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // Auth is one of the three places your process notes call out: the request itself, the
         // collection default, or a saved profile set up separately — all optional, so this only
         // points at where to go, rather than opening the dialog and asking for it up front.
-        CollectionSyncStatus = $"{name} created — add auth in Settings → Auth profiles if this API needs it";
+        CollectionSyncStatus = $"{name} created — click it in the tree to add a description or auth";
     }
 
     /// <summary>The folder picker both <see cref="OpenFolderAsync"/> and <see cref="NewCollectionAsync"/> use.</summary>
@@ -836,17 +1126,198 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// <see cref="NewCollectionAsync"/>.</summary>
     private async Task OpenAndPrimeFolderAsync(string path)
     {
-        await Tree.OpenFolderAsync(path).ConfigureAwait(true);
-        CollectionSyncStatus = $"{Tree.CollectionName} open";
-        RefreshAvailableEnvironments();
+        // Opened alongside every collection already in the tree, never in place of them; opening
+        // one that is already there just reloads it. Becoming current runs OnCurrentCollectionChanged,
+        // which points the environment picker and the Environments pane at it.
+        var collection = await Tree.OpenFolderAsync(path).ConfigureAwait(true);
+        CollectionSyncStatus = $"{collection.Name} open";
+
+        // Back in the tree, so its tabs read the tree's fresh copy rather than the one kept for them.
+        _detachedCollections.Remove(collection.Folder);
+
+        RememberOpenCollections();
+
+        // A scan or a first open can add environment files the list did not have; a collection
+        // still on "None" with environments now available picks the first one.
+        RefreshAvailableEnvironments(pickFirstIfNone: true);
 
         // Primes Environments with the open folder immediately, rather than waiting for Settings to
         // be opened once — the title-bar picker's inline "new environment" needs a folder to save
         // into the moment a collection opens, not only after a trip through the settings dialog.
-        Environments.Load(Tree.Folder, ActiveEnvironment);
+        // Reopen, not Load: this also runs when a save reloads an already-open collection, and
+        // must not throw away environment edits that have not been saved yet.
+        Environments.Reopen(Tree.Folder, ActiveEnvironment);
         Environments.RefreshDetectedProfiles(Tree.Definition?.ScannedFrom?.Path);
-        _ = RequestAuth.LoadAsync(Tabs.Active?.State?.Auth, Tree.Folder);
+        _ = RequestAuth.LoadAsync(Tabs.Active?.State?.Auth, CollectionFor(Tabs.Active?.State)?.Folder);
+
+        // A page showing a different collection has nothing to say about this one.
+        if (CollectionOverview is { } overview && !OpenCollection.IsSameFolder(overview.Folder, collection.Folder))
+        {
+            CollectionOverview = null;
+        }
+
+        OnPropertyChanged(nameof(CollectionAuthSummary));
+        OnPropertyChanged(nameof(InheritedHeadersForActiveTab));
         Dialog = DialogKind.None;
+    }
+
+    /// <summary>Remembers which collections are open, so the next launch reopens all of them.
+    /// Load-modify-save, as <see cref="SetTheme"/>.</summary>
+    private void RememberOpenCollections()
+    {
+        var settings = AppSettingsStore.Load();
+        settings.OpenCollectionFolders = [.. Tree.Collections.Select(c => c.Folder)];
+        settings.LastCollectionFolder = Tree.Folder;
+        AppSettingsStore.Save(settings);
+    }
+
+    /// <summary>
+    /// The collection a tab sends with and saves into: the one it was opened from, found by the
+    /// folder it recorded, or — for a tab restored from before tabs recorded one — by the request
+    /// file it came from. A tab that never had one follows the current collection.
+    /// </summary>
+    /// <remarks>
+    /// A tab whose collection is no longer in the tree (closed, or not reopened this launch) still
+    /// gets that collection, read from disk — never blank scopes, and never whichever collection
+    /// happens to be current. Null only when its folder no longer exists at all.
+    /// </remarks>
+    private OpenCollection? CollectionFor(TabState? state)
+    {
+        if (state?.CollectionFolder is { } folder)
+        {
+            return Tree.Find(folder) ?? DetachedCollection(folder);
+        }
+
+        return Tree.FindContaining(state?.RequestPath) ?? Tree.Current;
+    }
+
+    /// <summary>Collections tabs still belong to but the tree no longer shows, by folder. Seeded
+    /// by <see cref="CloseCollection"/> with the closed collection itself, so its environment
+    /// choice carries straight over; otherwise loaded once from disk.</summary>
+    private readonly Dictionary<string, OpenCollection> _detachedCollections = new(OpenCollection.FolderComparer);
+
+    private OpenCollection? DetachedCollection(string folder)
+    {
+        folder = OpenCollection.Normalize(folder);
+
+        if (_detachedCollections.TryGetValue(folder, out var cached))
+        {
+            return cached;
+        }
+
+        if (!Directory.Exists(folder))
+        {
+            return null;
+        }
+
+        LoadedCollection loaded;
+        try
+        {
+            loaded = CollectionLoader.Load(folder);
+        }
+        catch (Exception ex) when (ex is CollectionFormatException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        var collection = new OpenCollection(folder, Path.GetFileName(folder))
+        {
+            Definition = loaded.Definition,
+            EnvironmentName = Tree.InitialEnvironmentFor?.Invoke(folder) ?? "None",
+        };
+
+        _detachedCollections[folder] = collection;
+        return collection;
+    }
+
+    /// <summary>The environment a collection sends with. The current collection's is already
+    /// loaded (and kept fresh on every save); another open collection's is read from disk.</summary>
+    private EnvironmentDefinition? EnvironmentFor(OpenCollection? collection)
+    {
+        if (collection is null || collection.EnvironmentName == "None")
+        {
+            return null;
+        }
+
+        return collection == Tree.Current
+            ? ActiveEnvironment
+            : LoadEnvironmentOrNull(collection.Folder, collection.EnvironmentName);
+    }
+
+    private static EnvironmentDefinition? LoadEnvironmentOrNull(string folder, string name)
+    {
+        try
+        {
+            return CollectionLoader.LoadEnvironment(folder, name);
+        }
+        catch (Exception ex) when (ex is CollectionFormatException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static EnvironmentDefinition LoadGlobals() =>
+        LoadEnvironmentOrNull(StorageLocations.Globals, EnvironmentsViewModel.GlobalsName)
+            ?? new EnvironmentDefinition { Name = EnvironmentsViewModel.GlobalsName };
+
+    /// <summary>
+    /// Points the picker, the loaded environment and the Environments pane at the collection that
+    /// just became current, on whatever environment that collection was last left on.
+    /// </summary>
+    private void OnCurrentCollectionChanged()
+    {
+        _switchingCollection = true;
+        try
+        {
+            // Read before the list changes: a Reset on the bound list can write a spurious value
+            // back through EnvironmentName, and with it into the collection's own choice.
+            var target = Tree.Current?.EnvironmentName ?? "None";
+
+            RefreshAvailableEnvironments(pickFirstIfNone: false);
+
+            if (!AvailableEnvironments.Contains(target))
+            {
+                target = "None";
+            }
+
+            if (EnvironmentName == target)
+            {
+                // Same name, different collection: OnEnvironmentNameChanged will not run, but the
+                // environment behind the name is a different file.
+                LoadActiveEnvironment(target);
+            }
+            else
+            {
+                EnvironmentName = target;
+            }
+
+            if (Tree.Current is { } current)
+            {
+                current.EnvironmentName = target;
+            }
+        }
+        finally
+        {
+            _switchingCollection = false;
+        }
+
+        // Swap in this collection's own editor rather than reloading the shared one, so whatever
+        // was being edited in the collection just left stays exactly as it was, unsaved edits
+        // included. Reopen keeps a dirty editor untouched and refreshes a clean one from disk.
+        Environments = EnvironmentsEditorFor(Tree.Folder);
+        Environments.Reopen(Tree.Folder, ActiveEnvironment);
+        Environments.RefreshDetectedProfiles(Tree.Definition?.ScannedFrom?.Path);
+
+        // The page's Environments tab now shows a different collection's editor; leaving the page
+        // up would show one collection's environments under another's name.
+        if (CollectionOverview is { } overview
+            && (Tree.Folder is not { } folder || !OpenCollection.IsSameFolder(overview.Folder, folder)))
+        {
+            CollectionOverview = null;
+        }
+
+        OnPropertyChanged(nameof(CollectionAuthSummary));
+        OnPropertyChanged(nameof(InheritedHeadersForActiveTab));
     }
 
     /// <summary>
@@ -1019,13 +1490,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             SyncReview.SourcePath);
         EnsureDefaultEnvironment(SyncReview.OutputPath);
 
-        await Tree.OpenFolderAsync(SyncReview.OutputPath).ConfigureAwait(true);
-        CollectionSyncStatus = $"{Tree.CollectionName} open";
-        RefreshAvailableEnvironments();
-        Environments.Load(Tree.Folder, ActiveEnvironment);
-        Environments.RefreshDetectedProfiles(Tree.Definition?.ScannedFrom?.Path);
-        _ = RequestAuth.LoadAsync(Tabs.Active?.State?.Auth, Tree.Folder);
-        Dialog = DialogKind.None;
+        await OpenAndPrimeFolderAsync(SyncReview.OutputPath).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -1112,30 +1577,45 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        if (newValue == "None" || Tree.Folder is null)
-        {
-            ActiveEnvironment = null;
-            EnvironmentHasSecrets = false;
-            return;
-        }
+        LoadActiveEnvironment(newValue);
 
-        ActiveEnvironment = CollectionLoader.LoadEnvironment(Tree.Folder, newValue);
-        EnvironmentHasSecrets = ActiveEnvironment?.LocalNames.Count > 0;
+        // A pick made in the picker is that collection's choice, kept for when it is current again
+        // and for next launch. A collection switch merely showing its existing choice is not.
+        if (!_switchingCollection && Tree.Current is { } collection)
+        {
+            collection.EnvironmentName = newValue;
+
+            var settings = AppSettingsStore.Load();
+            settings.CollectionEnvironments[collection.Folder] = newValue;
+            AppSettingsStore.Save(settings);
+        }
 
         // Keeps the settings pane showing whichever environment is actually selected, if it
         // happens to be open while the title-bar picker switches — otherwise it would keep
         // rendering whatever was active when the pane was last opened.
-        if (Dialog == DialogKind.Environments)
+        if (Dialog == DialogKind.Environments && !_switchingCollection)
         {
             Environments.Load(Tree.Folder, ActiveEnvironment);
         }
     }
 
+    private void LoadActiveEnvironment(string name)
+    {
+        ActiveEnvironment = name == "None" || Tree.Folder is null
+            ? null
+            : LoadEnvironmentOrNull(Tree.Folder, name);
+
+        EnvironmentHasSecrets = ActiveEnvironment?.LocalNames.Count > 0;
+    }
+
     /// <summary>
-    /// Rebuilds the environment list from disk. Called after opening a folder and after applying a
-    /// scan, since either can add environment files that were not there before.
+    /// Rebuilds the environment list from the current collection's folder. Called after opening a
+    /// folder, after applying a scan — either can add environment files that were not there
+    /// before — and whenever a different collection becomes current.
     /// </summary>
-    private void RefreshAvailableEnvironments()
+    /// <param name="pickFirstIfNone">Picks the first environment for a collection still on "None".
+    /// Off when merely switching collections, where "None" may be what that collection was left on.</param>
+    private void RefreshAvailableEnvironments(bool pickFirstIfNone = true)
     {
         List<string> names = ["None"];
 
@@ -1151,7 +1631,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         // A single environment is the common case for a freshly imported collection, and picking
         // it automatically is what lets Send work without an extra click nobody would expect to need.
-        if (AvailableEnvironments.Count > 1 && EnvironmentName == "None")
+        if (pickFirstIfNone && AvailableEnvironments.Count > 1 && EnvironmentName == "None")
         {
             EnvironmentName = AvailableEnvironments[1];
         }
@@ -1183,7 +1663,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 merged[header.Name] = new InheritedHeaderRow(header.Name, header.Value, "default");
             }
 
-            foreach (var header in Tree.Definition?.Headers.Where(h => h.Enabled) ?? [])
+            foreach (var header in CollectionFor(state)?.Definition.Headers.Where(h => h.Enabled) ?? [])
             {
                 merged[header.Name] = new InheritedHeaderRow(header.Name, header.Value, "collection");
             }
@@ -1226,7 +1706,38 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// <summary>Deferred, and debounced thereafter. A git status on a cold image is not free.</summary>
     public Task RefreshGitStatusAsync() => Tree.RefreshGitStatusAsync();
 
-    public Task RestoreSessionAsync() => Tabs.RestoreSessionAsync();
+    /// <summary>Restores the tabs, then reopens every collection that was open last time — minus
+    /// any since moved or deleted — and lands on the one that was current, or the active tab's.</summary>
+    public async Task RestoreSessionAsync()
+    {
+        await Tabs.RestoreSessionAsync().ConfigureAwait(true);
+
+        if (Tree.Collections.Count > 0)
+        {
+            return;
+        }
+
+        var settings = AppSettingsStore.Load();
+
+        // Settings from before several collections could be open only know the one.
+        var folders = settings.OpenCollectionFolders is { Count: > 0 } open
+            ? open
+            : settings.LastCollectionFolder is { Length: > 0 } last ? [last] : [];
+
+        foreach (var folder in folders.Where(Directory.Exists))
+        {
+            await OpenAndPrimeFolderAsync(folder).ConfigureAwait(true);
+        }
+
+        var landing = Tree.Find(Tabs.Active?.State?.CollectionFolder) ?? Tree.Find(settings.LastCollectionFolder);
+
+        if (landing is not null)
+        {
+            Tree.Current = landing;
+        }
+
+        RememberOpenCollections();
+    }
 
     /// <summary>
     /// The exportable statement a security reviewer signs off on. SEC-06, generated from the
@@ -1265,6 +1776,7 @@ public enum DialogKind
     CommandPalette,
     TabOverflow,
     Environments,
+    GlobalVariables,
     AuthProfile,
     TrustAndNetwork,
     Storage,

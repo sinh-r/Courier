@@ -7,7 +7,8 @@ namespace Courier.Core.Variables;
 
 /// <summary>
 /// Resolves <c>{{name}}</c> references with the precedence CORE-04 fixes:
-/// request → environment → collection → global.
+/// request → environment → collection → global, with <c>global.</c> and <c>collection.Env.</c>
+/// prefixes that pin a reference to one scope.
 /// </summary>
 /// <remarks>
 /// Every resolution carries where the value came from, because CORE-04 also requires showing the
@@ -48,37 +49,94 @@ public sealed partial class VariableResolver
         return references;
     }
 
+    /// <summary>Pins a reference to the globals: <c>{{global.baseUrl}}</c>.</summary>
+    public const string GlobalPrefix = "global.";
+
+    /// <summary>Pins a reference to one environment of the request's collection:
+    /// <c>{{collection.QA.baseUrl}}</c>.</summary>
+    public const string CollectionPrefix = "collection.";
+
     /// <summary>
     /// Resolves one name against the scope stack. Returns an unresolved result rather than throwing:
     /// an unbound variable is a thing to show the user in the URL bar, not an exception.
     /// </summary>
+    /// <remarks>
+    /// An unqualified name is looked up in the request's collection first (the request's own
+    /// values, the selected environment, the collection's variables) and only then in the globals,
+    /// so a global is a fallback any collection can override, never the other way round. Two
+    /// prefixes pin a reference to one scope instead: <c>{{global.Key}}</c> reads only the globals,
+    /// and <c>{{collection.Env.Key}}</c> reads environment <c>Env</c> of the request's collection
+    /// whichever environment is selected.
+    /// </remarks>
     public async ValueTask<ResolvedValue> ResolveAsync(
         string name,
         VariableScopes scopes,
         CancellationToken ct = default)
+    {
+        if (TryStripPrefix(name, GlobalPrefix, out var globalName))
+        {
+            var global = await ResolveGlobalAsync(globalName, scopes, ct).ConfigureAwait(false);
+            return global with { Name = name };
+        }
+
+        if (TryStripPrefix(name, CollectionPrefix, out var qualified))
+        {
+            var dot = qualified.IndexOf('.', StringComparison.Ordinal);
+            if (dot > 0 && dot < qualified.Length - 1
+                && FindEnvironment(qualified[..dot], scopes) is { } environment)
+            {
+                var pinned = await ResolveInEnvironmentAsync(
+                    qualified[(dot + 1)..], environment, SecretKey.EnvironmentScope, ct).ConfigureAwait(false);
+
+                return (pinned ?? ResolvedValue.Missing(name, VariableOrigin.EnvironmentShared)) with { Name = name };
+            }
+
+            // No environment by that name: "collection.Key" still means the collection's own
+            // scopes, and deliberately never falls through to a global of the same name.
+            var collection = await ResolveCollectionAsync(qualified, scopes, ct).ConfigureAwait(false);
+            return (collection ?? ResolvedValue.Missing(name, VariableOrigin.Collection)) with { Name = name };
+        }
+
+        return await ResolveCollectionAsync(name, scopes, ct).ConfigureAwait(false)
+            ?? await ResolveGlobalAsync(name, scopes, ct).ConfigureAwait(false);
+    }
+
+    private static bool TryStripPrefix(string name, string prefix, out string rest)
+    {
+        if (name.Length > prefix.Length && name.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            rest = name[prefix.Length..];
+            return true;
+        }
+
+        rest = name;
+        return false;
+    }
+
+    /// <summary>The selected environment when it is the one named — it can hold a save newer than
+    /// anything the lookup would read — otherwise whatever the lookup finds.</summary>
+    private static EnvironmentDefinition? FindEnvironment(string environmentName, VariableScopes scopes) =>
+        string.Equals(scopes.Environment?.Name, environmentName, StringComparison.Ordinal)
+            ? scopes.Environment
+            : scopes.EnvironmentLookup?.Invoke(environmentName);
+
+    /// <summary>Request, then the selected environment, then the collection's variables. Null when
+    /// none of them has the name, so the caller decides what comes next.</summary>
+    private async ValueTask<ResolvedValue?> ResolveCollectionAsync(
+        string name,
+        VariableScopes scopes,
+        CancellationToken ct)
     {
         if (scopes.Request.TryGetValue(name, out var requestValue))
         {
             return new ResolvedValue(name, requestValue, VariableOrigin.Request, IsSecret: false);
         }
 
-        if (scopes.Environment is not null)
+        if (scopes.Environment is not null
+            && await ResolveInEnvironmentAsync(name, scopes.Environment, SecretKey.EnvironmentScope, ct).ConfigureAwait(false)
+                is { } environmentValue)
         {
-            if (scopes.Environment.Shared.TryGetValue(name, out var sharedValue))
-            {
-                return new ResolvedValue(name, sharedValue, VariableOrigin.EnvironmentShared, IsSecret: false);
-            }
-
-            if (scopes.Environment.LocalNames.Contains(name, StringComparer.Ordinal))
-            {
-                var secret = await _secretStore
-                    .GetAsync(scopes.Environment.SecretKeyFor(name), ct)
-                    .ConfigureAwait(false);
-
-                return secret is null
-                    ? ResolvedValue.Missing(name, VariableOrigin.EnvironmentLocal)
-                    : new ResolvedValue(name, secret, VariableOrigin.EnvironmentLocal, IsSecret: true);
-            }
+            return environmentValue;
         }
 
         if (scopes.Collection.TryGetValue(name, out var collectionValue))
@@ -86,12 +144,60 @@ public sealed partial class VariableResolver
             return new ResolvedValue(name, collectionValue, VariableOrigin.Collection, IsSecret: false);
         }
 
+        return null;
+    }
+
+    private async ValueTask<ResolvedValue> ResolveGlobalAsync(
+        string name,
+        VariableScopes scopes,
+        CancellationToken ct)
+    {
         if (scopes.Global.TryGetValue(name, out var globalValue))
         {
             return new ResolvedValue(name, globalValue, VariableOrigin.Global, IsSecret: false);
         }
 
+        if (scopes.GlobalEnvironment is not null
+            && await ResolveInEnvironmentAsync(name, scopes.GlobalEnvironment, SecretKey.GlobalScope, ct).ConfigureAwait(false)
+                is { } environmentValue)
+        {
+            return environmentValue with
+            {
+                Origin = environmentValue.Origin == VariableOrigin.EnvironmentLocal
+                    ? VariableOrigin.GlobalLocal
+                    : VariableOrigin.Global,
+            };
+        }
+
         return ResolvedValue.Missing(name, VariableOrigin.None);
+    }
+
+    /// <summary>A shared value, or a local one fetched from the credential store under
+    /// <paramref name="secretScope"/>. A local name with nothing stored is reported missing rather
+    /// than skipped, so it never silently falls through to a lower scope.</summary>
+    private async ValueTask<ResolvedValue?> ResolveInEnvironmentAsync(
+        string name,
+        EnvironmentDefinition environment,
+        string secretScope,
+        CancellationToken ct)
+    {
+        if (environment.Shared.TryGetValue(name, out var sharedValue))
+        {
+            return new ResolvedValue(name, sharedValue, VariableOrigin.EnvironmentShared, IsSecret: false);
+        }
+
+        if (!environment.LocalNames.Contains(name, StringComparer.Ordinal))
+        {
+            return null;
+        }
+
+        var secret = await _secretStore
+            .GetAsync(environment.SecretKeyFor(name, secretScope), ct)
+            .ConfigureAwait(false);
+
+        return secret is null
+            ? ResolvedValue.Missing(name, VariableOrigin.EnvironmentLocal)
+            : new ResolvedValue(name, secret, VariableOrigin.EnvironmentLocal, IsSecret: true);
     }
 
     /// <summary>
@@ -179,6 +285,14 @@ public sealed record VariableScopes
 
     public IReadOnlyDictionary<string, string> Global { get; init; } =
         new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>The app's machine-wide globals, consulted after <see cref="Global"/>. Their local
+    /// values are keyed under <see cref="SecretKey.GlobalScope"/>, not the environment scope.</summary>
+    public EnvironmentDefinition? GlobalEnvironment { get; init; }
+
+    /// <summary>Loads another environment of the same collection by name, for a
+    /// <c>{{collection.Env.Key}}</c> reference. Null when there is no collection to look in.</summary>
+    public Func<string, EnvironmentDefinition?>? EnvironmentLookup { get; init; }
 }
 
 public enum VariableOrigin
@@ -189,6 +303,7 @@ public enum VariableOrigin
     EnvironmentLocal,
     Collection,
     Global,
+    GlobalLocal,
 }
 
 /// <param name="IsSecret">
@@ -216,6 +331,7 @@ public sealed record ResolvedValue(string Name, string? Value, VariableOrigin Or
         VariableOrigin.EnvironmentLocal => "environment, local",
         VariableOrigin.Collection => "collection",
         VariableOrigin.Global => "global",
+        VariableOrigin.GlobalLocal => "global, local",
         _ => "unset",
     };
 }

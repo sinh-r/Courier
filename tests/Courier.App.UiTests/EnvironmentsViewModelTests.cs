@@ -103,6 +103,23 @@ public sealed class EnvironmentsViewModelTests : IDisposable
         Assert.Equal("Local", vm.Name);
     }
 
+    [Fact]
+    public async Task Global_mode_stores_a_local_value_under_the_global_secret_scope()
+    {
+        var secrets = new FakeSecretStore();
+        var vm = new EnvironmentsViewModel(secrets, isGlobal: true);
+        vm.Load(_folder, new EnvironmentDefinition { Name = EnvironmentsViewModel.GlobalsName });
+
+        vm.AddVariableCommand.Execute(null);
+        vm.Variables[0].Name = "apiKey";
+        vm.Variables[0].SharedValue = "sk-test";
+        vm.Variables[0].MoveToLocalCommand.Execute(null);
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        Assert.Equal([new SecretKey(SecretKey.GlobalScope, "Globals/apiKey")], secrets.Written);
+        Assert.False(vm.AllowsMultipleEnvironments);
+    }
+
     private sealed class FakeSecretStore : ISecretStore
     {
         public string LocationDescription => "in-memory, for tests";
@@ -112,8 +129,13 @@ public sealed class EnvironmentsViewModelTests : IDisposable
         public ValueTask<string?> GetAsync(SecretKey key, CancellationToken ct = default) =>
             ValueTask.FromResult<string?>(null);
 
-        public ValueTask SetAsync(SecretKey key, string value, CancellationToken ct = default) =>
-            ValueTask.CompletedTask;
+        public List<SecretKey> Written { get; } = [];
+
+        public ValueTask SetAsync(SecretKey key, string value, CancellationToken ct = default)
+        {
+            Written.Add(key);
+            return ValueTask.CompletedTask;
+        }
 
         public ValueTask DeleteAsync(SecretKey key, CancellationToken ct = default) => ValueTask.CompletedTask;
 

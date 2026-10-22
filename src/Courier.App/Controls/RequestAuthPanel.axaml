@@ -23,6 +23,16 @@
     <TextBlock Classes="meta" Text="{Binding RequestAuth.ResolutionNote, StringFormat='from {0}'}"
                IsVisible="{Binding RequestAuth.ResolutionNote, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
+    <!-- What "Inherit" actually resolves to, and the way to change it: the collection's Auth page. -->
+    <Grid ColumnDefinitions="120,*" IsVisible="{Binding RequestAuth.IsInherit}">
+      <TextBlock Grid.Column="0" Classes="meta" Text="Collection uses" VerticalAlignment="Center" />
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+        <TextBlock VerticalAlignment="Center" Text="{Binding CollectionAuthSummary}" />
+        <Button Content="Edit collection auth" Command="{Binding OpenCollectionAuthCommand}"
+                IsVisible="{Binding Tree.Folder, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      </StackPanel>
+    </Grid>
+
     <!-- The inline editor. Only the rows relevant to the chosen kind are shown. -->
     <StackPanel Spacing="8" IsVisible="{Binding RequestAuth.IsInline}">
 

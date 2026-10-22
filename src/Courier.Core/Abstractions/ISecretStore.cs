@@ -32,6 +32,7 @@ public interface ISecretStore
 public readonly record struct SecretKey(string Scope, string Name)
 {
     public const string EnvironmentScope = "env";
+    public const string GlobalScope = "global";
     public const string AuthScope = "auth";
     public const string TelemetryScope = "telemetry";
     public const string CertificateScope = "cert";

@@ -115,6 +115,13 @@
                   <MenuItem Header="New request" IsVisible="{Binding CanContainChildren}"
                             Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).NewRequestInFolderCommand}"
                             CommandParameter="{Binding}" />
+                  <MenuItem Header="Environments…" IsVisible="{Binding IsCollection}"
+                            Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ManageCollectionEnvironmentsCommand}"
+                            CommandParameter="{Binding}" />
+                  <!-- Out of the workspace, not off the disk: the folder and its files stay put. -->
+                  <MenuItem Header="Close collection" IsVisible="{Binding IsCollection}"
+                            Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).CloseCollectionCommand}"
+                            CommandParameter="{Binding}" />
                 </ContextMenu>
               </Grid.ContextMenu>
 

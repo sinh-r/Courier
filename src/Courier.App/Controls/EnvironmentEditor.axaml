@@ -1,0 +1,204 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Courier.App.ViewModels"
+             xmlns:controls="clr-namespace:Courier.App.Controls"
+             x:Class="Courier.App.Controls.EnvironmentEditor"
+             x:DataType="vm:EnvironmentsViewModel">
+
+  <!--
+    The environments table. SEC-03, CORE-12, UI_SPEC 5.5: two columns per variable, shared and
+    local (this machine only, in the OS credential store), with trust colours on the headers and a
+    lock glyph on local. One control, three homes: Settings, the collection page's Environments
+    tab, and the global variables page — the last with no picker and no "New environment", since
+    the globals are one fixed set.
+  -->
+  <StackPanel Spacing="12">
+
+    <TextBlock Classes="meta" Text="{Binding ScopeLabel}"
+               IsVisible="{Binding ScopeLabel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+    <!--
+      Which environment this pane edits — independent of the title-bar picker, which is
+      which environment requests are sent with. CORE-12.
+    -->
+    <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding AllowsMultipleEnvironments}">
+      <TextBlock Grid.Column="0" Classes="meta" VerticalAlignment="Center" Margin="0,0,8,0" Text="Editing" />
+      <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                ItemsSource="{Binding AvailableEnvironments}"
+                SelectedItem="{Binding SelectedEnvironmentName, Mode=TwoWay}"
+                AutomationProperties.Name="Environment being edited" />
+    </Grid>
+
+    <!--
+      Switching environments mid-edit does not discard silently. Same inline-warning idiom
+      as the SEC-03 secret banner below, so nothing here introduces a new pattern.
+    -->
+    <Border Background="{DynamicResource Panel}"
+            BorderBrush="{DynamicResource Secret}" BorderThickness="2,0,0,0"
+            Padding="10,6" IsVisible="{Binding HasPendingSwitch}">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Grid.Column="0" Classes="meta" VerticalAlignment="Center"
+                   Text="{Binding Name, StringFormat='Unsaved changes in {0}.'}" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+          <Button Content="Save" Height="20" Command="{Binding SaveCommand}" />
+          <Button Content="Discard" Height="20" Command="{Binding DiscardChangesCommand}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Grid ColumnDefinitions="*,Auto,Auto" IsVisible="{Binding HasEnvironment}">
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+        <TextBlock Classes="heading" Text="{Binding Name}" VerticalAlignment="Center" />
+        <TextBlock Classes="mono meta" VerticalAlignment="Center" Text="{Binding FilePath}" />
+      </StackPanel>
+      <Button Grid.Column="1" Content="Save" Command="{Binding SaveCommand}" />
+      <Button Grid.Column="2" Content="+ add variable" Command="{Binding AddVariableCommand}" />
+    </Grid>
+
+    <!--
+      What Save actually did. SEC-04's house style: specific and active, never a bare
+      "Saved"/"Failed" — names the file, or names the reason it did not write.
+    -->
+    <TextBlock Classes="meta" TextWrapping="Wrap"
+               IsVisible="{Binding SaveStatus, Converter={x:Static ObjectConverters.IsNotNull}}"
+               Text="{Binding SaveStatus.Message}"
+               Foreground="{Binding SaveStatus.Succeeded, Converter={StaticResource SucceededBrushConverter}, FallbackValue={DynamicResource Muted}}" />
+
+    <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1"
+            IsVisible="{Binding HasEnvironment}">
+      <StackPanel>
+
+        <Border Height="{DynamicResource RowHeight}" Padding="8,0"
+                BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+          <Grid ColumnDefinitions="200,*,*,32">
+            <TextBlock Grid.Column="0" Classes="meta" Text="Variable" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <TextBlock Text="●" Foreground="{DynamicResource Share}" FontSize="9" />
+              <TextBlock Classes="meta" Text="{Binding SharedColumnLabel}"
+                         Foreground="{DynamicResource Share}" />
+            </StackPanel>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <TextBlock Text="▲" Foreground="{DynamicResource Secret}" FontSize="10" />
+              <TextBlock Classes="meta" Text="Local · this machine, credential store"
+                         Foreground="{DynamicResource Secret}" />
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <ItemsControl ItemsSource="{Binding Variables}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:EnvironmentVariableViewModel">
+              <StackPanel>
+                <Border Height="{DynamicResource RowHeight}" Padding="8,0"
+                        BorderBrush="{DynamicResource Rule}" BorderThickness="0,0,0,1">
+                  <Grid ColumnDefinitions="200,*,*,32">
+                    <TextBox Grid.Column="0" Classes="mono" BorderThickness="0" Background="Transparent"
+                             Padding="0" VerticalAlignment="Center" PlaceholderText="name"
+                             Text="{Binding Name}" />
+                    <TextBox Grid.Column="1" Classes="mono" BorderThickness="0" Background="Transparent"
+                             Padding="0" VerticalAlignment="Center" PlaceholderText="value"
+                             Text="{Binding SharedValue}" IsVisible="{Binding !IsLocal}" />
+                    <Grid Grid.Column="2" ColumnDefinitions="*,Auto,Auto" VerticalAlignment="Center">
+                      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6"
+                                  VerticalAlignment="Center" IsVisible="{Binding !IsEditingLocal}">
+                        <TextBlock Text="▲" FontSize="10" Foreground="{DynamicResource Secret}"
+                                   IsVisible="{Binding IsLocal}" />
+                        <TextBlock Classes="mono" Text="{Binding LocalDisplay}" />
+                        <TextBlock Classes="meta" Text="{Binding LocalSource}" />
+                      </StackPanel>
+                      <TextBox Grid.Column="0" Classes="mono" PasswordChar="•" Padding="4,0"
+                                VerticalAlignment="Center" PlaceholderText="new value"
+                                Text="{Binding LocalValueDraft}"
+                                IsVisible="{Binding IsEditingLocal}" />
+                      <Button Grid.Column="1" Content="Edit" Height="20" Margin="4,0,0,0"
+                              IsVisible="{Binding CanEditLocal}"
+                              Command="{Binding BeginEditLocalCommand}" />
+                      <Button Grid.Column="1" Content="Set" Height="20" Margin="4,0,0,0"
+                              IsVisible="{Binding IsEditingLocal}"
+                              Command="{Binding ConfirmLocalEditCommand}" />
+                      <Button Grid.Column="2" Content="Cancel" Height="20" Margin="4,0,0,0"
+                              IsVisible="{Binding IsEditingLocal}"
+                              Command="{Binding CancelLocalEditCommand}" />
+                    </Grid>
+                    <Button Grid.Column="3" Classes="bare" Content="×" VerticalAlignment="Center"
+                            AutomationProperties.Name="Delete variable"
+                            Command="{Binding $parent[controls:EnvironmentEditor].((vm:EnvironmentsViewModel)DataContext).DeleteVariableCommand}"
+                            CommandParameter="{Binding}" />
+                  </Grid>
+                </Border>
+
+                <!--
+                  The inline flag. SEC-03: a secret-shaped value in the shared column is
+                  warned about before it is committed, with the two actions that resolve it.
+                -->
+                <Border Background="{DynamicResource Panel}"
+                        BorderBrush="{DynamicResource Secret}" BorderThickness="2,0,0,0"
+                        Padding="10,6" IsVisible="{Binding HasSharedSecretWarning}">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Classes="meta" TextWrapping="Wrap"
+                               VerticalAlignment="Center" Text="{Binding SecretReason}" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                      <Button Content="Move to local" Height="20"
+                              Command="{Binding MoveToLocalCommand}" />
+                      <Button Content="It is not a secret" Height="20"
+                              Command="{Binding DismissWarningCommand}" />
+                    </StackPanel>
+                  </Grid>
+                </Border>
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+      </StackPanel>
+    </Border>
+
+    <TextBlock Classes="meta" TextWrapping="Wrap" IsVisible="{Binding HasEnvironment}"
+               Text="{Binding ColumnsNote}" />
+
+    <TextBlock Classes="meta" TextWrapping="Wrap" IsVisible="{Binding !HasFolder}"
+               Text="Open a collection folder first." />
+
+    <!--
+      New environment. Always available, not only when the collection has none yet — the
+      usual case is a QA or Staging environment added alongside one already there. SCAN-07:
+      a profile detected from the scanned source's launchSettings.json/appsettings.*.json
+      fills both the name and baseUrl, so the common case needs no typing.
+    -->
+    <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1" Padding="10"
+            IsVisible="{Binding AllowsMultipleEnvironments}">
+      <StackPanel Spacing="8">
+        <TextBlock Classes="meta" Text="New environment" />
+
+        <ComboBox HorizontalAlignment="Stretch"
+                  IsVisible="{Binding DetectedProfiles.Count, Converter={StaticResource IsNotZeroConverter}}"
+                  ItemsSource="{Binding DetectedProfiles}"
+                  SelectedItem="{Binding SelectedDetectedProfile, Mode=TwoWay}"
+                  PlaceholderText="Detected from launchSettings.json…"
+                  AutomationProperties.Name="Detected launch profile">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:DetectedProfile">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Classes="mono" Text="{Binding Name}" />
+                <TextBlock Classes="meta mono" Text="{Binding BaseUrl}" />
+              </StackPanel>
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+
+        <Grid ColumnDefinitions="*,*,Auto">
+          <TextBox Grid.Column="0" Margin="0,0,6,0" PlaceholderText="Name, e.g. QA-Internal"
+                   Text="{Binding NewEnvironmentName}"
+                   AutomationProperties.Name="New environment name" />
+          <TextBox Grid.Column="1" Classes="mono" Margin="0,0,6,0" PlaceholderText="baseUrl"
+                   Text="{Binding NewEnvironmentBaseUrl}"
+                   AutomationProperties.Name="New environment base URL" />
+          <Button Grid.Column="2" Content="Create"
+                  Command="{Binding NewEnvironmentCommand}" />
+        </Grid>
+      </StackPanel>
+    </Border>
+
+  </StackPanel>
+
+</UserControl>

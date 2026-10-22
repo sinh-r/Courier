@@ -230,6 +230,21 @@ the name, so a teammate's already-stored secret is never orphaned by a rename so
 request → environment → collection → global
 ```
 
+Everything left of `global` belongs to the request's own collection, so a collection always wins
+over a global of the same name. Globals are not part of any collection: the app keeps them in one
+environment file under its local data folder (`globals/environments/Globals.env.yaml`), with local
+values in the credential store under the `global` scope.
+
+Two prefixes pin a reference to one scope, skipping the precedence above:
+
+| Reference | Reads |
+|---|---|
+| `{{global.name}}` | the global `name` only, even when the collection defines `name` too |
+| `{{collection.QA.name}}` | `name` from this collection's `QA` environment, whichever environment is selected |
+| `{{collection.name}}` | the collection's own scopes only (request, selected environment, collection) — never a global |
+
+A pinned reference that does not resolve stays unresolved; it never falls through to another scope.
+
 Nested references resolve to a depth of 10, after which substitution stops. An unresolved reference
 is **left as written** rather than replaced with an empty string, so the URL bar shows the gap
 instead of silently sending a request with a missing path segment.

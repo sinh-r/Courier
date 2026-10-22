@@ -26,7 +26,7 @@
               Background="{DynamicResource Panel}"
               BorderBrush="{DynamicResource Rule}"
               BorderThickness="0,0,0,1">
-        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto" Margin="8,0">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto" Margin="8,0">
 
           <Button Grid.Column="0" Classes="bare" Width="24" Height="24" Padding="0"
                   AutomationProperties.Name="Menu">
@@ -85,23 +85,13 @@
 
           <Border Grid.Column="2" Width="1" Height="20" Background="{DynamicResource Rule}" Margin="8,0" />
 
-          <!-- Workspace picker. -->
-          <Border Grid.Column="3" Classes="paper" Height="24" Margin="0,0,4,0"
-                  BorderBrush="{DynamicResource Rule}" BorderThickness="1"
-                  CornerRadius="{DynamicResource ControlRadius}" Padding="8,0">
-            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-              <TextBlock Classes="mono" Text="Local" VerticalAlignment="Center" />
-              <TextBlock Classes="meta" Text="▾" VerticalAlignment="Center" />
-            </StackPanel>
-          </Border>
-
           <!--
             Environment picker. The ▲ glyph marks an environment holding local-only values, in the
             secret colour — the same pair used on the environments table and the capsule review.
             A ListBox in the flyout rather than a ComboBox: it binds ItemsSource/SelectedItem
             directly against plain strings with no DataTemplate needed, and needs no dialog.
           -->
-          <Button Grid.Column="4" Classes="bare" Height="24" Padding="0"
+          <Button Grid.Column="3" Classes="bare" Height="24" Padding="0"
                   AutomationProperties.Name="Switch environment">
             <Border Classes="paper" BorderBrush="{DynamicResource Rule}" BorderThickness="1"
                     CornerRadius="{DynamicResource ControlRadius}" Padding="8,0" Height="24">
@@ -110,6 +100,10 @@
                            VerticalAlignment="Center"
                            IsVisible="{Binding EnvironmentHasSecrets}"
                            ToolTip.Tip="This environment holds values kept only on this machine." />
+                <!-- Which collection's environment this is — each open collection keeps its own. -->
+                <TextBlock Classes="meta" VerticalAlignment="Center"
+                           Text="{Binding Tree.CollectionName, StringFormat='{}{0} ·'}"
+                           IsVisible="{Binding Tree.CollectionName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                 <TextBlock Classes="mono" Text="{Binding EnvironmentName}" VerticalAlignment="Center" />
                 <TextBlock Classes="meta" Text="▾" VerticalAlignment="Center" />
               </StackPanel>
@@ -142,13 +136,18 @@
                           Command="{Binding OpenDialogCommand}"
                           CommandParameter="{x:Static vm:DialogKind.Environments}"
                           AutomationProperties.Name="Edit environment variables" />
+                  <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                          Content="Edit global variables…"
+                          Command="{Binding OpenDialogCommand}"
+                          CommandParameter="{x:Static vm:DialogKind.GlobalVariables}"
+                          AutomationProperties.Name="Edit global variables" />
                 </StackPanel>
               </Flyout>
             </Button.Flyout>
           </Button>
 
           <!-- Command palette entry. -->
-          <Button Grid.Column="6" Classes="bare" Height="24" Padding="0" Margin="12,0,12,0"
+          <Button Grid.Column="5" Classes="bare" Height="24" Padding="0" Margin="12,0,12,0"
                   Command="{Binding OpenDialogCommand}"
                   CommandParameter="{x:Static vm:DialogKind.CommandPalette}"
                   AutomationProperties.Name="Search endpoints, tabs and commands">
