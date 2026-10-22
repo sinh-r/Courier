@@ -2,6 +2,9 @@
 
 Deliverable 9. Written for a contributor about to change something.
 
+Diagrams of every flow, with pseudocode: [ARCHITECTURE_DIAGRAMS.md](ARCHITECTURE_DIAGRAMS.md)
+(or open `ARCHITECTURE_DIAGRAMS.html` in a browser).
+
 ---
 
 ## 1. Projects

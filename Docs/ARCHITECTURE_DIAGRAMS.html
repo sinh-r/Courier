@@ -1,0 +1,1959 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Courier Architecture Flows</title>
+<meta name="description" content="Courier's architecture: system context, project layers, and every implemented flow with a diagram and pseudocode.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f6f6f4;
+  --surface: #ffffff;
+  --surface-2: #f0f0ed;
+  --border: #dedcd6;
+  --border-strong: #c7c4bc;
+  --text: #1c1c1a;
+  --text-2: #55534d;
+  --text-3: #85827a;
+  --accent: #2f5bd3;
+  --accent-soft: #e6ecfb;
+  --code-bg: #f3f2ee;
+  --pseudo-bg: #1d1f24;
+  --pseudo-text: #e6e6e3;
+  --pseudo-head: #2a2d34;
+  --ok: #1d7a45; --ok-bg: #e3f3e8;
+  --part: #8a5a00; --part-bg: #fbf0d9;
+  --no: #a12f2f; --no-bg: #f8e3e1;
+  --shadow: 0 1px 2px rgba(20,20,10,.04), 0 1px 1px rgba(20,20,10,.03);
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131416; --surface: #1b1c1f; --surface-2: #222327; --border: #2e3035; --border-strong: #3c3f45;
+    --text: #ebebe8; --text-2: #b4b3ad; --text-3: #85847e;
+    --accent: #8ba8ff; --accent-soft: #1f2741;
+    --code-bg: #25262a; --pseudo-bg: #0e0f11; --pseudo-text: #e2e2df; --pseudo-head: #1a1b1e;
+    --ok: #6fd39a; --ok-bg: #16301f; --part: #e8b75a; --part-bg: #33280f; --no: #f08a83; --no-bg: #3a1a18;
+    --shadow: none;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131416; --surface: #1b1c1f; --surface-2: #222327; --border: #2e3035; --border-strong: #3c3f45;
+  --text: #ebebe8; --text-2: #b4b3ad; --text-3: #85847e;
+  --accent: #8ba8ff; --accent-soft: #1f2741;
+  --code-bg: #25262a; --pseudo-bg: #0e0f11; --pseudo-text: #e2e2df; --pseudo-head: #1a1b1e;
+  --ok: #6fd39a; --ok-bg: #16301f; --part: #e8b75a; --part-bg: #33280f; --no: #f08a83; --no-bg: #3a1a18;
+  --shadow: none;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 16px; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.6 var(--sans); -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font-family: var(--mono); font-size: .86em; background: var(--code-bg); padding: .1em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+
+.layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); min-height: 100vh; }
+.layout > *, .card, .diagram { min-width: 0; }
+
+/* ---------- sidebar ---------- */
+.side {
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  border-right: 1px solid var(--border); background: var(--surface);
+  padding: 20px 14px 32px;
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 14px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.brand-mark { width: 28px; height: 28px; border-radius: 7px; background: var(--text); color: var(--bg); display: grid; place-items: center; font: 600 14px var(--mono); }
+.brand-name { font-weight: 600; font-size: 15px; }
+.brand-sub { font-size: 12px; color: var(--text-3); }
+.toc { list-style: none; margin: 0; padding: 0; }
+.toc a { display: flex; gap: 8px; align-items: baseline; padding: 5px 8px; border-radius: 6px; color: var(--text-2); font-size: 13.5px; line-height: 1.35; }
+.toc a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.toc a.active { background: var(--accent-soft); color: var(--text); }
+.toc-num, .toc-tag { font: 500 11.5px var(--mono); color: var(--text-3); min-width: 26px; flex: none; }
+.toc-sub a { padding-left: 24px; font-size: 13px; }
+.toc-group { font: 600 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); padding: 14px 8px 4px; }
+.side-foot { margin-top: 18px; padding: 12px 8px 0; border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: center; }
+.btn {
+  font: 500 12.5px var(--sans); color: var(--text-2); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; cursor: pointer;
+}
+.btn:hover { color: var(--text); border-color: var(--border-strong); }
+.menu-btn { display: none; }
+
+/* ---------- main ---------- */
+main { padding: 36px 40px 80px; max-width: 1180px; width: 100%; }
+.hero { margin-bottom: 28px; }
+.eyebrow { font: 500 12px var(--mono); color: var(--text-3); letter-spacing: .04em; text-transform: uppercase; }
+h1 { font-size: 32px; line-height: 1.2; margin: 6px 0 14px; letter-spacing: -.01em; }
+.hero p { color: var(--text-2); max-width: 74ch; margin: 0 0 10px; }
+.stats { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; box-shadow: var(--shadow); }
+.stat b { font: 600 18px var(--mono); display: block; }
+.stat span { font-size: 12px; color: var(--text-3); }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 26px 28px; margin: 0 0 22px; box-shadow: var(--shadow);
+}
+.card h2 { font-size: 21px; line-height: 1.3; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.card h3 { font-size: 16.5px; margin: 30px 0 10px; padding-top: 22px; border-top: 1px dashed var(--border); display: flex; align-items: center; gap: 8px; }
+.card p { margin: 0 0 12px; max-width: 80ch; color: var(--text-2); }
+.card p strong { color: var(--text); }
+.card ul { margin: 0 0 14px; padding-left: 20px; color: var(--text-2); }
+.card li { margin: 3px 0; }
+.anchor { margin-left: auto; color: var(--text-3); font: 400 15px var(--mono); opacity: 0; }
+.card h2:hover .anchor { opacity: 1; }
+.flow-tag, .num {
+  font: 600 12.5px var(--mono); color: var(--accent); background: var(--accent-soft);
+  border-radius: 6px; padding: 2px 8px; flex: none;
+}
+.flow-tag.sub { font-size: 11.5px; }
+
+/* diagrams */
+.diagram { margin: 16px 0 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); position: relative; }
+.diagram-scroll { overflow-x: auto; padding: 18px; }
+.diagram pre.mermaid { margin: 0; display: flex; justify-content: center; min-width: min-content; background: none; font: 12px/1.45 var(--mono); color: var(--text-2); white-space: pre; }
+.diagram pre.mermaid:not([data-processed]) { justify-content: flex-start; }
+.diagram svg { height: auto; }
+.diagram-tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; }
+.diagram-tools .btn { font-size: 11.5px; padding: 3px 8px; background: var(--surface); }
+.diagram-error { font: 12px var(--sans); color: var(--no); padding: 0 18px 12px; }
+
+/* pseudocode */
+.pseudo { margin: 14px 0 16px; border-radius: 10px; overflow: hidden; background: var(--pseudo-bg); border: 1px solid var(--border); }
+.pseudo-head { display: flex; justify-content: space-between; align-items: center; padding: 7px 12px; background: var(--pseudo-head); color: #a7a8a3; font: 600 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
+.pseudo .copy { font: 500 11.5px var(--sans); color: #c9cac5; background: transparent; border: 1px solid #3a3d44; border-radius: 5px; padding: 2px 8px; cursor: pointer; text-transform: none; letter-spacing: 0; }
+.pseudo .copy:hover { color: #fff; border-color: #5a5e66; }
+.pseudo pre { margin: 0; padding: 14px 16px; overflow-x: auto; }
+.pseudo code { background: none; padding: 0; color: var(--pseudo-text); font-size: 12.8px; line-height: 1.6; overflow-wrap: normal; }
+.pseudo .cm { color: #8b9a7e; }
+.pseudo .kw { color: #9cb8ff; }
+.pseudo .ar { color: #e7b46a; }
+
+/* key files */
+.keyfiles { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; margin: 8px 0 2px; }
+.keyfiles-label { font: 600 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); padding-top: 5px; }
+.keyfiles ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
+.chip { display: inline-flex; gap: 6px; align-items: baseline; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; max-width: 100%; }
+.chip code { background: none; padding: 0; font-size: 12px; color: var(--text); }
+.chip-note { font-size: 11.5px; color: var(--text-3); }
+.chip-note code { color: var(--text-3); font-size: 11px; }
+
+/* tables */
+.table-scroll { overflow-x: auto; margin: 10px 0 16px; border: 1px solid var(--border); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--text-2); }
+th { background: var(--surface-2); color: var(--text); font-weight: 600; font-size: 12.5px; }
+tr:last-child td { border-bottom: none; }
+td.st { font-weight: 500; white-space: nowrap; }
+td.st-ok { color: var(--ok); background: var(--ok-bg); }
+td.st-part { color: var(--part); background: var(--part-bg); }
+td.st-no { color: var(--no); background: var(--no-bg); }
+
+/* full-size viewer */
+dialog.viewer { width: min(96vw, 1600px); height: 92vh; max-width: none; border: 1px solid var(--border); border-radius: 12px; padding: 0; background: var(--surface); color: var(--text); }
+dialog.viewer::backdrop { background: rgba(0,0,0,.55); }
+.viewer-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; }
+.viewer-body { overflow: auto; height: calc(92vh - 50px); padding: 20px; background: var(--surface-2); }
+.viewer-body svg { max-width: none !important; }
+
+@media (max-width: 960px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .side { position: sticky; top: 0; z-index: 10; height: auto; max-height: 100vh; padding: 10px 16px; border-right: none; border-bottom: 1px solid var(--border); }
+  .brand { border-bottom: none; margin: 0; padding: 0; }
+  .menu-btn { display: inline-block; margin-left: auto; }
+  .side nav, .side-foot { display: none; }
+  .side.open nav, .side.open .side-foot { display: block; }
+  .side.open { overflow-y: auto; }
+  .side.open nav { margin-top: 10px; }
+  main { padding: 24px 16px 60px; }
+  h1 { font-size: 25px; }
+  .card { padding: 18px 16px; border-radius: 10px; }
+  .diagram-scroll { padding: 12px; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="side" id="side">
+    <div class="brand">
+      <div class="brand-mark">C</div>
+      <div><div class="brand-name">Courier</div><div class="brand-sub">Architecture flows</div></div>
+      <button class="btn menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="side">Contents</button>
+    </div>
+    <nav aria-label="Contents">
+      <ul class="toc" id="toc">
+<li class="toc-sec"><a href="#1-system-context"><span class="toc-num">1</span>System context</a></li>
+<li class="toc-sec"><a href="#2-projects-and-layers"><span class="toc-num">2</span>Projects and layers</a></li>
+<li class="toc-sec"><a href="#3-data-model-at-a-glance"><span class="toc-num">3</span>Data model at a glance</a></li>
+<li class="toc-flow"><a href="#f1-app-startup-and-deferred-jobs"><span class="toc-tag">F1</span>App startup and deferred jobs</a></li>
+<li class="toc-flow"><a href="#f2-open-or-create-a-collection-folder"><span class="toc-tag">F2</span>Open or create a collection folder</a></li>
+<li class="toc-flow"><a href="#f3-send-a-request-desktop-app"><span class="toc-tag">F3</span>Send a request (desktop app)</a></li>
+<li class="toc-sub"><a href="#f3a-request-preparation-and-variable-resolution"><span class="toc-tag">F3a</span>Request preparation and variable resolution</a></li>
+<li class="toc-sub"><a href="#f3b-auth-resolution-and-application"><span class="toc-tag">F3b</span>Auth resolution and application</a></li>
+<li class="toc-sub"><a href="#f3c-execution-redirects-retries-outcomes"><span class="toc-tag">F3c</span>Execution, redirects, retries, outcomes</a></li>
+<li class="toc-flow"><a href="#f4-egress-chokepoint"><span class="toc-tag">F4</span>Egress chokepoint</a></li>
+<li class="toc-flow"><a href="#f5-response-rendering"><span class="toc-tag">F5</span>Response rendering</a></li>
+<li class="toc-flow"><a href="#f6-save-save-all-and-the-close-tab-guard"><span class="toc-tag">F6</span>Save, Save all, and the close-tab guard</a></li>
+<li class="toc-flow"><a href="#f7-tab-lifecycle-and-suspension"><span class="toc-tag">F7</span>Tab lifecycle and suspension</a></li>
+<li class="toc-flow"><a href="#f8-import-from-code-scan-diff-apply"><span class="toc-tag">F8</span>Import from code: scan → diff → apply</a></li>
+<li class="toc-flow"><a href="#f9-generated-overlay-layering"><span class="toc-tag">F9</span>Generated / overlay layering</a></li>
+<li class="toc-flow"><a href="#f10-environments-and-secrets"><span class="toc-tag">F10</span>Environments and secrets</a></li>
+<li class="toc-flow"><a href="#f11-curl-import-and-export"><span class="toc-tag">F11</span>curl import and export</a></li>
+<li class="toc-flow"><a href="#f12-capsule-export-and-inspect"><span class="toc-tag">F12</span>Capsule export and inspect</a></li>
+<li class="toc-flow"><a href="#f13-cli-courier-run"><span class="toc-tag">F13</span>CLI courier run</a></li>
+<li class="toc-flow"><a href="#f14-cli-scan-export-and-the-msbuild-task"><span class="toc-tag">F14</span>CLI scan, export, and the MSBuild task</a></li>
+<li class="toc-flow"><a href="#f15-scripting-sandbox"><span class="toc-tag">F15</span>Scripting sandbox</a></li>
+<li class="toc-flow"><a href="#f16-history"><span class="toc-tag">F16</span>History</a></li>
+<li class="toc-flow"><a href="#f17-telemetry-reconstruction-library-only"><span class="toc-tag">F17</span>Telemetry reconstruction (library only)</a></li>
+<li class="toc-sec"><a href="#4-implementation-status"><span class="toc-num">4</span>Implementation status</a></li>
+      </ul>
+    </nav>
+    <div class="side-foot">
+      <button class="btn" id="themeBtn" type="button">Theme: system</button>
+    </div>
+  </aside>
+
+  <main>
+    <header class="hero">
+      <div class="eyebrow">Courier · docs/ARCHITECTURE_DIAGRAMS</div>
+      <h1>Courier — architecture diagrams and flows</h1>
+<p>Every diagram and every pseudocode block here was derived from the code on <code>main</code> as of commit <code>5cbf396</code> (October 2026), not from the earlier specs. Pseudocode uses the real class and method names, so you can search for any line and land on the code that does it. Where something exists as a library but nothing in the app or CLI calls it yet, the flow says so.</p>
+<p>Companion to <a href="ARCHITECTURE.md">ARCHITECTURE.md</a>, which explains <em>why</em> the designs are what they are. This document shows <em>how the pieces move</em>.</p>
+<p>Diagrams are <a href="https://mermaid.js.org/" target="_blank" rel="noopener">Mermaid</a>. They render on GitHub, in VS Code's Markdown preview, and in <code>ARCHITECTURE_DIAGRAMS.html</code> next to this file.</p>
+      <div class="stats">
+        <div class="stat"><b>9</b><span>projects</span></div>
+        <div class="stat"><b>17</b><span>flows</span></div>
+        <div class="stat"><b>23</b><span>diagrams</span></div>
+        <div class="stat"><b>1</b><span>egress chokepoint</span></div>
+      </div>
+    </header>
+
+<section class="card" id="1-system-context"><h2><span class="num">1</span>System context<a class="anchor" href="#1-system-context" aria-label="Link to this section">#</a></h2>
+<p>Courier runs entirely on the developer's machine. It has three entry points: the desktop app, the <code>courier</code> CLI, and an MSBuild task that shells out to the CLI. Every outbound connection, whichever entry point started it, goes through one chokepoint: <code>EgressGate</code>.</p>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="flowchart LR
+    Dev([&quot;Developer&quot;])
+    CI([&quot;CI pipeline&quot;])
+
+    subgraph Machine[&quot;Developer machine / build agent&quot;]
+        App[&quot;Courier.App&lt;br/&gt;Avalonia desktop&quot;]
+        Cli[&quot;courier CLI&lt;br/&gt;Courier.Cli&quot;]
+        MsBuild[&quot;Courier.MSBuild&lt;br/&gt;CourierScanTask&quot;]
+        Gate{{&quot;EgressGate&lt;br/&gt;single outbound chokepoint&quot;}}
+        Files[(&quot;Collection folder&lt;br/&gt;YAML files in git&quot;)]
+        Db[(&quot;SQLite&lt;br/&gt;history, tab session&quot;)]
+        Vault[(&quot;OS credential store&lt;br/&gt;or COURIER_SECRET_* env vars&quot;)]
+        Certs[(&quot;Windows cert + trust store&quot;)]
+        Src[(&quot;.NET source&lt;br/&gt;.cs, launchSettings.json&quot;)]
+    end
+
+    Api[&quot;Target APIs&quot;]
+    Entra[&quot;Entra ID / token endpoints&quot;]
+    Tele[&quot;App Insights / Datadog / Azure DevOps&lt;br/&gt;(library only, no UI yet)&quot;]
+
+    Dev --&gt; App
+    Dev --&gt; Cli
+    CI --&gt; Cli
+    CI --&gt; MsBuild
+    MsBuild -- &quot;spawns: courier scan&quot; --&gt; Cli
+
+    App &lt;--&gt; Files
+    Cli &lt;--&gt; Files
+    App &lt;--&gt; Db
+    App &lt;--&gt; Vault
+    Cli --&gt; Vault
+    App --&gt; Src
+    Cli --&gt; Src
+
+    App --&gt; Gate
+    Cli --&gt; Gate
+    Gate --&gt; Certs
+    Gate -- &quot;TargetRequest&quot; --&gt; Api
+    Gate -- &quot;AuthAuthority&quot; --&gt; Entra
+    Gate -. &quot;TelemetryBackend / WorkItemTracker&quot; .-&gt; Tele">flowchart LR
+    Dev([&quot;Developer&quot;])
+    CI([&quot;CI pipeline&quot;])
+
+    subgraph Machine[&quot;Developer machine / build agent&quot;]
+        App[&quot;Courier.App&lt;br/&gt;Avalonia desktop&quot;]
+        Cli[&quot;courier CLI&lt;br/&gt;Courier.Cli&quot;]
+        MsBuild[&quot;Courier.MSBuild&lt;br/&gt;CourierScanTask&quot;]
+        Gate{{&quot;EgressGate&lt;br/&gt;single outbound chokepoint&quot;}}
+        Files[(&quot;Collection folder&lt;br/&gt;YAML files in git&quot;)]
+        Db[(&quot;SQLite&lt;br/&gt;history, tab session&quot;)]
+        Vault[(&quot;OS credential store&lt;br/&gt;or COURIER_SECRET_* env vars&quot;)]
+        Certs[(&quot;Windows cert + trust store&quot;)]
+        Src[(&quot;.NET source&lt;br/&gt;.cs, launchSettings.json&quot;)]
+    end
+
+    Api[&quot;Target APIs&quot;]
+    Entra[&quot;Entra ID / token endpoints&quot;]
+    Tele[&quot;App Insights / Datadog / Azure DevOps&lt;br/&gt;(library only, no UI yet)&quot;]
+
+    Dev --&gt; App
+    Dev --&gt; Cli
+    CI --&gt; Cli
+    CI --&gt; MsBuild
+    MsBuild -- &quot;spawns: courier scan&quot; --&gt; Cli
+
+    App &lt;--&gt; Files
+    Cli &lt;--&gt; Files
+    App &lt;--&gt; Db
+    App &lt;--&gt; Vault
+    Cli --&gt; Vault
+    App --&gt; Src
+    Cli --&gt; Src
+
+    App --&gt; Gate
+    Cli --&gt; Gate
+    Gate --&gt; Certs
+    Gate -- &quot;TargetRequest&quot; --&gt; Api
+    Gate -- &quot;AuthAuthority&quot; --&gt; Entra
+    Gate -. &quot;TelemetryBackend / WorkItemTracker&quot; .-&gt; Tele</pre></div></figure>
+<p><strong>Rules visible in this picture</strong></p>
+<ul><li>No server is operated by the project. Nothing in startup contacts the network: there is no update check, no analytics and no crash reporter.</li><li>Credentials never land in the collection folder. Their <em>names</em> are written there; their <em>values</em> live in the OS credential store (desktop) or in <code>COURIER_SECRET_*</code> environment variables (CLI).</li><li>The MSBuild task can't load the <code>net10.0</code> scanner, because MSBuild may be .NET Framework. It runs <code>courier scan</code> as a separate process and reads the JSON report it writes.</li></ul>
+</section>
+<section class="card" id="2-projects-and-layers"><h2><span class="num">2</span>Projects and layers<a class="anchor" href="#2-projects-and-layers" aria-label="Link to this section">#</a></h2>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="flowchart TB
+    subgraph Hosts[&quot;Hosts (composition roots)&quot;]
+        App[&quot;Courier.App&lt;br/&gt;net10.0 + net10.0-windows&lt;br/&gt;AppServices&quot;]
+        Cli[&quot;Courier.Cli&lt;br/&gt;net10.0&lt;br/&gt;CliServices&quot;]
+        MsB[&quot;Courier.MSBuild&lt;br/&gt;netstandard2.0&quot;]
+    end
+
+    subgraph Features[&quot;Feature libraries&quot;]
+        Scanner[&quot;Courier.Scanner&lt;br/&gt;Roslyn syntax tier&quot;]
+        Scripting[&quot;Courier.Scripting&lt;br/&gt;Jint sandbox, pm.*, runner&quot;]
+        Telemetry[&quot;Courier.Telemetry&lt;br/&gt;App Insights, Datadog, ADO&quot;]
+    end
+
+    Core[&quot;Courier.Core&lt;br/&gt;collections · HTTP · variables · auth&lt;br/&gt;capsules · rendering · storage · EgressGate&lt;br/&gt;&lt;b&gt;no UI, no Windows API&lt;/b&gt;&quot;]
+
+    subgraph Platform[&quot;Platform implementations of Core/Abstractions&quot;]
+        Win[&quot;Courier.Platform.Windows&lt;br/&gt;Credential Manager, cert store,&lt;br/&gt;WinHTTP proxy, WAM broker&quot;]
+        Posix[&quot;Courier.Platform.Posix&lt;br/&gt;best-effort fallbacks&quot;]
+    end
+
+    App --&gt; Scanner
+    App --&gt; Core
+    App -- &quot;windows TFM&quot; --&gt; Win
+    App -- &quot;plain net10.0 TFM&quot; --&gt; Posix
+    Cli --&gt; Scanner
+    Cli --&gt; Scripting
+    Cli --&gt; Core
+    MsB -. &quot;process boundary: courier scan&quot; .-&gt; Cli
+    Scanner --&gt; Core
+    Scripting --&gt; Core
+    Telemetry --&gt; Core
+    Win --&gt; Core
+    Posix --&gt; Core">flowchart TB
+    subgraph Hosts[&quot;Hosts (composition roots)&quot;]
+        App[&quot;Courier.App&lt;br/&gt;net10.0 + net10.0-windows&lt;br/&gt;AppServices&quot;]
+        Cli[&quot;Courier.Cli&lt;br/&gt;net10.0&lt;br/&gt;CliServices&quot;]
+        MsB[&quot;Courier.MSBuild&lt;br/&gt;netstandard2.0&quot;]
+    end
+
+    subgraph Features[&quot;Feature libraries&quot;]
+        Scanner[&quot;Courier.Scanner&lt;br/&gt;Roslyn syntax tier&quot;]
+        Scripting[&quot;Courier.Scripting&lt;br/&gt;Jint sandbox, pm.*, runner&quot;]
+        Telemetry[&quot;Courier.Telemetry&lt;br/&gt;App Insights, Datadog, ADO&quot;]
+    end
+
+    Core[&quot;Courier.Core&lt;br/&gt;collections · HTTP · variables · auth&lt;br/&gt;capsules · rendering · storage · EgressGate&lt;br/&gt;&lt;b&gt;no UI, no Windows API&lt;/b&gt;&quot;]
+
+    subgraph Platform[&quot;Platform implementations of Core/Abstractions&quot;]
+        Win[&quot;Courier.Platform.Windows&lt;br/&gt;Credential Manager, cert store,&lt;br/&gt;WinHTTP proxy, WAM broker&quot;]
+        Posix[&quot;Courier.Platform.Posix&lt;br/&gt;best-effort fallbacks&quot;]
+    end
+
+    App --&gt; Scanner
+    App --&gt; Core
+    App -- &quot;windows TFM&quot; --&gt; Win
+    App -- &quot;plain net10.0 TFM&quot; --&gt; Posix
+    Cli --&gt; Scanner
+    Cli --&gt; Scripting
+    Cli --&gt; Core
+    MsB -. &quot;process boundary: courier scan&quot; .-&gt; Cli
+    Scanner --&gt; Core
+    Scripting --&gt; Core
+    Telemetry --&gt; Core
+    Win --&gt; Core
+    Posix --&gt; Core</pre></div></figure>
+<p>**The abstractions in <code>Core/Abstractions</code>**: <code>ISecretStore</code>, <code>ITrustStore</code>, <code>ICertificateSource</code>, <code>IProxyResolver</code>, <code>IIntegratedAuthProvider</code>, <code>IGitStatusSource</code>, <code>IFileRevealer</code>.</p>
+<div class="table-scroll"><table><thead><tr><th>Host</th><th>Secret store</th><th>Proxy</th><th>Trust</th><th>Why</th></tr></thead><tbody><tr><td>App on Windows</td><td><code>WindowsSecretStore</code> (Credential Manager)</td><td><code>WinHttpProxyResolver</code> (PAC)</td><td><code>WindowsTrustStore</code></td><td>Full enterprise path</td></tr><tr><td>App elsewhere</td><td>Posix fallbacks</td><td>Posix fallbacks</td><td>Posix fallbacks</td><td>Linux/macOS contributors can still build and run it</td></tr><tr><td>CLI (any OS)</td><td><code>EnvironmentSecretStore</code> (read-only, <code>COURIER_SECRET_*</code>)</td><td><code>EnvironmentProxyResolver</code></td><td><code>FallbackTrustStore</code></td><td>A build agent has no interactive session to unlock a vault. The CLI fails clearly instead of hanging</td></tr></tbody></table></div>
+<p><code>ArchitectureTests</code> enforces the Core rule. It fails the build if <code>Courier.Core</code> gains an Avalonia reference, a <code>net*-windows</code> target or a <code>Microsoft.Win32</code> using.</p>
+</section>
+<section class="card" id="3-data-model-at-a-glance"><h2><span class="num">3</span>Data model at a glance<a class="anchor" href="#3-data-model-at-a-glance" aria-label="Link to this section">#</a></h2>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="flowchart LR
+    subgraph Disk[&quot;Collection folder (git-versioned)&quot;]
+        CY[&quot;collection.yaml&lt;br/&gt;name, variables, headers,&lt;br/&gt;settings, auth default, scannedFrom&quot;]
+        GEN[&quot;endpoints.generated.yaml&lt;br/&gt;machine-owned&quot;]
+        OVL[&quot;endpoints.overlay.yaml&lt;br/&gt;user-owned&quot;]
+        REQ[&quot;requests/**/*.request.yaml&lt;br/&gt;hand-authored&quot;]
+        ENV[&quot;environments/*.env.yaml&lt;br/&gt;shared values + local names&quot;]
+        AUTH[&quot;auth/*.auth.yaml&lt;br/&gt;profiles, no secrets&quot;]
+        CACHE[&quot;.courier-scan-cache.json&lt;br/&gt;file hashes&quot;]
+    end
+
+    RD[&quot;RequestDefinition&lt;br/&gt;has {{vars}}, no credentials&quot;]
+    PR[&quot;PreparedRequest&lt;br/&gt;resolved, memory only,&lt;br/&gt;carries SecretValues&quot;]
+    ER[&quot;ExchangeResult&lt;br/&gt;Completed / TransportFailure /&lt;br/&gt;Cancelled / Refused&quot;]
+
+    GEN --&gt; J((&quot;GeneratedOverlayJoiner.Join&quot;))
+    OVL --&gt; J
+    J --&gt; RD
+    REQ --&gt; RD
+    CY --&gt; RD
+    RD -- &quot;RequestPreparer&quot; --&gt; PR
+    ENV -. &quot;variables&quot; .-&gt; PR
+    AUTH -. &quot;auth&quot; .-&gt; PR
+    PR -- &quot;RequestExecutor&quot; --&gt; ER">flowchart LR
+    subgraph Disk[&quot;Collection folder (git-versioned)&quot;]
+        CY[&quot;collection.yaml&lt;br/&gt;name, variables, headers,&lt;br/&gt;settings, auth default, scannedFrom&quot;]
+        GEN[&quot;endpoints.generated.yaml&lt;br/&gt;machine-owned&quot;]
+        OVL[&quot;endpoints.overlay.yaml&lt;br/&gt;user-owned&quot;]
+        REQ[&quot;requests/**/*.request.yaml&lt;br/&gt;hand-authored&quot;]
+        ENV[&quot;environments/*.env.yaml&lt;br/&gt;shared values + local names&quot;]
+        AUTH[&quot;auth/*.auth.yaml&lt;br/&gt;profiles, no secrets&quot;]
+        CACHE[&quot;.courier-scan-cache.json&lt;br/&gt;file hashes&quot;]
+    end
+
+    RD[&quot;RequestDefinition&lt;br/&gt;has {{vars}}, no credentials&quot;]
+    PR[&quot;PreparedRequest&lt;br/&gt;resolved, memory only,&lt;br/&gt;carries SecretValues&quot;]
+    ER[&quot;ExchangeResult&lt;br/&gt;Completed / TransportFailure /&lt;br/&gt;Cancelled / Refused&quot;]
+
+    GEN --&gt; J((&quot;GeneratedOverlayJoiner.Join&quot;))
+    OVL --&gt; J
+    J --&gt; RD
+    REQ --&gt; RD
+    CY --&gt; RD
+    RD -- &quot;RequestPreparer&quot; --&gt; PR
+    ENV -. &quot;variables&quot; .-&gt; PR
+    AUTH -. &quot;auth&quot; .-&gt; PR
+    PR -- &quot;RequestExecutor&quot; --&gt; ER</pre></div></figure>
+<p>The definition (what you edit and what goes to disk) and the prepared request (resolved, credentials included, memory only) are deliberately separate types.</p>
+</section>
+<section class="card" id="f1-app-startup-and-deferred-jobs"><h2><span class="flow-tag">F1</span>App startup and deferred jobs<a class="anchor" href="#f1-app-startup-and-deferred-jobs" aria-label="Link to this section">#</a></h2>
+<p>The first frame has a time budget (PERF-01), so the constructor graph is kept shallow and everything that isn't needed to draw it is queued until after the first paint.</p>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="sequenceDiagram
+    autonumber
+    participant OS as Process
+    participant P as Program.Main
+    participant A as CourierApplication
+    participant S as AppServices
+    participant VM as MainWindowViewModel
+    participant W as MainWindow
+    participant Q as StartupJobQueue
+
+    OS-&gt;&gt;P: start
+    P-&gt;&gt;A: StartWithClassicDesktopLifetime
+    A-&gt;&gt;S: AppServices.Build(args)
+    Note over S: eager: SecretStore, ProxyResolver, TrustStore,&lt;br/&gt;EgressPolicy, EgressGate, RequestExecutor,&lt;br/&gt;VariableResolver, RedactionEngine, Scanner&lt;br/&gt;lazy: Entra (MSAL), DeveloperTokens,&lt;br/&gt;AuthRegistry, SQLite database
+    A-&gt;&gt;VM: new MainWindowViewModel(services)
+    A-&gt;&gt;W: new MainWindow { DataContext = VM }
+    A-&gt;&gt;Q: RunAfterFirstPaint(window, shell)
+    W--&gt;&gt;Q: Opened event
+    Q-&gt;&gt;Q: Dispatcher.Post at Background priority
+    Note over Q: record TimeToFirstFrame
+    loop each queued job, yielding between them
+        Q-&gt;&gt;Q: storage → database → history → git-status → session-restore
+    end
+    Note over Q: a failing job is written to CrashLog,&lt;br/&gt;never takes the window down">sequenceDiagram
+    autonumber
+    participant OS as Process
+    participant P as Program.Main
+    participant A as CourierApplication
+    participant S as AppServices
+    participant VM as MainWindowViewModel
+    participant W as MainWindow
+    participant Q as StartupJobQueue
+
+    OS-&gt;&gt;P: start
+    P-&gt;&gt;A: StartWithClassicDesktopLifetime
+    A-&gt;&gt;S: AppServices.Build(args)
+    Note over S: eager: SecretStore, ProxyResolver, TrustStore,&lt;br/&gt;EgressPolicy, EgressGate, RequestExecutor,&lt;br/&gt;VariableResolver, RedactionEngine, Scanner&lt;br/&gt;lazy: Entra (MSAL), DeveloperTokens,&lt;br/&gt;AuthRegistry, SQLite database
+    A-&gt;&gt;VM: new MainWindowViewModel(services)
+    A-&gt;&gt;W: new MainWindow { DataContext = VM }
+    A-&gt;&gt;Q: RunAfterFirstPaint(window, shell)
+    W--&gt;&gt;Q: Opened event
+    Q-&gt;&gt;Q: Dispatcher.Post at Background priority
+    Note over Q: record TimeToFirstFrame
+    loop each queued job, yielding between them
+        Q-&gt;&gt;Q: storage → database → history → git-status → session-restore
+    end
+    Note over Q: a failing job is written to CrashLog,&lt;br/&gt;never takes the window down</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>Program.Main(args):
+    try   BuildAvaloniaApp().StartWithClassicDesktopLifetime(args)
+    catch ex → CrashLog.Write(ex); return 1          // local log only, nothing is sent
+
+CourierApplication.OnFrameworkInitializationCompleted():
+    services ← AppServices.Build(args)               // cheap objects only
+    shell    ← new MainWindowViewModel(services)
+    window   ← new MainWindow(DataContext = shell)
+    on ShutdownRequested → services.Dispose()
+    services.StartupJobs.RunAfterFirstPaint(window, shell)
+
+StartupJobQueue.RunAfterFirstPaint(window, shell):
+    enqueue &quot;storage&quot;         → StorageLocations.EnsureCreated()
+    enqueue &quot;database&quot;        → services.DatabaseAsync()        // opens + migrates SQLite
+    enqueue &quot;history&quot;         → shell.LoadHistoryAsync()
+    enqueue &quot;git-status&quot;      → shell.RefreshGitStatusAsync()   // shells out to git
+    enqueue &quot;session-restore&quot; → shell.RestoreSessionAsync()
+    on window.Opened (once):
+        post at Background priority:
+            TimeToFirstFrame ← now − process start
+            ReportStartup()            // only if COURIER_STARTUP_REPORT is set (perf gate)
+            for job in queue:
+                try await job() catch ex → CrashLog.Write(ex)
+                yield to UI thread</code></pre></div>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>App/Program.cs</code></li><li class="chip"><code>App/App.axaml.cs</code></li><li class="chip"><code>App/Services/AppServices.cs</code></li><li class="chip"><code>App/Services/StartupJobQueue.cs</code></li></ul></div>
+</section>
+<section class="card" id="f2-open-or-create-a-collection-folder"><h2><span class="flow-tag">F2</span>Open or create a collection folder<a class="anchor" href="#f2-open-or-create-a-collection-folder" aria-label="Link to this section">#</a></h2>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="sequenceDiagram
+    autonumber
+    actor U as User
+    participant VM as MainWindowViewModel
+    participant T as CollectionTreeViewModel
+    participant L as CollectionLoader
+    participant J as GeneratedOverlayJoiner
+    participant E as EnvironmentsViewModel
+    participant RA as RequestAuth (AuthChoiceViewModel)
+
+    U-&gt;&gt;VM: Open folder (Ctrl+O) / New collection
+    VM-&gt;&gt;VM: PickFolderAsync
+    opt New collection
+        VM-&gt;&gt;VM: CollectionWriter.WriteCollectionDefinition(path, name)
+    end
+    VM-&gt;&gt;T: OpenFolderAsync(path)
+    T-&gt;&gt;L: Load(folder) on a worker thread
+    L-&gt;&gt;L: read collection.yaml (or default by folder name)
+    alt endpoints.generated.yaml exists
+        L-&gt;&gt;J: Join(generated, overlay)
+        J--&gt;&gt;L: requests (+ orphaned overlay entries)
+    end
+    L-&gt;&gt;L: read requests/**/*.request.yaml
+    Note over L: an unreadable file becomes a request&lt;br/&gt;with UnresolvedNotes, never dropped
+    L--&gt;&gt;T: LoadedCollection(definition, requests)
+    T-&gt;&gt;T: build tree: declared folders, then request folders
+    VM-&gt;&gt;VM: RefreshAvailableEnvironments()
+    VM-&gt;&gt;E: Load(folder, ActiveEnvironment)
+    VM-&gt;&gt;E: RefreshDetectedProfiles(definition.ScannedFrom)
+    VM-&gt;&gt;RA: LoadAsync(active tab auth, folder)">sequenceDiagram
+    autonumber
+    actor U as User
+    participant VM as MainWindowViewModel
+    participant T as CollectionTreeViewModel
+    participant L as CollectionLoader
+    participant J as GeneratedOverlayJoiner
+    participant E as EnvironmentsViewModel
+    participant RA as RequestAuth (AuthChoiceViewModel)
+
+    U-&gt;&gt;VM: Open folder (Ctrl+O) / New collection
+    VM-&gt;&gt;VM: PickFolderAsync
+    opt New collection
+        VM-&gt;&gt;VM: CollectionWriter.WriteCollectionDefinition(path, name)
+    end
+    VM-&gt;&gt;T: OpenFolderAsync(path)
+    T-&gt;&gt;L: Load(folder) on a worker thread
+    L-&gt;&gt;L: read collection.yaml (or default by folder name)
+    alt endpoints.generated.yaml exists
+        L-&gt;&gt;J: Join(generated, overlay)
+        J--&gt;&gt;L: requests (+ orphaned overlay entries)
+    end
+    L-&gt;&gt;L: read requests/**/*.request.yaml
+    Note over L: an unreadable file becomes a request&lt;br/&gt;with UnresolvedNotes, never dropped
+    L--&gt;&gt;T: LoadedCollection(definition, requests)
+    T-&gt;&gt;T: build tree: declared folders, then request folders
+    VM-&gt;&gt;VM: RefreshAvailableEnvironments()
+    VM-&gt;&gt;E: Load(folder, ActiveEnvironment)
+    VM-&gt;&gt;E: RefreshDetectedProfiles(definition.ScannedFrom)
+    VM-&gt;&gt;RA: LoadAsync(active tab auth, folder)</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>OpenAndPrimeFolderAsync(path):
+    Tree.OpenFolderAsync(path):
+        loaded ← Task.Run(CollectionLoader.Load(path))
+        Definition ← loaded.Definition
+        root ← node(CollectionName)
+        for f in Definition.Folders: root.EnsureFolder(f)        // empty folders still show
+        for group in loaded.Requests grouped by Folder:
+            add a request node under root.EnsureFolder(group)
+    RefreshAvailableEnvironments()                               // title-bar picker
+    Environments.Load(folder, ActiveEnvironment)
+    Environments.RefreshDetectedProfiles(Definition.ScannedFrom?.Path)
+    RequestAuth.LoadAsync(activeTab.Auth, folder)
+
+CollectionLoader.Load(folder):
+    definition ← exists(collection.yaml) ? deserialize : { Name = folder name }
+    requests ← []
+    if exists(endpoints.generated.yaml):
+        overlay ← exists(endpoints.overlay.yaml) ? deserialize : empty
+        requests += GeneratedOverlayJoiner.Join(generated, overlay)
+    for file in requests/**/*.request.yaml (ordinal order):
+        try   r ← deserialize(file); r.Folder ??= relative dir; requests += r
+        catch CollectionFormatException → requests += placeholder with UnresolvedNotes
+    return (definition, requests)
+
+NewCollectionAsync():
+    path ← PickFolderAsync()
+    CollectionWriter.WriteCollectionDefinition(path, name)        // no-op if it already exists
+    OpenAndPrimeFolderAsync(path)</code></pre></div>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>App/ViewModels/MainWindowViewModel.cs</code></li><li class="chip"><code>App/ViewModels/CollectionTreeViewModel.cs</code></li><li class="chip"><code>Core/Collections/CollectionLoader.cs</code></li><li class="chip"><code>Core/Collections/GeneratedOverlay.cs</code></li></ul></div>
+</section>
+<section class="card" id="f3-send-a-request-desktop-app"><h2><span class="flow-tag">F3</span>Send a request (desktop app)<a class="anchor" href="#f3-send-a-request-desktop-app" aria-label="Link to this section">#</a></h2>
+<p>This is the central flow. The CLI's <code>courier run</code> (F13) goes through the same <code>RequestPreparer</code> and <code>RequestExecutor</code>, so the two can't drift apart.</p>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="sequenceDiagram
+    autonumber
+    actor U as User
+    participant VM as MainWindowViewModel
+    participant Tab as TabViewModel
+    participant RA as RequestAuth
+    participant AR as AuthResolver
+    participant RP as RequestPreparer
+    participant VR as VariableResolver
+    participant REG as AuthProviderRegistry
+    participant EX as RequestExecutor
+    participant G as EgressGate
+    participant API as Target API
+    participant H as HistoryStore
+
+    U-&gt;&gt;VM: Send (Ctrl+Enter)
+    VM-&gt;&gt;Tab: BeginSend() → CancellationToken
+    VM-&gt;&gt;RA: ToReferenceAsync()
+    Note right of RA: inline secret typed?&lt;br/&gt;→ ISecretStore.SetAsync
+    VM-&gt;&gt;VM: request ← state.ToDefinition()
+    VM-&gt;&gt;VM: scopes ← env + collection vars&lt;br/&gt;headers ← app defaults ⊕ collection headers
+    VM-&gt;&gt;AR: Resolve(request.Auth, collection.Auth, AuthProfileStore.Load)
+    AR--&gt;&gt;VM: ResolvedAuth(profile, source, problem)
+    VM-&gt;&gt;RP: PrepareAsync(request, scopes, headers, settings, AuthPlan)
+    RP-&gt;&gt;VR: SubstituteAsync(url, query, headers, body)
+    RP-&gt;&gt;REG: ApplyAsync(resolved, AuthContext)
+    alt preparation failed
+        RP--&gt;&gt;VM: Fail(error) or NeedsSignIn(profile)
+        VM-&gt;&gt;Tab: SendError ← error
+        VM-&gt;&gt;VM: PendingSignInProfile ← profile
+    else prepared
+        RP--&gt;&gt;VM: PreparedRequest
+        VM-&gt;&gt;EX: SendAsync(prepared)
+        EX-&gt;&gt;G: Authorize(url, TargetRequest)
+        G--&gt;&gt;EX: HttpMessageInvoker
+        EX-&gt;&gt;API: HTTP
+        API--&gt;&gt;EX: response
+        EX--&gt;&gt;VM: ExchangeResult
+        VM-&gt;&gt;Tab: Response ← new ResponseViewModel(result)
+        VM-&gt;&gt;VM: Inspector.ShowToken(token, identity)
+        VM-&gt;&gt;H: RecordAsync(result, env, collection, id, SecretValues)
+    end
+    VM-&gt;&gt;Tab: CompleteSend()">sequenceDiagram
+    autonumber
+    actor U as User
+    participant VM as MainWindowViewModel
+    participant Tab as TabViewModel
+    participant RA as RequestAuth
+    participant AR as AuthResolver
+    participant RP as RequestPreparer
+    participant VR as VariableResolver
+    participant REG as AuthProviderRegistry
+    participant EX as RequestExecutor
+    participant G as EgressGate
+    participant API as Target API
+    participant H as HistoryStore
+
+    U-&gt;&gt;VM: Send (Ctrl+Enter)
+    VM-&gt;&gt;Tab: BeginSend() → CancellationToken
+    VM-&gt;&gt;RA: ToReferenceAsync()
+    Note right of RA: inline secret typed?&lt;br/&gt;→ ISecretStore.SetAsync
+    VM-&gt;&gt;VM: request ← state.ToDefinition()
+    VM-&gt;&gt;VM: scopes ← env + collection vars&lt;br/&gt;headers ← app defaults ⊕ collection headers
+    VM-&gt;&gt;AR: Resolve(request.Auth, collection.Auth, AuthProfileStore.Load)
+    AR--&gt;&gt;VM: ResolvedAuth(profile, source, problem)
+    VM-&gt;&gt;RP: PrepareAsync(request, scopes, headers, settings, AuthPlan)
+    RP-&gt;&gt;VR: SubstituteAsync(url, query, headers, body)
+    RP-&gt;&gt;REG: ApplyAsync(resolved, AuthContext)
+    alt preparation failed
+        RP--&gt;&gt;VM: Fail(error) or NeedsSignIn(profile)
+        VM-&gt;&gt;Tab: SendError ← error
+        VM-&gt;&gt;VM: PendingSignInProfile ← profile
+    else prepared
+        RP--&gt;&gt;VM: PreparedRequest
+        VM-&gt;&gt;EX: SendAsync(prepared)
+        EX-&gt;&gt;G: Authorize(url, TargetRequest)
+        G--&gt;&gt;EX: HttpMessageInvoker
+        EX-&gt;&gt;API: HTTP
+        API--&gt;&gt;EX: response
+        EX--&gt;&gt;VM: ExchangeResult
+        VM-&gt;&gt;Tab: Response ← new ResponseViewModel(result)
+        VM-&gt;&gt;VM: Inspector.ShowToken(token, identity)
+        VM-&gt;&gt;H: RecordAsync(result, env, collection, id, SecretValues)
+    end
+    VM-&gt;&gt;Tab: CompleteSend()</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>MainWindowViewModel.SendAsync():
+    tab ← Tabs.Active;  if none → return
+    tab.SendError ← null
+    ct  ← tab.BeginSend()
+    try:
+        state.Auth ← await RequestAuth.ToReferenceAsync(ct)    // commit Auth panel first
+        request    ← state.ToDefinition()
+        scopes     ← VariableScopes { Environment = ActiveEnvironment,
+                                      Collection  = Tree.Definition.Variables }
+        inherited  ← _defaultHeaders (app settings: Accept, User-Agent, …) ⊕ Tree.Definition.Headers  // later wins
+        resolved   ← AuthResolver.Resolve(request.Auth, Tree.Definition.Auth,
+                                          name → AuthProfileStore.Load(Tree.Folder, name))
+        prep ← await RequestPreparer.PrepareAsync(request, scopes, Variables, inherited,
+                    Tree.Definition.Settings, Tree.Definition.InjectTraceParent,
+                    EnvironmentName, AuthPlan(resolved, AuthRegistry), ct)
+        if not prep.Succeeded:
+            tab.SendError        ← prep.Error           // plain English, names the cause
+            PendingSignInProfile ← prep.SignInProfile   // shows a &quot;Sign in&quot; button if set
+            return
+        result ← await Executor.SendAsync(prep.Request, ct)
+        tab.Response?.Dispose();  tab.Response ← new ResponseViewModel(result)
+        Inspector.ShowToken(prep.Request.Auth?.Token, identity)
+        await HistoryStore.RecordAsync(result, EnvironmentName, CollectionName,
+                                       state.EndpointId ?? state.RequestPath,
+                                       prep.Request.SecretValues, ct)
+        HistoryCount++
+    catch OperationCanceledException → (normal; nothing to report)
+    finally tab.CompleteSend()
+
+SignInAndRetryAsync():                                   // only after the user clicks &quot;Sign in&quot;
+    await Entra.AcquireAsync(_lastAuthProfile, interactiveAllowed = true)
+    on InteractiveAuthRequiredException → tab.SendError ← message; return
+    await SendAsync()</code></pre></div>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>App/ViewModels/MainWindowViewModel.cs</code><span class="chip-note"><code>SendAsync</code>, <code>SignInAndRetryAsync</code></span></li><li class="chip"><code>Core/Http/RequestPreparer.cs</code></li><li class="chip"><code>Core/Http/RequestExecutor.cs</code></li><li class="chip"><code>Core/Storage/HistoryStore.cs</code></li></ul></div>
+<h3 id="f3a-request-preparation-and-variable-resolution"><span class="flow-tag sub">F3a</span>Request preparation and variable resolution</h3>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="flowchart TD
+    A[&quot;RequestDefinition&quot;] --&gt; B[&quot;Substitute {{vars}} in URL&quot;]
+    B --&gt; C[&quot;Replace {param} with PathParams&quot;]
+    C --&gt; D{&quot;Unbound variables&lt;br/&gt;left in URL?&quot;}
+    D -- yes --&gt; X1[&quot;Fail: The URL still has&lt;br/&gt;unresolved variables: …&quot;]
+    D -- no --&gt; E{&quot;Any path param&lt;br/&gt;left empty?&quot;}
+    E -- yes --&gt; X2[&quot;Fail: Fill in the path parameter: …&quot;]
+    E -- no --&gt; F{&quot;Absolute URI?&quot;}
+    F -- no --&gt; X3[&quot;Fail: &#x27;…&#x27; is not an absolute URL&quot;]
+    F -- yes --&gt; G[&quot;Append enabled Query rows&lt;br/&gt;(values substituted, escaped)&quot;]
+    G --&gt; H[&quot;Merge headers by name, case-insensitive:&lt;br/&gt;inherited first, request&#x27;s own win&quot;]
+    H --&gt; I[&quot;Substitute vars in header values and body&quot;]
+    I --&gt; J{&quot;AuthPlan given?&quot;}
+    J -- no --&gt; P
+    J -- yes --&gt; K{&quot;Resolved.Problem?&quot;}
+    K -- yes --&gt; X4[&quot;Fail: problem text&quot;]
+    K -- no --&gt; L[&quot;Registry.ApplyAsync&quot;]
+    L -- &quot;InteractiveAuthRequired&quot; --&gt; X5[&quot;NeedsSignIn(profile)&quot;]
+    L --&gt; M[&quot;Auth headers replace typed ones&lt;br/&gt;auth query params appended&lt;br/&gt;SecretValues collected&quot;]
+    M --&gt; P[&quot;PreparedRequest&lt;br/&gt;Settings = request ⟵ collection ⟵ defaults&quot;]">flowchart TD
+    A[&quot;RequestDefinition&quot;] --&gt; B[&quot;Substitute {{vars}} in URL&quot;]
+    B --&gt; C[&quot;Replace {param} with PathParams&quot;]
+    C --&gt; D{&quot;Unbound variables&lt;br/&gt;left in URL?&quot;}
+    D -- yes --&gt; X1[&quot;Fail: The URL still has&lt;br/&gt;unresolved variables: …&quot;]
+    D -- no --&gt; E{&quot;Any path param&lt;br/&gt;left empty?&quot;}
+    E -- yes --&gt; X2[&quot;Fail: Fill in the path parameter: …&quot;]
+    E -- no --&gt; F{&quot;Absolute URI?&quot;}
+    F -- no --&gt; X3[&quot;Fail: &#x27;…&#x27; is not an absolute URL&quot;]
+    F -- yes --&gt; G[&quot;Append enabled Query rows&lt;br/&gt;(values substituted, escaped)&quot;]
+    G --&gt; H[&quot;Merge headers by name, case-insensitive:&lt;br/&gt;inherited first, request&#x27;s own win&quot;]
+    H --&gt; I[&quot;Substitute vars in header values and body&quot;]
+    I --&gt; J{&quot;AuthPlan given?&quot;}
+    J -- no --&gt; P
+    J -- yes --&gt; K{&quot;Resolved.Problem?&quot;}
+    K -- yes --&gt; X4[&quot;Fail: problem text&quot;]
+    K -- no --&gt; L[&quot;Registry.ApplyAsync&quot;]
+    L -- &quot;InteractiveAuthRequired&quot; --&gt; X5[&quot;NeedsSignIn(profile)&quot;]
+    L --&gt; M[&quot;Auth headers replace typed ones&lt;br/&gt;auth query params appended&lt;br/&gt;SecretValues collected&quot;]
+    M --&gt; P[&quot;PreparedRequest&lt;br/&gt;Settings = request ⟵ collection ⟵ defaults&quot;]</pre></div></figure>
+<p>Variables are resolved in <strong>request → environment (shared, then local from the secret store) → collection → global</strong> order. A value that itself contains <code>{{…}}</code> is resolved again, up to 10 levels deep.</p>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>VariableResolver.ResolveAsync(name, scopes):
+    if scopes.Request has name           → (value, Request)
+    if scopes.Environment:
+        if Environment.Shared has name   → (value, EnvironmentShared)
+        if Environment.LocalNames has name:
+            secret ← ISecretStore.GetAsync(Environment.SecretKeyFor(name))
+            return secret ? (secret, EnvironmentLocal, IsSecret = true) : Missing
+    if scopes.Collection has name        → (value, Collection)
+    if scopes.Global has name            → (value, Global)
+    return Missing
+
+VariableResolver.SubstituteAsync(text, scopes):
+    repeat up to 10 times:
+        refs ← regex \{\{ name \}\} over current text
+        if no refs → stop
+        for each ref: resolved ? splice value : leave &quot;{{name}}&quot; in place, add to Unbound
+        if nothing was substituted this pass → stop
+    return (text, used, unbound)
+
+RequestPreparer.PrepareAsync(request, scopes, variables, inherited, settings, trace, env, auth):
+    url ← Substitute(request.Url); replace each {name} from request.PathParams
+    if url.Unbound          → Fail(&quot;The URL still has unresolved variables: …&quot;)
+    if any empty path param → Fail(&quot;Fill in the path parameter(s): …&quot;)
+    if url not absolute     → Fail(&quot;&#x27;…&#x27; is not an absolute URL.&quot;)
+    append enabled query rows (substituted, URI-escaped)
+    headers ← inherited overlaid by request.Headers (enabled, named), values substituted
+    body    ← UTF-8 of Substitute(request.Body.Text)
+    if auth:
+        if auth.Resolved.Problem → Fail(problem)
+        if auth.Resolved.HasAuth:
+            try   r ← auth.Registry.ApplyAsync(resolved, AuthContext(uri, method, body))
+            catch InteractiveAuthRequiredException e → NeedsSignIn(e.ProfileName, e.Message)
+            for h in r.Headers: remove same-named header; add h     // Auth tab wins
+            query += r.QueryParameters;  secrets += r.SecretValues()
+    return Ok(PreparedRequest{ method, uri, headers, body, contentType,
+                               Settings = request.Settings ⟵ collection ⟵ Defaults,
+                               env, trace, Auth = r, SecretValues = secrets })</code></pre></div>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>Core/Http/RequestPreparer.cs</code></li><li class="chip"><code>Core/Variables/VariableResolver.cs</code></li></ul></div>
+<h3 id="f3b-auth-resolution-and-application"><span class="flow-tag sub">F3b</span>Auth resolution and application</h3>
+<p>Auth can be set in three places: the request itself, the collection default in <code>collection.yaml</code>, or a saved profile under <code>auth/</code>. A request defaults to <strong>Inherit</strong>.</p>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="flowchart TD
+    S[&quot;request.Auth&lt;br/&gt;(null → Inherit)&quot;] --&gt; M{&quot;Mode&quot;}
+    M -- &quot;None&quot; --&gt; N[&quot;NoAuth&quot;]
+    M -- &quot;Inline&quot; --&gt; I{&quot;Inline config saved?&quot;}
+    I -- yes --&gt; OK1[&quot;ResolvedAuth(inline)&quot;]
+    I -- no --&gt; P1[&quot;Problem: no config saved&quot;]
+    M -- &quot;Profile&quot; --&gt; PR{&quot;auth/NAME.auth.yaml&lt;br/&gt;exists?&quot;}
+    PR -- yes --&gt; OK2[&quot;ResolvedAuth(profile)&quot;]
+    PR -- no --&gt; P2[&quot;Problem: profile not in auth/&quot;]
+    M -- &quot;Inherit&quot; --&gt; C{&quot;collection.Auth mode&quot;}
+    C -- &quot;None / unset&quot; --&gt; N
+    C -- &quot;Inline / Profile&quot; --&gt; M2[&quot;same rules, Source = Collection&quot;]
+
+    OK1 --&gt; R[&quot;AuthProviderRegistry.ApplyAsync&lt;br/&gt;dispatch on profile.Kind&quot;]
+    OK2 --&gt; R
+    M2 --&gt; R
+    R --&gt; B[&quot;Bearer → Authorization: Bearer secret&quot;]
+    R --&gt; BA[&quot;Basic → Authorization: Basic b64(user:secret)&quot;]
+    R --&gt; E[&quot;EntraClientCredentials /&lt;br/&gt;EntraAuthorizationCode → EntraAuthProvider&quot;]
+    E --&gt; E1{&quot;token silently available?&quot;}
+    E1 -- yes --&gt; E2[&quot;Authorization: Bearer access_token&quot;]
+    E1 -- no --&gt; E3[&quot;InteractiveAuthRequiredException&lt;br/&gt;→ &#x27;Sign in&#x27; button (ENT-05)&quot;]">flowchart TD
+    S[&quot;request.Auth&lt;br/&gt;(null → Inherit)&quot;] --&gt; M{&quot;Mode&quot;}
+    M -- &quot;None&quot; --&gt; N[&quot;NoAuth&quot;]
+    M -- &quot;Inline&quot; --&gt; I{&quot;Inline config saved?&quot;}
+    I -- yes --&gt; OK1[&quot;ResolvedAuth(inline)&quot;]
+    I -- no --&gt; P1[&quot;Problem: no config saved&quot;]
+    M -- &quot;Profile&quot; --&gt; PR{&quot;auth/NAME.auth.yaml&lt;br/&gt;exists?&quot;}
+    PR -- yes --&gt; OK2[&quot;ResolvedAuth(profile)&quot;]
+    PR -- no --&gt; P2[&quot;Problem: profile not in auth/&quot;]
+    M -- &quot;Inherit&quot; --&gt; C{&quot;collection.Auth mode&quot;}
+    C -- &quot;None / unset&quot; --&gt; N
+    C -- &quot;Inline / Profile&quot; --&gt; M2[&quot;same rules, Source = Collection&quot;]
+
+    OK1 --&gt; R[&quot;AuthProviderRegistry.ApplyAsync&lt;br/&gt;dispatch on profile.Kind&quot;]
+    OK2 --&gt; R
+    M2 --&gt; R
+    R --&gt; B[&quot;Bearer → Authorization: Bearer secret&quot;]
+    R --&gt; BA[&quot;Basic → Authorization: Basic b64(user:secret)&quot;]
+    R --&gt; E[&quot;EntraClientCredentials /&lt;br/&gt;EntraAuthorizationCode → EntraAuthProvider&quot;]
+    E --&gt; E1{&quot;token silently available?&quot;}
+    E1 -- yes --&gt; E2[&quot;Authorization: Bearer access_token&quot;]
+    E1 -- no --&gt; E3[&quot;InteractiveAuthRequiredException&lt;br/&gt;→ &#x27;Sign in&#x27; button (ENT-05)&quot;]</pre></div></figure>
+<p>The registry in both <code>AppServices</code> and <code>CliServices</code> maps <strong>Bearer, Basic, EntraClientCredentials, EntraAuthorizationCode</strong>. <code>SimpleAuthProviders.cs</code> also defines providers for ApiKey, AWS SigV4 and Integrated Windows auth, but neither registry wires them in yet, so <code>ApplyAsync</code> throws <code>NotSupportedException</code> for those kinds.</p>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>AuthResolver.Resolve(requestAuth, collectionAuth, lookup):
+    req ← requestAuth ?? Inherit
+    if req.Mode ≠ Inherit → ResolveReference(req, Source = Request)
+    col ← collectionAuth ?? None
+    return col.Mode = None ? NoAuth : ResolveReference(col, Source = Collection)
+
+ResolveReference(ref, source):
+    None    → NoAuth
+    Inline  → ref.Inline ? Resolved(ref.Inline) : Problem(&quot;…none was saved with it.&quot;)
+    Profile → name empty ? Problem
+              : lookup(name) ?? Problem(&quot;Auth profile &#x27;X&#x27; is not in auth/…&quot;)
+
+AuthProviderRegistry.ApplyAsync(resolved, ctx):
+    if not resolved.HasAuth → AuthResult.None
+    provider ← map[profile.Kind] or throw NotSupported
+    return provider.ApplyAsync(profile, ctx)
+
+EntraAuthProvider.AcquireAsync(profile, interactiveAllowed):
+    register authority host with EgressPolicy (AuthAuthority)
+    scopes ← profile.Scopes or [&quot;{clientId}/.default&quot;]
+    lock:
+        ClientCredentials → secret ← ISecretStore.Get(profile.SecretKey)
+                             (missing → InteractiveAuthRequired &quot;No client secret is stored…&quot;)
+                             MSAL confidential app (cached per secret fingerprint)
+                             AcquireTokenForClient(scopes)
+        DeviceCode        → DeviceCodeAsync (raises DeviceCodeIssued)
+        otherwise         → silent first (cache / WAM broker);
+                             prompt only if interactiveAllowed, else throw InteractiveAuthRequired
+    // MSAL&#x27;s HttpClient comes from EgressGate.CreateClient, so token calls are recorded too
+
+AuthChoiceViewModel.GetTokenAsync():          // &quot;Get token&quot; button, inline Entra config
+    store any typed secret → ISecretStore
+    acquired ← Entra.AcquireAsync(profile, interactiveAllowed = true)
+    Show(TokenDecoder.TryDecode(acquired.AccessToken))      // claims table in the panel
+    on any failure → TokenStatusMessage + TokenAcquireFailed event
+                    → MainWindowViewModel.AuthTokenError → AuthTokenErrorView popup
+
+SaveCollectionAuthAsync():                    // &quot;save as collection default&quot;
+    definition.Auth ← CollectionAuth.ToReferenceAsync()
+    CollectionLoader.SaveCollectionDefinition(folder, definition)</code></pre></div>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>Core/Auth/AuthResolver.cs</code></li><li class="chip"><code>Core/Auth/AuthProviderRegistry.cs</code></li><li class="chip"><code>Core/Auth/SimpleAuthProviders.cs</code></li><li class="chip"><code>Core/Auth/EntraAuthProvider.cs</code></li><li class="chip"><code>Core/Auth/TokenDecoder.cs</code></li><li class="chip"><code>Core/Auth/AuthProfileStore.cs</code></li><li class="chip"><code>App/ViewModels/AuthChoiceViewModel.cs</code></li></ul></div>
+<h3 id="f3c-execution-redirects-retries-outcomes"><span class="flow-tag sub">F3c</span>Execution, redirects, retries, outcomes</h3>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="flowchart TD
+    A[&quot;SendAsync(prepared)&quot;] --&gt; B[&quot;attempts = Retries + 1&quot;]
+    B --&gt; C[&quot;SendOnceAsync&quot;]
+    C --&gt; D[&quot;BuildMessage · TraceInjector.Inject&lt;br/&gt;CookieJar.ApplyTo(env)&quot;]
+    D --&gt; E[&quot;EgressGate.Authorize(url, TargetRequest)&quot;]
+    E -- &quot;EgressDeniedException&quot; --&gt; R1[&quot;Outcome = Refused&quot;]
+    E --&gt; F[&quot;invoker.SendAsync&lt;br/&gt;(timeout linked to user cancel)&quot;]
+    F -- &quot;timeout&quot; --&gt; T1[&quot;Outcome = TransportFailure (Timeout)&quot;]
+    F -- &quot;user cancel&quot; --&gt; T2[&quot;Outcome = Cancelled&quot;]
+    F -- &quot;HttpRequestException&quot; --&gt; T3[&quot;Outcome = TransportFailure&lt;br/&gt;(DNS / TLS / refused, explained)&quot;]
+    F --&gt; G[&quot;CookieJar.Capture&quot;]
+    G --&gt; H{&quot;3xx and FollowRedirects&lt;br/&gt;and hop &lt; MaxRedirects?&quot;}
+    H -- yes --&gt; I[&quot;record RedirectHop&lt;br/&gt;url ← Location&quot;] --&gt; D
+    H -- no --&gt; J[&quot;ReadResponseAsync&lt;br/&gt;(large bodies spill to disk)&quot;]
+    J --&gt; K[&quot;Outcome = Completed&lt;br/&gt;(a 500 is still Completed)&quot;]
+    T1 --&gt; L{&quot;TransportFailure and&lt;br/&gt;attempts left?&quot;}
+    T3 --&gt; L
+    L -- yes --&gt; M[&quot;backoff 200ms × 2^(n−1)&quot;] --&gt; C
+    L -- no --&gt; Z[&quot;return ExchangeResult&quot;]
+    K --&gt; Z
+    R1 --&gt; Z
+    T2 --&gt; Z">flowchart TD
+    A[&quot;SendAsync(prepared)&quot;] --&gt; B[&quot;attempts = Retries + 1&quot;]
+    B --&gt; C[&quot;SendOnceAsync&quot;]
+    C --&gt; D[&quot;BuildMessage · TraceInjector.Inject&lt;br/&gt;CookieJar.ApplyTo(env)&quot;]
+    D --&gt; E[&quot;EgressGate.Authorize(url, TargetRequest)&quot;]
+    E -- &quot;EgressDeniedException&quot; --&gt; R1[&quot;Outcome = Refused&quot;]
+    E --&gt; F[&quot;invoker.SendAsync&lt;br/&gt;(timeout linked to user cancel)&quot;]
+    F -- &quot;timeout&quot; --&gt; T1[&quot;Outcome = TransportFailure (Timeout)&quot;]
+    F -- &quot;user cancel&quot; --&gt; T2[&quot;Outcome = Cancelled&quot;]
+    F -- &quot;HttpRequestException&quot; --&gt; T3[&quot;Outcome = TransportFailure&lt;br/&gt;(DNS / TLS / refused, explained)&quot;]
+    F --&gt; G[&quot;CookieJar.Capture&quot;]
+    G --&gt; H{&quot;3xx and FollowRedirects&lt;br/&gt;and hop &lt; MaxRedirects?&quot;}
+    H -- yes --&gt; I[&quot;record RedirectHop&lt;br/&gt;url ← Location&quot;] --&gt; D
+    H -- no --&gt; J[&quot;ReadResponseAsync&lt;br/&gt;(large bodies spill to disk)&quot;]
+    J --&gt; K[&quot;Outcome = Completed&lt;br/&gt;(a 500 is still Completed)&quot;]
+    T1 --&gt; L{&quot;TransportFailure and&lt;br/&gt;attempts left?&quot;}
+    T3 --&gt; L
+    L -- yes --&gt; M[&quot;backoff 200ms × 2^(n−1)&quot;] --&gt; C
+    L -- no --&gt; Z[&quot;return ExchangeResult&quot;]
+    K --&gt; Z
+    R1 --&gt; Z
+    T2 --&gt; Z</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>RequestExecutor.SendAsync(prepared, ct):
+    settings ← prepared.Settings ⟵ Defaults
+    for attempt in 1..(Retries + 1):
+        last ← SendOnceAsync(prepared, settings, attempt)
+        if last.Outcome ≠ TransportFailure or attempt is the last → return last
+        await delay(200ms × 2^(attempt−1))          // only transport failures are retried
+
+SendOnceAsync(prepared, settings, attempt):
+    url ← prepared.Url;  maxRedirects ← FollowRedirects ? (MaxRedirects ?? 10) : 0
+    timeout ← TimeoutMilliseconds ?? 30 000, linked with ct
+    loop hop:
+        message ← BuildMessage(prepared, url)
+        traceId ← TraceInjector.Inject(message, prepared.InjectTraceParent)
+        CookieJar.ApplyTo(message, env)
+        try:
+            invoker  ← EgressGate.Authorize(url, TargetRequest, initiator, HandlerProfile)
+            response ← invoker.SendAsync(message)
+            CookieJar.Capture(response, env)
+            if hop &lt; maxRedirects and redirect → record hop; url ← next; continue
+            return Completed(request, ReadResponseAsync(response), elapsed, traceId, redirects)
+        catch EgressDenied          → Refused
+        catch timeout               → TransportFailure(Timeout, &quot;No response within … ms&quot;)
+        catch OperationCanceled     → Cancelled
+        catch HttpRequestException  → TransportFailure(Explain(ex, url))</code></pre></div>
+<p><code>TransportFailure</code> ("the request never left or never came back") is never merged with an HTTP 500. The UI gives it its own glyph and status text.</p>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>Core/Http/RequestExecutor.cs</code></li><li class="chip"><code>Core/Http/ExchangeResult.cs</code></li><li class="chip"><code>Core/Http/CookieJar.cs</code></li><li class="chip"><code>Core/Http/TraceInjector.cs</code></li></ul></div>
+</section>
+<section class="card" id="f4-egress-chokepoint"><h2><span class="flow-tag">F4</span>Egress chokepoint<a class="anchor" href="#f4-egress-chokepoint" aria-label="Link to this section">#</a></h2>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="flowchart LR
+    subgraph Callers
+        EX[&quot;RequestExecutor&lt;br/&gt;TargetRequest&quot;]
+        MSAL[&quot;MSAL / Azure.Identity&lt;br/&gt;via CreateClient&quot;]
+        TEL[&quot;Telemetry sources&lt;br/&gt;via CreateClient&quot;]
+    end
+
+    EX --&gt; AUTH[&quot;EgressGate.Authorize&quot;]
+    MSAL --&gt; RH[&quot;RecordingHandler&quot;] --&gt; AUTH2[&quot;policy check + record&lt;br/&gt;per request&quot;]
+    TEL --&gt; RH
+
+    AUTH --&gt; POL{&quot;IEgressPolicy.Evaluate&lt;br/&gt;(UserIntentEgressPolicy)&quot;}
+    AUTH2 --&gt; POL
+    POL -- &quot;TargetRequest, PAC → allow&quot; --&gt; REC
+    POL -- &quot;UpdateCheck, not opted in → deny&quot; --&gt; DENY
+    POL -- &quot;other purpose: host registered&lt;br/&gt;for that purpose? → allow&quot; --&gt; REC
+    POL -- &quot;otherwise → deny&quot; --&gt; DENY
+    REC[&quot;EgressRecord queued&lt;br/&gt;Recorded event&quot;] --&gt; HS{&quot;HandlerProfile&quot;}
+    DENY[&quot;record + throw&lt;br/&gt;EgressDeniedException&quot;]
+    HS -- &quot;UseIntegratedAuth&quot; --&gt; HC[&quot;HttpClientHandler&lt;br/&gt;UseDefaultCredentials (NTLM/Kerberos)&quot;]
+    HS -- &quot;otherwise&quot; --&gt; SH[&quot;SocketsHttpHandler&lt;br/&gt;HTTP/2-3, no auto-redirect,&lt;br/&gt;proxy from IProxyResolver&quot;]
+    HC --&gt; TLS[&quot;ITrustStore.Validate&lt;br/&gt;(corporate roots, named failures)&quot;]
+    SH --&gt; TLS
+    REC -.-&gt; NS[&quot;NetworkStatement.Render&lt;br/&gt;(SEC-06 audit report)&quot;]">flowchart LR
+    subgraph Callers
+        EX[&quot;RequestExecutor&lt;br/&gt;TargetRequest&quot;]
+        MSAL[&quot;MSAL / Azure.Identity&lt;br/&gt;via CreateClient&quot;]
+        TEL[&quot;Telemetry sources&lt;br/&gt;via CreateClient&quot;]
+    end
+
+    EX --&gt; AUTH[&quot;EgressGate.Authorize&quot;]
+    MSAL --&gt; RH[&quot;RecordingHandler&quot;] --&gt; AUTH2[&quot;policy check + record&lt;br/&gt;per request&quot;]
+    TEL --&gt; RH
+
+    AUTH --&gt; POL{&quot;IEgressPolicy.Evaluate&lt;br/&gt;(UserIntentEgressPolicy)&quot;}
+    AUTH2 --&gt; POL
+    POL -- &quot;TargetRequest, PAC → allow&quot; --&gt; REC
+    POL -- &quot;UpdateCheck, not opted in → deny&quot; --&gt; DENY
+    POL -- &quot;other purpose: host registered&lt;br/&gt;for that purpose? → allow&quot; --&gt; REC
+    POL -- &quot;otherwise → deny&quot; --&gt; DENY
+    REC[&quot;EgressRecord queued&lt;br/&gt;Recorded event&quot;] --&gt; HS{&quot;HandlerProfile&quot;}
+    DENY[&quot;record + throw&lt;br/&gt;EgressDeniedException&quot;]
+    HS -- &quot;UseIntegratedAuth&quot; --&gt; HC[&quot;HttpClientHandler&lt;br/&gt;UseDefaultCredentials (NTLM/Kerberos)&quot;]
+    HS -- &quot;otherwise&quot; --&gt; SH[&quot;SocketsHttpHandler&lt;br/&gt;HTTP/2-3, no auto-redirect,&lt;br/&gt;proxy from IProxyResolver&quot;]
+    HC --&gt; TLS[&quot;ITrustStore.Validate&lt;br/&gt;(corporate roots, named failures)&quot;]
+    SH --&gt; TLS
+    REC -.-&gt; NS[&quot;NetworkStatement.Render&lt;br/&gt;(SEC-06 audit report)&quot;]</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>EgressGate.Authorize(destination, purpose, initiator, profile):
+    verdict ← policy.Evaluate(destination, purpose)
+    record  ← EgressRecord(host, port, scheme, purpose, initiator, now, verdict)
+    _records.Enqueue(record);  raise Recorded(record)
+    if not verdict.IsAllowed → throw EgressDeniedException(reason)
+    return cached HttpMessageInvoker for HandlerFor(profile)
+
+UserIntentEgressPolicy.Evaluate(destination, purpose):
+    if purpose = UpdateCheck and not opted in → Deny(&quot;Update checking is off…&quot;)
+    if purpose ∈ {TargetRequest, ProxyAutoConfig} → Allow      // the URL is the user&#x27;s intent
+    if Registered[destination.Host] = purpose → Allow          // e.g. an auth authority
+    → Deny(&quot;No configuration in this profile names HOST as a …&quot;)
+
+EgressGate.Build(profile):                                     // cached per HandlerProfile
+    if profile.UseIntegratedAuth → HttpClientHandler(UseDefaultCredentials, client certs,
+                                                     proxy, trust-store validation)
+    else → SocketsHttpHandler(AllowAutoRedirect = false, proxy = IProxyResolver result,
+                              client certs, trust-store validation)</code></pre></div>
+<p><code>ArchitectureTests</code> fails the build if any other code constructs a handler or socket, so the network statement can't under-report what the process does.</p>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>Core/Privacy/EgressGate.cs</code></li><li class="chip"><code>Core/Privacy/IEgressPolicy.cs</code></li><li class="chip"><code>Core/Privacy/EgressPurpose.cs</code></li><li class="chip"><code>Core/Privacy/NetworkStatement.cs</code></li></ul></div>
+</section>
+<section class="card" id="f5-response-rendering"><h2><span class="flow-tag">F5</span>Response rendering<a class="anchor" href="#f5-response-rendering" aria-label="Link to this section">#</a></h2>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="flowchart TD
+    R[&quot;ExchangeResult.Response&quot;] --&gt; B{&quot;BodyPath set?&lt;br/&gt;(spilled to disk)&quot;}
+    B -- yes --&gt; MM[&quot;ResponseBuffer.FromFile&lt;br/&gt;memory-mapped view&quot;]
+    B -- no --&gt; BY[&quot;ResponseBuffer.FromBytes&quot;]
+    MM --&gt; T{&quot;length &gt; 4 MB?&quot;}
+    BY --&gt; T
+    T -- yes --&gt; BAN[&quot;IsTruncatedForDisplay&lt;br/&gt;banner + &#x27;Load all&#x27;&quot;]
+    T --&gt; J{&quot;Content-Type looks like JSON?&quot;}
+    J -- yes --&gt; IDX[&quot;JsonIndex.TryBuild(span)&lt;br/&gt;Utf8JsonReader → flat struct array&quot;]
+    IDX --&gt; TREE[&quot;JsonTreeProjection&lt;br/&gt;expansion bitset, linear walk&quot;]
+    TREE --&gt; ROWS[&quot;virtualized rows (JsonTreeView)&quot;]
+    J -- no --&gt; RAW[&quot;Raw text&quot;]
+    SRCH[&quot;Search box&quot;] --&gt; BS[&quot;BodySearch.Find over raw bytes&quot;]
+    BS --&gt; NC[&quot;BodySearch.NodeContaining&lt;br/&gt;→ RevealAndFindRow → ScrollToRow&quot;]
+    MODES[&quot;Mode: Pretty · Raw formatted · Raw&quot;] --&gt; ROWS">flowchart TD
+    R[&quot;ExchangeResult.Response&quot;] --&gt; B{&quot;BodyPath set?&lt;br/&gt;(spilled to disk)&quot;}
+    B -- yes --&gt; MM[&quot;ResponseBuffer.FromFile&lt;br/&gt;memory-mapped view&quot;]
+    B -- no --&gt; BY[&quot;ResponseBuffer.FromBytes&quot;]
+    MM --&gt; T{&quot;length &gt; 4 MB?&quot;}
+    BY --&gt; T
+    T -- yes --&gt; BAN[&quot;IsTruncatedForDisplay&lt;br/&gt;banner + &#x27;Load all&#x27;&quot;]
+    T --&gt; J{&quot;Content-Type looks like JSON?&quot;}
+    J -- yes --&gt; IDX[&quot;JsonIndex.TryBuild(span)&lt;br/&gt;Utf8JsonReader → flat struct array&quot;]
+    IDX --&gt; TREE[&quot;JsonTreeProjection&lt;br/&gt;expansion bitset, linear walk&quot;]
+    TREE --&gt; ROWS[&quot;virtualized rows (JsonTreeView)&quot;]
+    J -- no --&gt; RAW[&quot;Raw text&quot;]
+    SRCH[&quot;Search box&quot;] --&gt; BS[&quot;BodySearch.Find over raw bytes&quot;]
+    BS --&gt; NC[&quot;BodySearch.NodeContaining&lt;br/&gt;→ RevealAndFindRow → ScrollToRow&quot;]
+    MODES[&quot;Mode: Pretty · Raw formatted · Raw&quot;] --&gt; ROWS</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>ResponseViewModel(result).Load():
+    RequestHeaders  ← result.Request.Headers as rows
+    if no response → return                        // transport failure: status text explains
+    ResponseHeaders ← response.Headers as rows
+    buffer ← response.BodyPath ? ResponseBuffer.FromFile(path) : FromBytes(body)
+    IsTruncatedForDisplay ← buffer.Length &gt; 4 MB
+    if LooksLikeJson(contentType):
+        Index ← JsonIndex.TryBuild(first 4 MB span)
+        Tree  ← new JsonTreeProjection(Index)
+
+Search(term):  Matches ← BodySearch.Find(span, term)        // never walks the tree
+MoveToMatch(i): node ← BodySearch.NodeContaining(Index, offset[i])
+                row  ← Tree.RevealAndFindRow(node); ScrollToRow(row)
+Mode = RawFormatted → JsonSerializer re-indent (cached; falls back to raw if cut mid-token)
+LoadEverything()    → rebuild Index/Tree over the whole buffer
+Release()           → drop buffer + index (called when the tab suspends or closes)</code></pre></div>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>App/ViewModels/ResponseViewModel.cs</code></li><li class="chip"><code>Core/Rendering/ResponseBuffer.cs</code></li><li class="chip"><code>Core/Rendering/JsonIndex.cs</code></li><li class="chip"><code>Core/Rendering/JsonTreeProjection.cs</code></li><li class="chip"><code>Core/Rendering/BodySearch.cs</code></li></ul></div>
+</section>
+<section class="card" id="f6-save-save-all-and-the-close-tab-guard"><h2><span class="flow-tag">F6</span>Save, Save all, and the close-tab guard<a class="anchor" href="#f6-save-save-all-and-the-close-tab-guard" aria-label="Link to this section">#</a></h2>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="flowchart TD
+    S1[&quot;Ctrl+S / Save button&quot;] --&gt; ST[&quot;SaveTabAsync(active)&quot;]
+    S2[&quot;Save all&quot;] --&gt; LOOP[&quot;for each dirty tab&quot;] --&gt; ST
+    C1[&quot;× / Ctrl+W / middle-click&quot;] --&gt; RC{&quot;tab.IsDirty?&quot;}
+    RC -- no --&gt; CL[&quot;Tabs.Close(tab)&quot;]
+    RC -- yes --&gt; DLG[&quot;ConfirmCloseTab dialog&quot;]
+    DLG -- &quot;Save and close&quot; --&gt; ST2[&quot;SaveTabAsync&quot;] --&gt; CL
+    DLG -- &quot;Don&#x27;t save&quot; --&gt; CL
+    ST --&gt; F{&quot;collection folder open?&quot;}
+    F -- no --&gt; KEEP[&quot;return false, tab stays dirty&quot;]
+    F -- yes --&gt; W[&quot;flush Auth panel (active tab only)&lt;br/&gt;CollectionSerializer.SerializeRequest&lt;br/&gt;write requests/FOLDER/NAME.request.yaml&quot;]
+    W --&gt; CLEAN[&quot;RequestPath set · IsDirty = false&quot;]
+    CLEAN --&gt; RE[&quot;Tree.OpenFolderAsync (once per batch)&quot;]">flowchart TD
+    S1[&quot;Ctrl+S / Save button&quot;] --&gt; ST[&quot;SaveTabAsync(active)&quot;]
+    S2[&quot;Save all&quot;] --&gt; LOOP[&quot;for each dirty tab&quot;] --&gt; ST
+    C1[&quot;× / Ctrl+W / middle-click&quot;] --&gt; RC{&quot;tab.IsDirty?&quot;}
+    RC -- no --&gt; CL[&quot;Tabs.Close(tab)&quot;]
+    RC -- yes --&gt; DLG[&quot;ConfirmCloseTab dialog&quot;]
+    DLG -- &quot;Save and close&quot; --&gt; ST2[&quot;SaveTabAsync&quot;] --&gt; CL
+    DLG -- &quot;Don&#x27;t save&quot; --&gt; CL
+    ST --&gt; F{&quot;collection folder open?&quot;}
+    F -- no --&gt; KEEP[&quot;return false, tab stays dirty&quot;]
+    F -- yes --&gt; W[&quot;flush Auth panel (active tab only)&lt;br/&gt;CollectionSerializer.SerializeRequest&lt;br/&gt;write requests/FOLDER/NAME.request.yaml&quot;]
+    W --&gt; CLEAN[&quot;RequestPath set · IsDirty = false&quot;]
+    CLEAN --&gt; RE[&quot;Tree.OpenFolderAsync (once per batch)&quot;]</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>SaveTabAsync(tab):
+    if no state or Tree.Folder is null → return false
+    if tab is active → state.Auth ← RequestAuth.ToReferenceAsync()
+            // other tabs already flushed their auth when the user switched away
+    yaml ← new CollectionSerializer().SerializeRequest(state.ToDefinition())
+    path ← state.RequestPath
+           ?? Tree.Folder/requests/{state.Folder}/{CollectionFormat.FileNameFor(def)}
+    create the directory; write yaml
+    state.RequestPath ← path;  state.IsDirty ← tab.IsDirty ← false
+    return true
+
+SaveAllAsync():
+    dirty ← tabs where IsDirty;  if none → &quot;Nothing to save&quot;
+    saved ← count of SaveTabAsync(t) = true
+    if saved &gt; 0 → Tree.OpenFolderAsync(Folder)          // once for the whole batch
+    status ← &quot;Saved N requests&quot; or &quot;Saved N of M — open a collection folder to save the rest&quot;
+
+RequestCloseTab(tab):
+    if not tab.IsDirty → Tabs.Close(tab)
+    else PendingCloseTab ← tab; Dialog ← ConfirmCloseTab</code></pre></div>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>App/ViewModels/MainWindowViewModel.cs</code><span class="chip-note"><code>SaveTabAsync</code>, <code>SaveAllAsync</code>, <code>RequestCloseTab</code>, <code>ConfirmCloseTab*</code></span></li><li class="chip"><code>Core/Collections/CollectionSerializer.cs</code></li></ul></div>
+</section>
+<section class="card" id="f7-tab-lifecycle-and-suspension"><h2><span class="flow-tag">F7</span>Tab lifecycle and suspension<a class="anchor" href="#f7-tab-lifecycle-and-suspension" aria-label="Link to this section">#</a></h2>
+<p>A tab is a serializable POCO (<code>TabState</code>), never a live control tree. Only 8 tabs stay live; the rest are serialized to a compact JSON string held <strong>in memory</strong>, and their response buffers are released. The whole session goes to SQLite when the window closes, and comes back after the next launch's first paint.</p>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="stateDiagram-v2
+    [*] --&gt; Live: Tabs.Open(state)
+    Live --&gt; Active: Select
+    Active --&gt; Live: another tab selected
+    Live --&gt; Suspended: EnforceBudget() and more than 8 live,&lt;br/&gt;least recently active first
+    Suspended --&gt; Active: Select → Activate()&lt;br/&gt;(deserialize, under 50 ms)
+    Active --&gt; Closed: Close
+    Live --&gt; Closed: Close
+    Suspended --&gt; Closed: Close
+    Closed --&gt; [*]
+
+    state &quot;Window closing&quot; as WC
+    Active --&gt; WC: OnClosing → SaveSessionAsync
+    WC --&gt; SQLite: tab_state rows (ordinal, payload)
+    SQLite --&gt; Suspended: next launch, RestoreSessionAsync&lt;br/&gt;(every restored tab starts suspended)">stateDiagram-v2
+    [*] --&gt; Live: Tabs.Open(state)
+    Live --&gt; Active: Select
+    Active --&gt; Live: another tab selected
+    Live --&gt; Suspended: EnforceBudget() and more than 8 live,&lt;br/&gt;least recently active first
+    Suspended --&gt; Active: Select → Activate()&lt;br/&gt;(deserialize, under 50 ms)
+    Active --&gt; Closed: Close
+    Live --&gt; Closed: Close
+    Suspended --&gt; Closed: Close
+    Closed --&gt; [*]
+
+    state &quot;Window closing&quot; as WC
+    Active --&gt; WC: OnClosing → SaveSessionAsync
+    WC --&gt; SQLite: tab_state rows (ordinal, payload)
+    SQLite --&gt; Suspended: next launch, RestoreSessionAsync&lt;br/&gt;(every restored tab starts suspended)</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>TabCollection.Select(tab):
+    previous.IsActive ← false;  Active ← tab
+    tab.Activate()                 // rehydrate from _suspendedPayload if suspended
+    EnforceBudget()
+
+EnforceBudget():
+    if Items.Count ≤ LiveTabBudget(8) → return
+    live ← non-suspended tabs ordered by LastActive desc
+    for tab in live.Skip(8): if tab ≠ Active → tab.Suspend()
+
+TabViewModel.Suspend():
+    _suspendedPayload ← JsonSerializer.Serialize(State);  State ← null
+    Response.Release();  Response ← null      // drops the large buffer + index
+    // Title, Method and VerbBrush stay resident, so the strip looks identical
+
+SaveSessionAsync():   DELETE tab_state; INSERT one row per tab (ordinal, payload)
+RestoreSessionAsync(): read payloads in order → TabViewModel.Deserialize → Suspend()
+                       replace the placeholder tab only if something was restored
+                       (SQLite errors → CrashLog, empty session)</code></pre></div>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>App/ViewModels/TabCollection.cs</code></li><li class="chip"><code>App/ViewModels/TabViewModel.cs</code></li><li class="chip"><code>App/ViewModels/TabState.cs</code></li><li class="chip"><code>App/Views/MainWindow.axaml.cs</code></li><li class="chip"><code>Core/Storage/CourierDatabase.cs</code></li></ul></div>
+</section>
+<section class="card" id="f8-import-from-code-scan-diff-apply"><h2><span class="flow-tag">F8</span>Import from code: scan → diff → apply<a class="anchor" href="#f8-import-from-code-scan-diff-apply" aria-label="Link to this section">#</a></h2>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="sequenceDiagram
+    autonumber
+    actor U as User
+    participant VM as MainWindowViewModel
+    participant SR as SyncReviewViewModel
+    participant CW as CollectionWriter
+    participant SS as SolutionScanner
+    participant CS as ControllerSyntaxScanner
+    participant MA as MinimalApiScanner
+    participant TS as TypeShapeIndex
+    participant ER as EnvironmentReader
+    participant D as ScanDiff
+
+    U-&gt;&gt;VM: Import from code (menu / palette / first-run)
+    VM-&gt;&gt;SR: SourcePath, OutputPath = source/collections/NAME
+    VM-&gt;&gt;CW: ReadCache(output) → previous hashes + endpoints
+    VM-&gt;&gt;SS: Task.Run(Scan(source, hashes, endpoints))
+    SS-&gt;&gt;SS: enumerate *.cs (skip bin, obj, .git, …), SHA-256 each
+    SS-&gt;&gt;SS: carry forward endpoints from unchanged files
+    loop each changed file
+        SS-&gt;&gt;CS: ScanFile (attribute-routed controllers)
+        SS-&gt;&gt;MA: ScanFile (MapGet / MapGroup / MapMethods)
+    end
+    SS-&gt;&gt;TS: Build(all files) → DTO shapes
+    SS-&gt;&gt;SS: Deduplicate, ResolveBody → SyntaxSampleBodyGenerator
+    SS-&gt;&gt;ER: Read(root) → launchSettings, appsettings, Postman env
+    SS--&gt;&gt;VM: ScanResult(endpoints, unresolved, environments)
+    VM-&gt;&gt;D: Compare(previous generated, current)
+    D--&gt;&gt;SR: added / changed / removed
+    SR--&gt;&gt;U: live diff + unresolved list with reasons
+    U-&gt;&gt;VM: Apply
+    VM-&gt;&gt;CW: Write(output) → endpoints.generated.yaml (+ empty overlay if missing) + cache
+    VM-&gt;&gt;CW: WriteEnvironments(output, secrets) → environments/*.env.yaml (new only)
+    VM-&gt;&gt;CW: WriteCollectionDefinition(output, name, source) (only if missing)
+    VM-&gt;&gt;VM: EnsureDefaultEnvironment (Local with empty baseUrl)
+    VM-&gt;&gt;VM: Tree.OpenFolderAsync(output) and prime environments + auth">sequenceDiagram
+    autonumber
+    actor U as User
+    participant VM as MainWindowViewModel
+    participant SR as SyncReviewViewModel
+    participant CW as CollectionWriter
+    participant SS as SolutionScanner
+    participant CS as ControllerSyntaxScanner
+    participant MA as MinimalApiScanner
+    participant TS as TypeShapeIndex
+    participant ER as EnvironmentReader
+    participant D as ScanDiff
+
+    U-&gt;&gt;VM: Import from code (menu / palette / first-run)
+    VM-&gt;&gt;SR: SourcePath, OutputPath = source/collections/NAME
+    VM-&gt;&gt;CW: ReadCache(output) → previous hashes + endpoints
+    VM-&gt;&gt;SS: Task.Run(Scan(source, hashes, endpoints))
+    SS-&gt;&gt;SS: enumerate *.cs (skip bin, obj, .git, …), SHA-256 each
+    SS-&gt;&gt;SS: carry forward endpoints from unchanged files
+    loop each changed file
+        SS-&gt;&gt;CS: ScanFile (attribute-routed controllers)
+        SS-&gt;&gt;MA: ScanFile (MapGet / MapGroup / MapMethods)
+    end
+    SS-&gt;&gt;TS: Build(all files) → DTO shapes
+    SS-&gt;&gt;SS: Deduplicate, ResolveBody → SyntaxSampleBodyGenerator
+    SS-&gt;&gt;ER: Read(root) → launchSettings, appsettings, Postman env
+    SS--&gt;&gt;VM: ScanResult(endpoints, unresolved, environments)
+    VM-&gt;&gt;D: Compare(previous generated, current)
+    D--&gt;&gt;SR: added / changed / removed
+    SR--&gt;&gt;U: live diff + unresolved list with reasons
+    U-&gt;&gt;VM: Apply
+    VM-&gt;&gt;CW: Write(output) → endpoints.generated.yaml (+ empty overlay if missing) + cache
+    VM-&gt;&gt;CW: WriteEnvironments(output, secrets) → environments/*.env.yaml (new only)
+    VM-&gt;&gt;CW: WriteCollectionDefinition(output, name, source) (only if missing)
+    VM-&gt;&gt;VM: EnsureDefaultEnvironment (Local with empty baseUrl)
+    VM-&gt;&gt;VM: Tree.OpenFolderAsync(output) and prime environments + auth</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>RunScanAsync():
+    cache   ← CollectionWriter.ReadCache(OutputPath)               // null on first scan
+    result  ← await Task.Run(Scanner.Scan(SourcePath, cache?.Hashes, cache?.Endpoints))
+    current ← result.Endpoints.map(e → e.ToRequest(&quot;baseUrl&quot;))
+    changes ← ScanDiff.Compare(LoadPreviousGenerated(OutputPath), current)
+    SyncReview.Load(changes, result, collectionName)
+
+SolutionScanner.Scan(path, previousHashes, previousEndpoints):
+    files  ← *.cs under ResolveRoot(path), excluding bin/obj/node_modules/.git/…
+    hashes ← SHA-256 per file
+    if incremental: endpoints ← previous endpoints from unchanged files; toParse ← changed
+    for file in toParse:
+        text ← read (IOException → Unresolved &quot;could not be read&quot;)
+        for r in ControllerSyntaxScanner.ScanFile ∪ MinimalApiScanner.ScanFile:
+            ScannedEndpoint → endpoints;  UnresolvedEndpoint → unresolved
+    shapes ← TypeShapeIndex.Build(all files)      // DTOs often live in another file
+    return ScanResult{ Deduplicate(endpoints).map(ResolveBody(·, shapes)), unresolved,
+                       EnvironmentReader.Read(root), Tier = Syntax, hashes, elapsed }
+
+ControllerSyntaxScanner.ScanController(class):
+    prefix ← [Route] on the class; version ← ApiVersionReader; auth ← [Authorize]/[AllowAnonymous]
+    for public method with Http* verbs:
+        for each verb attribute:
+            template not a literal → Unresolved(&quot;…not a literal. Load the solution…&quot;)
+            template ← RouteResolver.Combine(prefix, action, controller, action, version)
+            empty and no [Route] → Unresolved(&quot;depends on conventional routing&quot;)
+            params ← SyntaxHelpers.ReadParameters (path/query/[FromBody] type)
+            emit ScannedEndpoint(EndpointIdentity.Compute(verb, template, declaringType), …)
+
+ResolveBody(endpoint, shapes):
+    if endpoint.BodyTypeName and SyntaxSampleBodyGenerator.Generate(shapes, type, namespace)
+        → endpoint with SampleBody (honours [Required], [Range], [StringLength], enums,
+          [JsonPropertyName])
+    else → add note &quot;Load the solution to generate a sample body…&quot;   // reported, not guessed
+
+ApplyScanAsync():
+    CollectionWriter.Write(output, result, &quot;baseUrl&quot;)    // generated file only; overlay untouched
+    CollectionWriter.WriteEnvironments(output, result, SecretStore)   // skips existing files;
+                                                                      // secrets → vault, names → file
+    CollectionWriter.WriteCollectionDefinition(output, name, SourcePath)   // skips if exists
+    EnsureDefaultEnvironment(output)
+    open the folder in the tree; prime Environments and RequestAuth</code></pre></div>
+<p><strong>What a scan never does</strong>: it never drops an endpoint without saying why, and it never writes <code>endpoints.overlay.yaml</code>, an existing <code>*.env.yaml</code>, or an existing <code>collection.yaml</code>.</p>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>App/ViewModels/MainWindowViewModel.cs</code><span class="chip-note"><code>ImportFromCodeAsync</code>, <code>RunScanAsync</code>, <code>ApplyScanAsync</code></span></li><li class="chip"><code>App/ViewModels/SyncReviewViewModel.cs</code></li><li class="chip"><code>Scanner/SolutionScanner.cs</code></li><li class="chip"><code>Scanner/Syntax/*</code></li><li class="chip"><code>Scanner/Routing/*</code></li><li class="chip"><code>Scanner/EnvironmentReader.cs</code></li><li class="chip"><code>Scanner/Diffing/ScanDiff.cs</code></li><li class="chip"><code>Scanner/CollectionWriter.cs</code></li></ul></div>
+</section>
+<section class="card" id="f9-generated-overlay-layering"><h2><span class="flow-tag">F9</span>Generated / overlay layering<a class="anchor" href="#f9-generated-overlay-layering" aria-label="Link to this section">#</a></h2>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="flowchart LR
+    G[&quot;endpoints.generated.yaml&lt;br/&gt;(scanner writes, every build)&quot;] --&gt; J{&quot;GeneratedOverlayJoiner.Join&lt;br/&gt;match on EndpointIdentity&quot;}
+    O[&quot;endpoints.overlay.yaml&lt;br/&gt;(user&#x27;s edits, never touched by scanner)&quot;] --&gt; J
+    J -- &quot;id in both&quot; --&gt; A[&quot;generated.Clone() + overlay edits&lt;br/&gt;Provenance = GeneratedEdited&quot;]
+    J -- &quot;only generated&quot; --&gt; B[&quot;as generated&lt;br/&gt;Provenance = Generated&quot;]
+    J -- &quot;only overlay, has edits&quot; --&gt; C[&quot;orphan request&lt;br/&gt;&#x27;no longer in the source,&lt;br/&gt;your payload is kept&#x27;&quot;]
+    ID[&quot;EndpointIdentity.Compute(&lt;br/&gt;verb, NormaliseRoute(template),&lt;br/&gt;declaringType) → hash&quot;] -.-&gt; J">flowchart LR
+    G[&quot;endpoints.generated.yaml&lt;br/&gt;(scanner writes, every build)&quot;] --&gt; J{&quot;GeneratedOverlayJoiner.Join&lt;br/&gt;match on EndpointIdentity&quot;}
+    O[&quot;endpoints.overlay.yaml&lt;br/&gt;(user&#x27;s edits, never touched by scanner)&quot;] --&gt; J
+    J -- &quot;id in both&quot; --&gt; A[&quot;generated.Clone() + overlay edits&lt;br/&gt;Provenance = GeneratedEdited&quot;]
+    J -- &quot;only generated&quot; --&gt; B[&quot;as generated&lt;br/&gt;Provenance = Generated&quot;]
+    J -- &quot;only overlay, has edits&quot; --&gt; C[&quot;orphan request&lt;br/&gt;&#x27;no longer in the source,&lt;br/&gt;your payload is kept&#x27;&quot;]
+    ID[&quot;EndpointIdentity.Compute(&lt;br/&gt;verb, NormaliseRoute(template),&lt;br/&gt;declaringType) → hash&quot;] -.-&gt; J</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>EndpointIdentity.Compute(verb, routeTemplate, declaringType):
+    hash( upper(verb), NormaliseRoute(template) /* constraints and defaults stripped */, type )
+    // method name and body are NOT inputs, so renaming a C# method keeps the identity
+
+GeneratedOverlayJoiner.Join(generated, overlay):
+    byId ← overlay entries by Id
+    for e in generated:
+        if byId has e.Id → Apply(e, edits)     // name, url, body, path params, query,
+                                                // headers (by name), auth, scripts,
+                                                // assertions, settings (inherit)
+        else             → e
+    for orphan in overlay entries not matched and HasEdits:
+        → request with UnresolvedNotes &quot;This endpoint is no longer in the source…&quot;</code></pre></div>
+<p>Changing what goes into <code>EndpointIdentity</code> orphans every overlay that already exists, so treat it as a file format change (see <code>COLLECTION_FORMAT.md</code> §4).</p>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>Core/Collections/EndpointIdentity.cs</code></li><li class="chip"><code>Core/Collections/GeneratedOverlay.cs</code></li></ul></div>
+</section>
+<section class="card" id="f10-environments-and-secrets"><h2><span class="flow-tag">F10</span>Environments and secrets<a class="anchor" href="#f10-environments-and-secrets" aria-label="Link to this section">#</a></h2>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="flowchart TD
+    UI[&quot;Settings → Environments / title-bar picker&quot;] --&gt; ROW[&quot;variable row: name + value&quot;]
+    ROW --&gt; CLS{&quot;SecretPatterns.Classify(value, name)&lt;br/&gt;looks secret?&quot;}
+    CLS -- yes --&gt; WARN[&quot;inline SEC-03 warning with Reason&lt;br/&gt;+ &#x27;Move to local&#x27; action&quot;]
+    WARN --&gt; MTL[&quot;MoveToLocal(): value held in memory&lt;br/&gt;as PendingLocalValue, row.IsLocal = true&quot;]
+    CLS -- no --&gt; SH
+    ROW --&gt; SAVE[&quot;SaveAsync&quot;]
+    SAVE --&gt; SH[&quot;shared → definition.Shared[name] = value&quot;]
+    SAVE --&gt; LO[&quot;local → definition.LocalNames += name&quot;]
+    LO --&gt; SEC[&quot;ISecretStore.SetAsync(&lt;br/&gt;env/ENVNAME/VAR, value)&quot;]
+    LO --&gt; REN[&quot;renamed local var: copy secret to new key,&lt;br/&gt;delete old key&quot;]
+    SH --&gt; FILE[&quot;CollectionLoader.SaveEnvironment&lt;br/&gt;environments/ENVNAME.env.yaml&quot;]
+    LO --&gt; FILE
+    FILE -. &quot;never contains a local value&quot; .-&gt; GIT[(&quot;git&quot;)]
+    SEC -. &quot;Windows Credential Manager&quot; .-&gt; VAULT[(&quot;vault&quot;)]">flowchart TD
+    UI[&quot;Settings → Environments / title-bar picker&quot;] --&gt; ROW[&quot;variable row: name + value&quot;]
+    ROW --&gt; CLS{&quot;SecretPatterns.Classify(value, name)&lt;br/&gt;looks secret?&quot;}
+    CLS -- yes --&gt; WARN[&quot;inline SEC-03 warning with Reason&lt;br/&gt;+ &#x27;Move to local&#x27; action&quot;]
+    WARN --&gt; MTL[&quot;MoveToLocal(): value held in memory&lt;br/&gt;as PendingLocalValue, row.IsLocal = true&quot;]
+    CLS -- no --&gt; SH
+    ROW --&gt; SAVE[&quot;SaveAsync&quot;]
+    SAVE --&gt; SH[&quot;shared → definition.Shared[name] = value&quot;]
+    SAVE --&gt; LO[&quot;local → definition.LocalNames += name&quot;]
+    LO --&gt; SEC[&quot;ISecretStore.SetAsync(&lt;br/&gt;env/ENVNAME/VAR, value)&quot;]
+    LO --&gt; REN[&quot;renamed local var: copy secret to new key,&lt;br/&gt;delete old key&quot;]
+    SH --&gt; FILE[&quot;CollectionLoader.SaveEnvironment&lt;br/&gt;environments/ENVNAME.env.yaml&quot;]
+    LO --&gt; FILE
+    FILE -. &quot;never contains a local value&quot; .-&gt; GIT[(&quot;git&quot;)]
+    SEC -. &quot;Windows Credential Manager&quot; .-&gt; VAULT[(&quot;vault&quot;)]</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>EnvironmentsViewModel.SaveAsync():
+    require Name
+    definition ← { Name }
+    for row in Variables with a name:
+        if not row.IsLocal: definition.Shared[row.Name] ← row.SharedValue
+        else:
+            definition.LocalNames += row.Name
+            if row.PendingLocalValue → SecretStore.Set(env/{Name}/{row.Name}, value)
+            elif renamed            → move secret from old key to new key
+    CollectionLoader.SaveEnvironment(folder, definition)
+    SaveStatus ← what happened, or why it didn&#x27;t        // mirrored to the status bar
+
+At send time: VariableResolver reads Shared directly, and LocalNames via
+ISecretStore.GetAsync(Environment.SecretKeyFor(name)).</code></pre></div>
+<p>Renaming or deleting a whole environment isn't supported yet: the secret keys embed the environment name, and the migration that would move them hasn't been built.</p>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>App/ViewModels/SettingsViewModels.cs</code><span class="chip-note"><code>EnvironmentsViewModel</code></span></li><li class="chip"><code>Core/Collections/EnvironmentDefinition.cs</code></li><li class="chip"><code>Core/Collections/CollectionLoader.cs</code></li><li class="chip"><code>Core/Privacy/SecretPatterns.cs</code></li><li class="chip"><code>Platform.Windows/Secrets/WindowsSecretStore.cs</code></li></ul></div>
+</section>
+<section class="card" id="f11-curl-import-and-export"><h2><span class="flow-tag">F11</span>curl import and export<a class="anchor" href="#f11-curl-import-and-export" aria-label="Link to this section">#</a></h2>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="flowchart LR
+    P1[&quot;Paste into URL box&lt;br/&gt;(CurlImporter.LooksLikeCurl)&quot;] --&gt; IC[&quot;ImportCurl(text)&quot;]
+    P2[&quot;Menu: Paste curl from clipboard&quot;] --&gt; IC
+    IC --&gt; PARSE[&quot;CurlImporter.Parse&lt;br/&gt;method, URL, -H, -d/--data*, -F, -u&quot;]
+    PARSE --&gt; SQ[&quot;SplitQuery → Params grid&quot;]
+    PARSE --&gt; NOTE{&quot;stripped -u password or&lt;br/&gt;rejected --insecure?&quot;}
+    NOTE -- yes --&gt; BAN[&quot;CapsuleOrigin banner lists UnresolvedNotes&quot;]
+    PARSE --&gt; TAB[&quot;Tabs.Open(TabState.FromDefinition)&quot;]
+
+    TAB2[&quot;Active tab&quot;] --&gt; EXP[&quot;RequestExporters.ToCurl&lt;br/&gt;(Windows line continuation on Windows)&quot;]
+    EXP --&gt; CLIP[&quot;Clipboard: {{vars}} kept, never resolved&quot;]
+    CLI[&quot;courier export --format curl|http|csharp|python&quot;] --&gt; EXP2[&quot;RequestExporters.ToCurl / ToHttpFile /&lt;br/&gt;ToCSharp / ToPython&quot;]">flowchart LR
+    P1[&quot;Paste into URL box&lt;br/&gt;(CurlImporter.LooksLikeCurl)&quot;] --&gt; IC[&quot;ImportCurl(text)&quot;]
+    P2[&quot;Menu: Paste curl from clipboard&quot;] --&gt; IC
+    IC --&gt; PARSE[&quot;CurlImporter.Parse&lt;br/&gt;method, URL, -H, -d/--data*, -F, -u&quot;]
+    PARSE --&gt; SQ[&quot;SplitQuery → Params grid&quot;]
+    PARSE --&gt; NOTE{&quot;stripped -u password or&lt;br/&gt;rejected --insecure?&quot;}
+    NOTE -- yes --&gt; BAN[&quot;CapsuleOrigin banner lists UnresolvedNotes&quot;]
+    PARSE --&gt; TAB[&quot;Tabs.Open(TabState.FromDefinition)&quot;]
+
+    TAB2[&quot;Active tab&quot;] --&gt; EXP[&quot;RequestExporters.ToCurl&lt;br/&gt;(Windows line continuation on Windows)&quot;]
+    EXP --&gt; CLIP[&quot;Clipboard: {{vars}} kept, never resolved&quot;]
+    CLI[&quot;courier export --format curl|http|csharp|python&quot;] --&gt; EXP2[&quot;RequestExporters.ToCurl / ToHttpFile /&lt;br/&gt;ToCSharp / ToPython&quot;]</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>ImportCurl(command):
+    request ← CurlImporter.Parse(command)     // split query string; detect body kind;
+                                              // drop -u password and --insecure, with a note
+    state ← TabState.FromDefinition(request, CollectionName, EnvironmentName)
+    if request.UnresolvedNotes → state.Capsule ← CapsuleOrigin(&quot;pasted curl&quot;, notes)
+    Tabs.Open(state)
+
+CopyAsCurlAsync():
+    curl ← RequestExporters.ToCurl(activeState.ToDefinition(), windowsLineContinuation)
+    clipboard.SetText(curl)                   // {{name}} references are left for the recipient</code></pre></div>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>Core/Import/CurlImporter.cs</code></li><li class="chip"><code>Core/Export/RequestExporters.cs</code></li><li class="chip"><code>App/Views/RequestEditorView.axaml.cs</code></li><li class="chip"><code>Cli/Commands/ExportCommand.cs</code></li></ul></div>
+</section>
+<section class="card" id="f12-capsule-export-and-inspect"><h2><span class="flow-tag">F12</span>Capsule export and inspect<a class="anchor" href="#f12-capsule-export-and-inspect" aria-label="Link to this section">#</a></h2>
+<p>A capsule is a zip holding one failing exchange, with credentials replaced by placeholders and a manifest. The user has to see the redaction review before anything is written.</p>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="sequenceDiagram
+    autonumber
+    actor U as User
+    participant VM as MainWindowViewModel
+    participant CX as CapsuleExportViewModel
+    participant RE as RedactionEngine
+    participant D as CapsuleExportDialog
+    participant CA as CapsuleArchive
+
+    U-&gt;&gt;VM: Export capsule (needs a response on the active tab)
+    VM-&gt;&gt;CX: new(Redaction, result, env, traceId, version)
+    CX-&gt;&gt;CX: CapsuleProjection.FromExchange(result)
+    CX-&gt;&gt;RE: Review(request, response)
+    RE--&gt;&gt;CX: Included / Replaced / Flagged
+    CX--&gt;&gt;U: review screen (env name shown, values never included)
+    loop each flagged item
+        U-&gt;&gt;CX: Redact or Keep (no third option)
+    end
+    U-&gt;&gt;D: Save
+    D-&gt;&gt;D: file picker → stream
+    D-&gt;&gt;CX: WriteAsync(stream)
+    CX-&gt;&gt;RE: Apply(request, response, review, decisions)
+    RE--&gt;&gt;CX: redacted request, response, RedactionReport
+    CX-&gt;&gt;CA: WriteAsync(stream, manifest, steps, report)
+    CA-&gt;&gt;CA: zip: manifest.json, redactions.json,&lt;br/&gt;request.json, response.json, README">sequenceDiagram
+    autonumber
+    actor U as User
+    participant VM as MainWindowViewModel
+    participant CX as CapsuleExportViewModel
+    participant RE as RedactionEngine
+    participant D as CapsuleExportDialog
+    participant CA as CapsuleArchive
+
+    U-&gt;&gt;VM: Export capsule (needs a response on the active tab)
+    VM-&gt;&gt;CX: new(Redaction, result, env, traceId, version)
+    CX-&gt;&gt;CX: CapsuleProjection.FromExchange(result)
+    CX-&gt;&gt;RE: Review(request, response)
+    RE--&gt;&gt;CX: Included / Replaced / Flagged
+    CX--&gt;&gt;U: review screen (env name shown, values never included)
+    loop each flagged item
+        U-&gt;&gt;CX: Redact or Keep (no third option)
+    end
+    U-&gt;&gt;D: Save
+    D-&gt;&gt;D: file picker → stream
+    D-&gt;&gt;CX: WriteAsync(stream)
+    CX-&gt;&gt;RE: Apply(request, response, review, decisions)
+    RE--&gt;&gt;CX: redacted request, response, RedactionReport
+    CX-&gt;&gt;CA: WriteAsync(stream, manifest, steps, report)
+    CA-&gt;&gt;CA: zip: manifest.json, redactions.json,&lt;br/&gt;request.json, response.json, README</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>CapsuleExportViewModel(engine, result, env, traceId, version):
+    step    ← CapsuleProjection.FromExchange(result)
+    review  ← engine.Review(step.Request, step.Response)
+              // Included as-is · Replaced automatically (known secrets, patterns, field names)
+              // · Flagged for a human decision (personal data and the like)
+    Flagged ← review.Flagged as decision rows (undecided = redacted)
+
+WriteAsync(stream):
+    decisions ← flagged.Location → Keep
+    (req, resp, report) ← engine.Apply(request, response, review, decisions)
+    CapsuleArchive.WriteAsync(stream, manifest{title, env name, traceId, version, note},
+                              [step(req, resp)], report)
+
+courier capsule inspect FILE [--redactions]:
+    capsule ← CapsuleArchive.ReadAsync(file);  print the manifest, steps and, if asked, redactions</code></pre></div>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>App/ViewModels/CapsuleExportViewModel.cs</code></li><li class="chip"><code>App/Views/Dialogs/CapsuleExportDialog.axaml.cs</code></li><li class="chip"><code>Core/Capsules/RedactionEngine.cs</code></li><li class="chip"><code>Core/Capsules/CapsuleArchive.cs</code></li><li class="chip"><code>Cli/Commands/CapsuleCommand.cs</code></li></ul></div>
+</section>
+<section class="card" id="f13-cli-courier-run"><h2><span class="flow-tag">F13</span>CLI <code>courier run</code><a class="anchor" href="#f13-cli-courier-run" aria-label="Link to this section">#</a></h2>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="sequenceDiagram
+    autonumber
+    participant CI as CI / terminal
+    participant RC as RunCommand
+    participant L as CollectionLoader
+    participant P as EgressPolicy
+    participant CR as CollectionRunner
+    participant SR as ScriptRunner (Jint)
+    participant RP as RequestPreparer
+    participant EX as RequestExecutor
+    participant AE as AssertionEvaluator
+
+    CI-&gt;&gt;RC: courier run DIR -e ENV [-d data] [--junit] [--json] [--bail] [--filter]
+    RC-&gt;&gt;L: Load(folder), LoadEnvironment(ENV)
+    RC-&gt;&gt;RC: apply --filter (0 requests → exit 2)
+    RC-&gt;&gt;RC: build RunPlan (vars, headers, settings, auth, data rows)
+    RC-&gt;&gt;P: Register(host of each absolute URL, TargetRequest)
+    RC-&gt;&gt;CR: RunAsync(plan)
+    loop each data row (one iteration)
+        loop each request
+            CR-&gt;&gt;SR: RunPreRequest(script, context)
+            alt pre-request script failed
+                CR--&gt;&gt;CR: result with script error (not sent)
+            else
+                CR-&gt;&gt;RP: PrepareAsync(…, AuthPlan)
+                alt prepare failed or needs sign-in
+                    CR--&gt;&gt;CR: result with error (&quot;use client credentials for unattended runs&quot;)
+                else
+                    CR-&gt;&gt;EX: SendAsync
+                    CR-&gt;&gt;SR: RunPostResponse(script, context, result)
+                    CR-&gt;&gt;AE: Evaluate(request.Assertions, result)
+                end
+            end
+            CR--&gt;&gt;RC: RequestCompleted event → prints a pass/FAIL line
+        end
+    end
+    CR--&gt;&gt;RC: RunReport
+    RC-&gt;&gt;RC: write --json / --junit
+    RC--&gt;&gt;CI: exit code (non-zero on any failure)">sequenceDiagram
+    autonumber
+    participant CI as CI / terminal
+    participant RC as RunCommand
+    participant L as CollectionLoader
+    participant P as EgressPolicy
+    participant CR as CollectionRunner
+    participant SR as ScriptRunner (Jint)
+    participant RP as RequestPreparer
+    participant EX as RequestExecutor
+    participant AE as AssertionEvaluator
+
+    CI-&gt;&gt;RC: courier run DIR -e ENV [-d data] [--junit] [--json] [--bail] [--filter]
+    RC-&gt;&gt;L: Load(folder), LoadEnvironment(ENV)
+    RC-&gt;&gt;RC: apply --filter (0 requests → exit 2)
+    RC-&gt;&gt;RC: build RunPlan (vars, headers, settings, auth, data rows)
+    RC-&gt;&gt;P: Register(host of each absolute URL, TargetRequest)
+    RC-&gt;&gt;CR: RunAsync(plan)
+    loop each data row (one iteration)
+        loop each request
+            CR-&gt;&gt;SR: RunPreRequest(script, context)
+            alt pre-request script failed
+                CR--&gt;&gt;CR: result with script error (not sent)
+            else
+                CR-&gt;&gt;RP: PrepareAsync(…, AuthPlan)
+                alt prepare failed or needs sign-in
+                    CR--&gt;&gt;CR: result with error (&quot;use client credentials for unattended runs&quot;)
+                else
+                    CR-&gt;&gt;EX: SendAsync
+                    CR-&gt;&gt;SR: RunPostResponse(script, context, result)
+                    CR-&gt;&gt;AE: Evaluate(request.Assertions, result)
+                end
+            end
+            CR--&gt;&gt;RC: RequestCompleted event → prints a pass/FAIL line
+        end
+    end
+    CR--&gt;&gt;RC: RunReport
+    RC-&gt;&gt;RC: write --json / --junit
+    RC--&gt;&gt;CI: exit code (non-zero on any failure)</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>RunCommand.ExecuteAsync(folder, env, data, json, junit, bail, filter):
+    collection ← CollectionLoader.Load(folder)
+    requests   ← filter ? where name/url contains filter : all
+    if none → stderr; return 2
+    environment ← env ? CollectionLoader.LoadEnvironment(folder, env) : null
+    plan ← RunPlan{ requests, environment, Shared vars, collection vars/headers/settings,
+                    Data = DataFileReader.Read(csv|tsv|json), StopOnFailure = bail,
+                    CollectionAuth, AuthProfiles = AuthProfileStore.Load, AuthRegistry }
+    for r in requests with an absolute URL: EgressPolicy.Register(uri, TargetRequest)
+    report ← new CollectionRunner(Executor, Variables).RunAsync(plan)
+    write report.ToJson() / report.ToJUnitXml() if asked
+    return report.ExitCode
+
+CollectionRunner.RunAsync(plan):
+    rows ← plan.Data or [ {} ]                              // no data = one iteration
+    for row: context ← { Environment, CollectionVariables, Variables = row }   // live dicts
+        for request:
+            pre ← ScriptRunner.RunPreRequest(request.Scripts.PreRequest, context)
+            if pre failed → record error; continue (or stop if bail)
+            scopes ← { Request = context.Variables, Environment = plan.Environment,
+                       Collection = context.CollectionVariables, Global = context.Environment }
+            prep ← RequestPreparer.PrepareAsync(…, AuthPlan(AuthResolver.Resolve(…)))
+            if failed → record error (interactive sign-in explained for CI)
+            result ← Executor.SendAsync(prep.Request)
+            post   ← ScriptRunner.RunPostResponse(script, context, result)   // can set vars
+            asserts ← AssertionEvaluator.Evaluate(request.Assertions, result)
+            raise RequestCompleted</code></pre></div>
+<p>In the CLI, secrets come from <code>COURIER_SECRET_&lt;SCOPE&gt;_&lt;NAME&gt;</code> environment variables. The CLI's secret store refuses writes on purpose.</p>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>Cli/Commands/RunCommand.cs</code></li><li class="chip"><code>Cli/Services/CliServices.cs</code></li><li class="chip"><code>Scripting/Running/CollectionRunner.cs</code></li><li class="chip"><code>Scripting/Assertions/AssertionEvaluator.cs</code></li></ul></div>
+</section>
+<section class="card" id="f14-cli-scan-export-and-the-msbuild-task"><h2><span class="flow-tag">F14</span>CLI <code>scan</code>, <code>export</code>, and the MSBuild task<a class="anchor" href="#f14-cli-scan-export-and-the-msbuild-task" aria-label="Link to this section">#</a></h2>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="flowchart TD
+    subgraph Build[&quot;dotnet build (consumer project)&quot;]
+        TGT[&quot;Courier.MSBuild.targets&lt;br/&gt;Target CourierScan AfterTargets=Build&lt;br/&gt;if CourierScanEnabled and not design-time&quot;]
+        TGT --&gt; TASK[&quot;CourierScanTask.Execute&quot;]
+    end
+    TASK -- &quot;spawn: courier scan SRC --output DIR&lt;br/&gt;--json TEMP --base-url-variable baseUrl&quot; --&gt; SC
+    subgraph Cli[&quot;courier CLI&quot;]
+        SC[&quot;ScanCommand&quot;] --&gt; SS[&quot;SolutionScanner.Scan&quot;]
+        SS --&gt; W[&quot;CollectionWriter.Write / WriteEnvironments /&lt;br/&gt;WriteCollectionDefinition&quot;]
+        SC --&gt; J[&quot;JSON report&quot;]
+        EXP[&quot;ExportCommand&quot;] --&gt; LD[&quot;CollectionLoader.Load&quot;] --&gt; RX[&quot;RequestExporters&quot;]
+    end
+    J --&gt; TASK
+    TASK --&gt; LOG{&quot;exit code, counts&quot;}
+    LOG -- &quot;unresolved &gt; 0&quot; --&gt; WARN[&quot;MSBuild warning:&lt;br/&gt;N endpoint(s) could not be fully derived&quot;]
+    LOG -- &quot;timeout / non-zero&quot; --&gt; ERR[&quot;error, or a warning if&lt;br/&gt;TreatScanErrorsAsWarnings&quot;]
+    LOG -- &quot;ok&quot; --&gt; MSG[&quot;N endpoints written to DIR&quot;]">flowchart TD
+    subgraph Build[&quot;dotnet build (consumer project)&quot;]
+        TGT[&quot;Courier.MSBuild.targets&lt;br/&gt;Target CourierScan AfterTargets=Build&lt;br/&gt;if CourierScanEnabled and not design-time&quot;]
+        TGT --&gt; TASK[&quot;CourierScanTask.Execute&quot;]
+    end
+    TASK -- &quot;spawn: courier scan SRC --output DIR&lt;br/&gt;--json TEMP --base-url-variable baseUrl&quot; --&gt; SC
+    subgraph Cli[&quot;courier CLI&quot;]
+        SC[&quot;ScanCommand&quot;] --&gt; SS[&quot;SolutionScanner.Scan&quot;]
+        SS --&gt; W[&quot;CollectionWriter.Write / WriteEnvironments /&lt;br/&gt;WriteCollectionDefinition&quot;]
+        SC --&gt; J[&quot;JSON report&quot;]
+        EXP[&quot;ExportCommand&quot;] --&gt; LD[&quot;CollectionLoader.Load&quot;] --&gt; RX[&quot;RequestExporters&quot;]
+    end
+    J --&gt; TASK
+    TASK --&gt; LOG{&quot;exit code, counts&quot;}
+    LOG -- &quot;unresolved &gt; 0&quot; --&gt; WARN[&quot;MSBuild warning:&lt;br/&gt;N endpoint(s) could not be fully derived&quot;]
+    LOG -- &quot;timeout / non-zero&quot; --&gt; ERR[&quot;error, or a warning if&lt;br/&gt;TreatScanErrorsAsWarnings&quot;]
+    LOG -- &quot;ok&quot; --&gt; MSG[&quot;N endpoints written to DIR&quot;]</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>CourierScanTask.Execute():
+    if SourcePath missing → Report(&quot;nothing was scanned&quot;)
+    run ToolPath &quot;scan SRC --output DIR --json TEMP --base-url-variable VAR&quot;
+        (no window, redirected output, WorkingDirectory = SourcePath)
+    if it doesn&#x27;t exit within TimeoutSeconds → kill; Report(timeout)
+    log stdout lines; if exit ≠ 0 → Report(stderr)
+    ReadCounts(TEMP) → EndpointCount, UnresolvedCount
+    if UnresolvedCount &gt; 0 → LogWarning (shown in the IDE error list)
+
+ScanCommand(path, --output, --json, --base-url-variable, --fail-on-unresolved):
+    result ← SolutionScanner.Scan(path, cached hashes if --output has a cache)
+    if --output: CollectionWriter.Write + WriteEnvironments (secret writes are reported, not thrown)
+                 + WriteCollectionDefinition
+    print a summary; write the JSON report; exit non-zero on unresolved if asked
+
+ExportCommand(folder, --format curl|http|csharp|python, --request filter, --output):
+    for request in CollectionLoader.Load(folder).Requests matching filter:
+        emit RequestExporters.To{Curl|HttpFile|CSharp|Python}(request)</code></pre></div>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>MSBuild/CourierScanTask.cs</code></li><li class="chip"><code>MSBuild/build/Courier.MSBuild.targets</code></li><li class="chip"><code>Cli/Commands/ScanCommand.cs</code></li><li class="chip"><code>Cli/Commands/ExportCommand.cs</code></li></ul></div>
+</section>
+<section class="card" id="f15-scripting-sandbox"><h2><span class="flow-tag">F15</span>Scripting sandbox<a class="anchor" href="#f15-scripting-sandbox" aria-label="Link to this section">#</a></h2>
+<p>Scripts run only in <code>courier run</code> (through <code>CollectionRunner</code>). The desktop Send path doesn't run scripts or evaluate assertions yet.</p>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="flowchart LR
+    S[&quot;request.Scripts.PreRequest /&lt;br/&gt;PostResponse&quot;] --&gt; SR[&quot;ScriptRunner.Run&quot;]
+    SR --&gt; SB[&quot;new ScriptSandbox per script&lt;br/&gt;(never shared)&quot;]
+    SB --&gt; LIM[&quot;Jint options: Strict, TimeoutInterval,&lt;br/&gt;LimitMemory, MaxStatements,&lt;br/&gt;LimitRecursion, no CLR interop&quot;]
+    SB --&gt; STRIP[&quot;remove globals that reach the host&quot;]
+    SR --&gt; PM[&quot;PmApi: pm.environment, pm.variables,&lt;br/&gt;pm.collectionVariables, pm.globals,&lt;br/&gt;pm.response, pm.test, pm.expect&quot;]
+    PM -- &quot;Expose(&#x27;pm&#x27;), Expose(&#x27;postman&#x27;)&quot; --&gt; SB
+    SB --&gt; OUT[&quot;ScriptRun: Succeeded, Error,&lt;br/&gt;console, Unsupported pm.* calls, Tests&quot;]
+    PM -. &quot;writes go to live dictionaries&quot; .-&gt; CTX[&quot;ScriptContext&lt;br/&gt;(visible to the next request)&quot;]">flowchart LR
+    S[&quot;request.Scripts.PreRequest /&lt;br/&gt;PostResponse&quot;] --&gt; SR[&quot;ScriptRunner.Run&quot;]
+    SR --&gt; SB[&quot;new ScriptSandbox per script&lt;br/&gt;(never shared)&quot;]
+    SB --&gt; LIM[&quot;Jint options: Strict, TimeoutInterval,&lt;br/&gt;LimitMemory, MaxStatements,&lt;br/&gt;LimitRecursion, no CLR interop&quot;]
+    SB --&gt; STRIP[&quot;remove globals that reach the host&quot;]
+    SR --&gt; PM[&quot;PmApi: pm.environment, pm.variables,&lt;br/&gt;pm.collectionVariables, pm.globals,&lt;br/&gt;pm.response, pm.test, pm.expect&quot;]
+    PM -- &quot;Expose(&#x27;pm&#x27;), Expose(&#x27;postman&#x27;)&quot; --&gt; SB
+    SB --&gt; OUT[&quot;ScriptRun: Succeeded, Error,&lt;br/&gt;console, Unsupported pm.* calls, Tests&quot;]
+    PM -. &quot;writes go to live dictionaries&quot; .-&gt; CTX[&quot;ScriptContext&lt;br/&gt;(visible to the next request)&quot;]</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>ScriptRunner.Run(script, context, result?):
+    if script is blank → ScriptRun.NotRun
+    sandbox ← new ScriptSandbox(limits)            // Default, or ForRunner in collection runs
+    pm ← new PmApi(engine, result, context.Environment, context.Variables,
+                   context.Globals, context.CollectionVariables, sandbox.UnsupportedCalls)
+    sandbox.Expose(&quot;pm&quot;, pm);  sandbox.Expose(&quot;postman&quot;, pm)
+    outcome ← sandbox.Run(script)                  // returns a result, never throws to the caller
+    return ScriptRun(outcome.Succeeded, outcome.Error, outcome.Console,
+                     outcome.Unsupported, pm.Results)</code></pre></div>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>Scripting/ScriptRunner.cs</code></li><li class="chip"><code>Scripting/Sandbox/ScriptSandbox.cs</code></li><li class="chip"><code>Scripting/Pm/PmApi.cs</code></li><li class="chip"><code>Scripting/Pm/PmExpectation.cs</code></li></ul></div>
+</section>
+<section class="card" id="f16-history"><h2><span class="flow-tag">F16</span>History<a class="anchor" href="#f16-history" aria-label="Link to this section">#</a></h2>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="flowchart LR
+    SEND[&quot;SendAsync completes&quot;] --&gt; REC[&quot;HistoryStore.RecordAsync(result, env,&lt;br/&gt;collection, requestId, SecretValues)&quot;]
+    REC --&gt; RED[&quot;Redact(headers, SecretValues)&lt;br/&gt;(auth token never stored in plaintext)&quot;]
+    RED --&gt; DB[(&quot;SQLite history table&quot;)]
+    START[&quot;Startup job &#x27;history&#x27;&quot;] --&gt; LOAD[&quot;LoadHistoryAsync → QueryAsync / CountAsync&quot;]
+    LOAD --&gt; DB
+    PANE[&quot;History pane / inspector &#x27;this tab&#x27;&quot;] --&gt; Q[&quot;QueryAsync (filtered in SQL)&quot;] --&gt; DB
+    Q --&gt; PAY[&quot;GetPayloadAsync(id)&quot;]">flowchart LR
+    SEND[&quot;SendAsync completes&quot;] --&gt; REC[&quot;HistoryStore.RecordAsync(result, env,&lt;br/&gt;collection, requestId, SecretValues)&quot;]
+    REC --&gt; RED[&quot;Redact(headers, SecretValues)&lt;br/&gt;(auth token never stored in plaintext)&quot;]
+    RED --&gt; DB[(&quot;SQLite history table&quot;)]
+    START[&quot;Startup job &#x27;history&#x27;&quot;] --&gt; LOAD[&quot;LoadHistoryAsync → QueryAsync / CountAsync&quot;]
+    LOAD --&gt; DB
+    PANE[&quot;History pane / inspector &#x27;this tab&#x27;&quot;] --&gt; Q[&quot;QueryAsync (filtered in SQL)&quot;] --&gt; DB
+    Q --&gt; PAY[&quot;GetPayloadAsync(id)&quot;]</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>HistoryStore.RecordAsync(result, env, collection, requestId, secretValues):
+    secrets ← set(secretValues)
+    INSERT history(started, method, url, path, status, outcome, elapsed, bytes,
+                   env, collection, requestId, traceId, failureKind, failureMessage,
+                   Redact(request.Headers, secrets), request.Body,
+                   Redact(response.Headers, secrets), response.Body, response.BodyPath)
+    return new row id</code></pre></div>
+<p><code>PruneAsync(retention)</code> exists, but nothing in the app or CLI calls it yet.</p>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>Core/Storage/HistoryStore.cs</code></li><li class="chip"><code>Core/Storage/CourierDatabase.cs</code></li><li class="chip"><code>App/Views/HistoryPaneView.axaml</code></li></ul></div>
+</section>
+<section class="card" id="f17-telemetry-reconstruction-library-only"><h2><span class="flow-tag">F17</span>Telemetry reconstruction (library only)<a class="anchor" href="#f17-telemetry-reconstruction-library-only" aria-label="Link to this section">#</a></h2>
+<p>The libraries are implemented, but no menu, button or CLI command reaches them yet. <code>TelemetryReconstructViewModel</code> and its dialog exist, but they aren't wired to these sources.</p>
+<figure class="diagram"><div class="diagram-scroll"><pre class="mermaid" data-src="flowchart LR
+    Q[&quot;search: trace id / route / time&quot;] --&gt; SRC{&quot;ITelemetrySource&quot;}
+    SRC --&gt; AI[&quot;AppInsightsSource&lt;br/&gt;(Azure.Monitor.Query)&quot;]
+    SRC --&gt; DD[&quot;DatadogSource&quot;]
+    AI --&gt; TR[&quot;TelemetryRequest&quot;]
+    DD --&gt; TR
+    TR --&gt; RR[&quot;RequestReconstructor.Rebuild&lt;br/&gt;→ ReconstructedRequest&lt;br/&gt;(Missing list, Describe())&quot;]
+    RR -.-&gt; TAB[&quot;would open as a tab (not wired)&quot;]
+    CAP[&quot;capsule&quot;] -.-&gt; ADO[&quot;WorkItemAttachmentClient&lt;br/&gt;attach to Azure DevOps (not wired)&quot;]
+    AI -. &quot;EgressGate.CreateClient&lt;br/&gt;TelemetryBackend&quot; .-&gt; G{{&quot;EgressGate&quot;}}
+    DD -.-&gt; G
+    ADO -. &quot;WorkItemTracker&quot; .-&gt; G">flowchart LR
+    Q[&quot;search: trace id / route / time&quot;] --&gt; SRC{&quot;ITelemetrySource&quot;}
+    SRC --&gt; AI[&quot;AppInsightsSource&lt;br/&gt;(Azure.Monitor.Query)&quot;]
+    SRC --&gt; DD[&quot;DatadogSource&quot;]
+    AI --&gt; TR[&quot;TelemetryRequest&quot;]
+    DD --&gt; TR
+    TR --&gt; RR[&quot;RequestReconstructor.Rebuild&lt;br/&gt;→ ReconstructedRequest&lt;br/&gt;(Missing list, Describe())&quot;]
+    RR -.-&gt; TAB[&quot;would open as a tab (not wired)&quot;]
+    CAP[&quot;capsule&quot;] -.-&gt; ADO[&quot;WorkItemAttachmentClient&lt;br/&gt;attach to Azure DevOps (not wired)&quot;]
+    AI -. &quot;EgressGate.CreateClient&lt;br/&gt;TelemetryBackend&quot; .-&gt; G{{&quot;EgressGate&quot;}}
+    DD -.-&gt; G
+    ADO -. &quot;WorkItemTracker&quot; .-&gt; G</pre></div></figure>
+<div class="pseudo"><div class="pseudo-head"><span>Pseudocode</span><button class="copy" type="button">Copy</button></div><pre><code>RequestReconstructor.Rebuild(telemetryRequest):
+    method, url, headers, body (whatever the backend logged) → ReconstructedRequest
+    Missing ← the parts the backend did not hold
+    IsComplete ← Missing is empty;  Describe() explains the fidelity (TEL-05)</code></pre></div>
+<div class="keyfiles"><span class="keyfiles-label">Key files</span><ul><li class="chip"><code>Telemetry/ITelemetrySource.cs</code></li><li class="chip"><code>Telemetry/AppInsights/AppInsightsSource.cs</code></li><li class="chip"><code>Telemetry/Datadog/DatadogSource.cs</code></li><li class="chip"><code>Telemetry/Reconstruction/RequestReconstructor.cs</code></li><li class="chip"><code>Telemetry/AzureDevOps/WorkItemAttachmentClient.cs</code></li></ul></div>
+</section>
+<section class="card" id="4-implementation-status"><h2><span class="num">4</span>Implementation status<a class="anchor" href="#4-implementation-status" aria-label="Link to this section">#</a></h2>
+<p>Checked against the code by looking for a caller in <code>Courier.App</code> or <code>Courier.Cli</code>, not taken from the README.</p>
+<div class="table-scroll"><table><thead><tr><th>Area</th><th>Status</th><th>Reached from</th></tr></thead><tbody><tr><td>Send request with variables, path params, query, headers</td><td class="st st-ok">✅ wired</td><td>App Send, <code>courier run</code></td></tr><tr><td>Auth: request / collection / profile, Bearer, Basic, Entra (client credentials, auth code)</td><td class="st st-ok">✅ wired</td><td>App Send, Auth panel, Settings, <code>courier run</code></td></tr><tr><td>"Get token" + JWT decode, failure popup</td><td class="st st-ok">✅ wired</td><td>Auth panel, profile editor</td></tr><tr><td>Auth providers ApiKey, AWS SigV4, Integrated Windows</td><td class="st st-part">◐ library only</td><td>not in either <code>AuthProviderRegistry</code></td></tr><tr><td>Egress gate (policy, records, handler selection)</td><td class="st st-ok">✅ wired</td><td>every send, every token call</td></tr><tr><td>Network statement report (<code>NetworkStatement.Render</code>)</td><td class="st st-part">◐ view-model method, no UI caller yet</td><td><code>MainWindowViewModel.RenderNetworkStatement</code></td></tr><tr><td>Response rendering (Pretty / Raw formatted / Raw, search, 4 MB banner)</td><td class="st st-ok">✅ wired</td><td>response pane</td></tr><tr><td>Response Tests, Server, Preview tabs</td><td class="st st-no">⛔ disabled with tooltip</td><td>—</td></tr><tr><td>Save / Save all / close guard</td><td class="st st-ok">✅ wired</td><td>Ctrl+S, Save button, menu, tab close</td></tr><tr><td>Tab suspension + session restore</td><td class="st st-ok">✅ wired</td><td>tab strip, startup job, window close</td></tr><tr><td>Import from code (controllers, minimal APIs, DTO sample bodies, environments, Postman env exports)</td><td class="st st-ok">✅ wired</td><td>menu, palette, first-run, <code>courier scan</code>, MSBuild</td></tr><tr><td>Semantic scan tier (<code>DtoSampleGenerator</code>, MSBuildWorkspace)</td><td class="st st-part">◐ library only</td><td>—</td></tr><tr><td>Generated/overlay join</td><td class="st st-ok">✅ wired</td><td>every collection load</td></tr><tr><td>Environments editor + local secrets</td><td class="st st-ok">✅ wired (no rename/delete of a whole environment)</td><td>Settings, title-bar picker</td></tr><tr><td>curl import/export; http/C#/Python export</td><td class="st st-ok">✅ wired (curl in app; all four in CLI)</td><td>URL box, menu, <code>courier export</code></td></tr><tr><td>Capsule export / inspect</td><td class="st st-ok">✅ export in app, inspect in CLI</td><td>response toolbar, <code>courier capsule inspect</code></td></tr><tr><td>Scripts + assertions</td><td class="st st-part">◐ CLI only</td><td><code>courier run</code></td></tr><tr><td>History record/query</td><td class="st st-ok">✅ wired; prune not called</td><td>Send, history pane</td></tr><tr><td>Postman collection importer</td><td class="st st-part">◐ library only</td><td>—</td></tr><tr><td>Telemetry sources, reconstruction, Azure DevOps</td><td class="st st-part">◐ library only</td><td>—</td></tr><tr><td>OpenAPI import</td><td class="st st-no">⛔ not built</td><td>—</td></tr></tbody></table></div>
+</section>
+  </main>
+</div>
+
+<dialog class="viewer" id="viewer">
+  <div class="viewer-head"><span id="viewerTitle">Diagram</span><button class="btn" type="button" id="viewerClose">Close</button></div>
+  <div class="viewer-body" id="viewerBody"></div>
+</dialog>
+
+<script>
+(function () {
+  // ---------- TOC grouping: insert a "Flows" label before the first flow ----------
+  var toc = document.getElementById('toc');
+  var firstFlow = toc.querySelector('.toc-flow');
+  if (firstFlow) {
+    var g = document.createElement('li');
+    g.className = 'toc-group'; g.textContent = 'Flows';
+    toc.insertBefore(g, firstFlow);
+    var status = Array.prototype.find.call(toc.querySelectorAll('.toc-sec'), function (li) {
+      return li.compareDocumentPosition(firstFlow) & Node.DOCUMENT_POSITION_PRECEDING;
+    });
+    if (status) {
+      var g2 = document.createElement('li');
+      g2.className = 'toc-group'; g2.textContent = 'Status';
+      toc.insertBefore(g2, status);
+    }
+  }
+
+  // ---------- mobile menu ----------
+  var side = document.getElementById('side');
+  var menuBtn = document.getElementById('menuBtn');
+  menuBtn.addEventListener('click', function () {
+    var open = side.classList.toggle('open');
+    menuBtn.setAttribute('aria-expanded', String(open));
+  });
+  toc.addEventListener('click', function (e) {
+    if (e.target.closest('a')) { side.classList.remove('open'); menuBtn.setAttribute('aria-expanded', 'false'); }
+  });
+
+  // ---------- active TOC entry ----------
+  var links = {};
+  toc.querySelectorAll('a').forEach(function (a) { links[a.getAttribute('href').slice(1)] = a; });
+  var targets = Array.prototype.slice.call(document.querySelectorAll('section.card[id], h3[id]'));
+  function updateActive() {
+    var current = null;
+    for (var i = 0; i < targets.length; i++) {
+      if (targets[i].getBoundingClientRect().top < 120) current = targets[i]; else break;
+    }
+    Object.keys(links).forEach(function (k) { links[k].classList.remove('active'); });
+    if (current && links[current.id]) links[current.id].classList.add('active');
+  }
+  window.addEventListener('scroll', updateActive, { passive: true });
+  updateActive();
+
+  // ---------- pseudocode: light highlighting + copy ----------
+  document.querySelectorAll('.pseudo code').forEach(function (code) {
+    var raw = code.textContent;
+    code.dataset.raw = raw;
+    var esc = function (s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+    code.innerHTML = raw.split('\n').map(function (line) {
+      var idx = line.indexOf('//');
+      var head = idx >= 0 ? line.slice(0, idx) : line;
+      var tail = idx >= 0 ? line.slice(idx) : '';
+      head = esc(head)
+        .replace(/\b(if|else|elif|for|in|return|try|catch|finally|loop|repeat|await|on|while|require|enqueue|post|emit|run|stop|continue)\b/g, '<span class="kw">$1</span>')
+        .replace(/(←|→|⊕|⟵)/g, '<span class="ar">$1</span>');
+      return head + (tail ? '<span class="cm">' + esc(tail) + '</span>' : '');
+    }).join('\n');
+  });
+  document.querySelectorAll('.pseudo .copy').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var raw = btn.closest('.pseudo').querySelector('code').dataset.raw;
+      var done = function () { btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy'; }, 1400); };
+      if (navigator.clipboard) navigator.clipboard.writeText(raw).then(done, function () {});
+    });
+  });
+
+  // ---------- theme ----------
+  var THEME_KEY = 'courier-arch-theme';
+  var themeBtn = document.getElementById('themeBtn');
+  var pref = 'system';
+  try { pref = localStorage.getItem(THEME_KEY) || 'system'; } catch (e) {}
+  function applyPref() {
+    if (pref === 'system') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', pref);
+    themeBtn.textContent = 'Theme: ' + pref;
+  }
+  applyPref();
+  themeBtn.addEventListener('click', function () {
+    pref = pref === 'system' ? 'light' : pref === 'light' ? 'dark' : 'system';
+    try { localStorage.setItem(THEME_KEY, pref); } catch (e) {}
+    applyPref();
+    if (window.__renderDiagrams) window.__renderDiagrams();
+  });
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+      if (pref === 'system' && window.__renderDiagrams) window.__renderDiagrams();
+    });
+  }
+
+  // ---------- full-size viewer ----------
+  var viewer = document.getElementById('viewer');
+  document.getElementById('viewerClose').addEventListener('click', function () { viewer.close(); });
+  viewer.addEventListener('click', function (e) { if (e.target === viewer) viewer.close(); });
+  window.__openViewer = function (fig) {
+    var svg = fig.querySelector('svg');
+    if (!svg) return;
+    var body = document.getElementById('viewerBody');
+    body.innerHTML = '';
+    var clone = svg.cloneNode(true);
+    clone.removeAttribute('style');
+    var vb = svg.viewBox && svg.viewBox.baseVal;
+    if (vb && vb.width) { clone.setAttribute('width', vb.width); clone.setAttribute('height', vb.height); }
+    body.appendChild(clone);
+    var card = fig.closest('section');
+    var h = card && card.querySelector('h2');
+    document.getElementById('viewerTitle').textContent = h ? h.textContent.replace('#', '').trim() : 'Diagram';
+    viewer.showModal();
+  };
+})();
+</script>
+
+<script type="module">
+const figures = Array.from(document.querySelectorAll('figure.diagram'));
+let mermaid;
+try {
+  mermaid = (await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')).default;
+} catch (e) {
+  // Offline or blocked: the Mermaid source stays visible as text, which is still readable.
+  figures.forEach(f => {
+    const note = document.createElement('div');
+    note.className = 'diagram-error';
+    note.textContent = 'Diagram renderer could not be loaded (offline?). Showing the Mermaid source.';
+    f.appendChild(note);
+  });
+}
+
+function token(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+let run = 0;
+async function renderAll() {
+  if (!mermaid) return;
+  const mine = ++run;
+  const dark = token('color-scheme') === 'dark';
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: 'base',
+    fontFamily: '"IBM Plex Sans", system-ui, sans-serif',
+    themeVariables: {
+      darkMode: dark,
+      background: token('--surface-2'),
+      primaryColor: token('--surface'),
+      primaryBorderColor: token('--border-strong'),
+      primaryTextColor: token('--text'),
+      secondaryColor: token('--accent-soft'),
+      tertiaryColor: token('--surface-2'),
+      lineColor: token('--text-3'),
+      textColor: token('--text'),
+      mainBkg: token('--surface'),
+      nodeBorder: token('--border-strong'),
+      clusterBkg: token('--surface'),
+      clusterBorder: token('--border'),
+      edgeLabelBackground: token('--surface-2'),
+      actorBkg: token('--surface'),
+      actorBorder: token('--border-strong'),
+      actorTextColor: token('--text'),
+      actorLineColor: token('--border-strong'),
+      signalColor: token('--text-2'),
+      signalTextColor: token('--text'),
+      labelBoxBkgColor: token('--surface'),
+      labelBoxBorderColor: token('--border-strong'),
+      labelTextColor: token('--text'),
+      loopTextColor: token('--text-2'),
+      noteBkgColor: token('--accent-soft'),
+      noteBorderColor: token('--accent'),
+      noteTextColor: token('--text'),
+      activationBkgColor: token('--accent-soft'),
+      sequenceNumberColor: token('--surface'),
+      fontSize: '13px'
+    },
+    flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'basis' },
+    sequence: { useMaxWidth: false, mirrorActors: false, showSequenceNumbers: true },
+    state: { useMaxWidth: false }
+  });
+
+  for (const [i, fig] of figures.entries()) {
+    if (mine !== run) return;
+    const pre = fig.querySelector('pre.mermaid');
+    fig.querySelector('.diagram-error')?.remove();
+    try {
+      // An explicit, unique id per diagram and per render pass: Mermaid's own ids are
+      // timestamp-based, and diagrams rendered in the same millisecond collide.
+      const { svg } = await mermaid.render(`courier-diagram-${i}-${mine}`, pre.dataset.src);
+      if (mine !== run) return;
+      pre.innerHTML = svg;
+      pre.setAttribute('data-processed', 'true');
+    } catch (err) {
+      pre.removeAttribute('data-processed');
+      pre.textContent = pre.dataset.src;
+      const note = document.createElement('div');
+      note.className = 'diagram-error';
+      note.textContent = 'This diagram failed to render: ' + (err && err.message ? err.message.split(String.fromCharCode(10))[0] : err);
+      fig.appendChild(note);
+    }
+    if (!fig.querySelector('.diagram-tools') && fig.querySelector('svg')) {
+      const tools = document.createElement('div');
+      tools.className = 'diagram-tools';
+      const b = document.createElement('button');
+      b.className = 'btn'; b.type = 'button'; b.textContent = 'Full size';
+      b.addEventListener('click', () => window.__openViewer(fig));
+      tools.appendChild(b);
+      fig.appendChild(tools);
+    }
+  }
+}
+window.__renderDiagrams = renderAll;
+renderAll();
+</script>
+</body>
+</html>
