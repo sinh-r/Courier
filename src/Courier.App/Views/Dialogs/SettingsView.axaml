@@ -117,8 +117,8 @@
                       IsVisible="{Binding AuthProfileEditor.ShowsEntraFields}">
                 <StackPanel Spacing="8">
                   <Grid ColumnDefinitions="90,*">
-                    <TextBlock Grid.Column="0" Classes="meta" Text="Tenant" />
-                    <TextBox Grid.Column="1" Classes="mono" PlaceholderText="contoso.onmicrosoft.com"
+                    <TextBlock Grid.Column="0" Classes="meta" Text="Tenant ID" />
+                    <TextBox Grid.Column="1" Classes="mono" PlaceholderText="00000000-0000-0000-0000-000000000000"
                              Text="{Binding AuthProfileEditor.Tenant}" />
                   </Grid>
                   <Grid ColumnDefinitions="90,*">
@@ -227,8 +227,8 @@
                   <StackPanel Spacing="8" IsVisible="{Binding CollectionAuth.IsInline}">
 
                     <Grid ColumnDefinitions="90,*" IsVisible="{Binding CollectionAuth.ShowsEntraFields}">
-                      <TextBlock Grid.Column="0" Classes="meta" Text="Tenant" VerticalAlignment="Center" />
-                      <TextBox Grid.Column="1" Classes="mono" PlaceholderText="contoso.onmicrosoft.com"
+                      <TextBlock Grid.Column="0" Classes="meta" Text="Tenant ID" VerticalAlignment="Center" />
+                      <TextBox Grid.Column="1" Classes="mono" PlaceholderText="00000000-0000-0000-0000-000000000000"
                                 Text="{Binding CollectionAuth.Tenant}" />
                     </Grid>
 

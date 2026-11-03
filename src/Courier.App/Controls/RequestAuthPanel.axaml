@@ -37,8 +37,8 @@
     <StackPanel Spacing="8" IsVisible="{Binding RequestAuth.IsInline}">
 
       <Grid ColumnDefinitions="120,*" IsVisible="{Binding RequestAuth.ShowsEntraFields}">
-        <TextBlock Grid.Column="0" Classes="meta" Text="Tenant" VerticalAlignment="Center" />
-        <TextBox Grid.Column="1" Classes="mono" PlaceholderText="contoso.onmicrosoft.com"
+        <TextBlock Grid.Column="0" Classes="meta" Text="Tenant ID" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Classes="mono" PlaceholderText="00000000-0000-0000-0000-000000000000"
                   Text="{Binding RequestAuth.Tenant}" />
       </Grid>
 

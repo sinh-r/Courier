@@ -21,7 +21,7 @@ public sealed class AuthProfile
 
     // --- Entra and generic OIDC ---
 
-    /// <summary>Tenant id or domain, e.g. contoso.onmicrosoft.com.</summary>
+    /// <summary>Entra tenant ID — a GUID, e.g. 72f988bf-86f1-41af-91ab-2d7cd011db47.</summary>
     public string? Tenant { get; set; }
 
     public string? ClientId { get; set; }
@@ -75,6 +75,33 @@ public sealed class AuthProfile
     /// <summary>True when the profile needs a secret the user has not supplied yet.</summary>
     public bool RequiresSecret => Kind is AuthKind.EntraClientCredentials or AuthKind.Basic
         or AuthKind.ApiKey or AuthKind.Bearer or AuthKind.AwsSigV4 or AuthKind.OAuth2ClientCredentials;
+
+    /// <summary>
+    /// Why <see cref="Tenant"/> cannot be used to sign in, or null when it can. Only Entra kinds
+    /// without an explicit <see cref="Authority"/> are checked. A blank tenant falls back to
+    /// "organizations", which client credentials does not accept: an app-only token is always for
+    /// one specific tenant.
+    /// </summary>
+    public string? TenantProblem()
+    {
+        if (Authority is not null
+            || Kind is not (AuthKind.EntraWindowsSignIn or AuthKind.EntraClientCredentials
+                or AuthKind.EntraDeviceCode or AuthKind.EntraAuthorizationCode))
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(Tenant))
+        {
+            return Kind == AuthKind.EntraClientCredentials
+                ? "Client credentials needs a Tenant ID (the directory's GUID, from the app registration's Overview page)."
+                : null;
+        }
+
+        return Guid.TryParse(Tenant.Trim(), out _)
+            ? null
+            : $"Tenant ID must be a GUID, e.g. 72f988bf-86f1-41af-91ab-2d7cd011db47 — \"{Tenant.Trim()}\" is not one.";
+    }
 
     /// <summary>
     /// Deep-enough copy for <see cref="Collections.RequestDefinition.Clone"/>: this is a mutable

@@ -82,6 +82,14 @@ public sealed class EntraAuthProvider : IAuthProvider, IDisposable
         bool interactiveAllowed,
         CancellationToken ct = default)
     {
+        // Caught here rather than left to Entra, which answers a malformed tenant with an AADSTS
+        // code that names neither the field nor the fix. Thrown as the same exception a missing
+        // secret is, so a send reports it beside the request instead of failing unexplained.
+        if (profile.TenantProblem() is { } problem)
+        {
+            throw new InteractiveAuthRequiredException(profile.Name, problem);
+        }
+
         RegisterAuthority(profile);
 
         var scopes = profile.Scopes.Count > 0
@@ -282,7 +290,7 @@ public sealed class EntraAuthProvider : IAuthProvider, IDisposable
     }
 
     private string AuthorityFor(AuthProfile profile) =>
-        profile.Authority ?? $"{DefaultAuthority}/{profile.Tenant ?? "organizations"}";
+        profile.Authority ?? $"{DefaultAuthority}/{(string.IsNullOrWhiteSpace(profile.Tenant) ? "organizations" : profile.Tenant.Trim())}";
 
     /// <summary>
     /// Makes the token authority a legitimate destination. P4: every network destination is

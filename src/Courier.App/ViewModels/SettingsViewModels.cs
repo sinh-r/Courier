@@ -872,6 +872,12 @@ public sealed partial class AuthProfileEditorViewModel : ObservableObject
             SecretRef = _loaded?.SecretRef,
         };
 
+        if (profile.TenantProblem() is { } tenantProblem)
+        {
+            StatusMessage = tenantProblem;
+            return;
+        }
+
         if (SecretInput.Length > 0)
         {
             profile.SecretRef ??= Guid.NewGuid().ToString("n");
