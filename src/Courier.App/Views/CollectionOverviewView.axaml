@@ -222,7 +222,7 @@
                   <TextBlock Grid.Column="0" Classes="heading" Text="Decoded token" />
                   <TextBlock Grid.Column="1" Classes="meta" Text="{Binding CollectionAuth.TokenTimingLine}" />
                 </Grid>
-                <TextBlock Classes="meta" Text="{Binding CollectionAuth.TokenStatusMessage}"
+                <TextBlock Classes="meta" Text="{Binding CollectionAuth.TokenStatusMessage}" TextWrapping="Wrap" TextTrimming="None"
                            IsVisible="{Binding CollectionAuth.TokenStatusMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
                 <Border BorderBrush="{DynamicResource Rule}" BorderThickness="1">
